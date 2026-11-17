@@ -16,3 +16,8 @@
 | [`specs/spec-change-template.md`](specs/spec-change-template.md) | 契约/边界变更核对清单 |
 | [`specs/fractal-boards-roadmap.md`](specs/fractal-boards-roadmap.md) | 后续方向：WorkFlowy 分形看板（意义、大纲/Harness/双链实现路线与红线） |
 | [`specs/teleagent-adapter.zh-CN.md`](specs/teleagent-adapter.zh-CN.md) | 规划：TeleAgent（星辰超级智能体）接入方案——本地 SQLite 契约、复制交接式委派、跨平台与未验证项 |
+
+## `docs/research/` 调研索引
+| 文档 | 覆盖范围 |
+| --- | --- |
+| [`research/teleagent-ecosystem.zh-CN.md`](research/teleagent-ecosystem.zh-CN.md) | TeleAgent（星辰超级智能体）开源生态调研（2026-11-17）：33 个社区仓库的功能与实现方式、三条接入路线、本地内核接口画像、对 Agent Deck 的可借鉴/有条件/禁止三档取舍与封号风险 |
