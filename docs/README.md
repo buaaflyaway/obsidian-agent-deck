@@ -15,3 +15,4 @@
 | [`specs/pitfalls-and-lessons.md`](specs/pitfalls-and-lessons.md) | Obsidian API、长日志性能、ACP/子进程与标题保护硬坑 |
 | [`specs/spec-change-template.md`](specs/spec-change-template.md) | 契约/边界变更核对清单 |
 | [`specs/fractal-boards-roadmap.md`](specs/fractal-boards-roadmap.md) | 后续方向：WorkFlowy 分形看板（意义、大纲/Harness/双链实现路线与红线） |
+| [`specs/teleagent-adapter.zh-CN.md`](specs/teleagent-adapter.zh-CN.md) | 规划：TeleAgent（星辰超级智能体）接入方案——本地 SQLite 契约、复制交接式委派、跨平台与未验证项 |
