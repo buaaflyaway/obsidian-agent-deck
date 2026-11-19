@@ -25,6 +25,7 @@ import * as J from "./journal.js";
 import { mentionOptions, stripTaskMention, mentionTrigger } from "./task-mentions.js";
 import { hasAgentCapability, canContinueInApp } from "./agent-registry.js";
 import { runHandoffDispatch } from "./teleagent-dispatch.js";
+import { dispatchTeleagentLinux } from "./teleagent-dispatch-linux.js";
 import { isPrivateFrontmatter, isPathExcluded } from "./memory-query-core.js";
 import {
   ancestorLines, withContext, freshTaskText, stripInternalIdentifiers,
@@ -1009,9 +1010,15 @@ export class Delegator {
       autoSend: opts.autoSend,
       projectName: opts.projectName,
       text: resolved.prompt,
+      dispatchLinux: dispatchTeleagentLinux,
     });
     if (dispatched.skipped === "no-project") this.plugin.notice(t("没有识别到项目名，已退回复制交接"), 8000);
-    else if (dispatched.skipped === "platform") this.plugin.notice(t("UI Automation 派发只在 Windows 可用"), 8000);
+    else if (dispatched.skipped === "platform") this.plugin.notice(t("派发只在 Windows/Linux 可用"), 8000);
+    else if (dispatched.ok && dispatched.manualSubmit) {
+      // Linux 端到端实测前只做到“填入 + 让用户手动提交”，提示里必须说清楚没有自动发送。
+      this.plugin.notice(t("已填入任务文本，请在 TeleAgent 里手动点「运行」· {project}", { project: dispatched.project }), 12000);
+      if (dispatched.textVerified === false) this.plugin.notice(t("未能自动确认输入框内容（没有截图工具），请目视确认后再点「运行」"), 10000);
+    }
     else if (dispatched.ok && dispatched.verified) this.plugin.notice(t("已派发并确认落库 · {project}", { project: dispatched.project }), 6000);
     else if (dispatched.ok) this.plugin.notice(t("已发送，但本地库里还没查到 · {project}", { project: dispatched.project }), 9000);
     else if (!dispatched.skipped) this.plugin.notice(t("派发失败（{stage}）：{error}", { stage: dispatched.stage, error: String(dispatched.error || "").slice(0, 120) }), 12000);

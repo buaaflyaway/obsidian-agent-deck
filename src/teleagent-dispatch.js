@@ -18,7 +18,8 @@ import { resolveSqliteBinary } from "./sqlite.js";
 
 // 失败时回报的阶段名，前端/日志按它定位卡点，不要只说“失败了”。
 export const DISPATCH_STAGES = [
-  "platform", // 非 Windows
+  "platform", // 当前平台没有派发后端（Windows / Linux 之外）
+  "dependency", // Linux：外部依赖缺失（xdotool / 剪贴板）
   "input", // 载荷不合法
   "spawn", // PowerShell 起不来
   "attach", // 找不到主窗口 / 无障碍树没准备好
@@ -27,8 +28,10 @@ export const DISPATCH_STAGES = [
   "project", // 项目选择器打不开或选不中
   "mode", // 执行模式不是「默认权限」
   "model", // 模型不是「旗舰」
+  "focus", // Linux：windowfocus 后 getwindowfocus 校验失败
   "typing", // 注入后文本读不回
-  "submit", // 「运行」一直不可用或点不动
+  "paste", // Linux：剪贴板写入或 Ctrl+V 失败
+  "submit", // 「运行」一直不可用或点不动（Linux 端到端测试才用）
   "timeout", // 整体超时
   "protocol", // 脚本输出不是可解析的结果
 ];
@@ -386,8 +389,9 @@ export function verifyDispatchedSession({ project, text, sinceMs, dbs, runSql } 
 }
 
 // handoff 接线层的可测入口：判断“这次交接要不要顺手自动派发”，并把结果原样带回。
-// 只有三个条件同时成立才会真的派发：用户点了自动发送、目标就是 TeleAgent、当前是 Windows；
-// 另外必须有项目名——没有就退回复制交接，绝不猜一个目录把任务发错地方。
+// 只有四个条件同时成立才会真的派发：用户点了自动发送、目标就是 TeleAgent、当前平台有
+// 派发后端（Windows / Linux）、并且有项目名——没有项目名就退回复制交接，绝不猜目录。
+// Linux 后端由调用方注入（dispatchLinux），本模块不反向依赖它，保持模块图无环。
 export async function runHandoffDispatch({
   agent,
   autoSend,
@@ -395,11 +399,17 @@ export async function runHandoffDispatch({
   text,
   platform = process.platform,
   dispatch = dispatchTeleagentTask,
+  dispatchLinux = null,
 } = {}) {
   if (!autoSend || agent !== "teleagent") return { skipped: "not-requested" };
-  if (platform !== "win32") return { skipped: "platform" };
+  if (platform !== "win32" && platform !== "linux") return { skipped: "platform" };
   const project = String(projectName || "").trim();
   if (!project) return { skipped: "no-project" };
+  if (platform === "linux") {
+    if (typeof dispatchLinux !== "function") return { skipped: "platform" };
+    const result = await dispatchLinux({ project, text: String(text || "") });
+    return { ...result, project };
+  }
   const result = await dispatch({ project, text: String(text || "") });
   return { ...result, project };
 }

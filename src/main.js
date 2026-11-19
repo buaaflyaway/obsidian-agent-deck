@@ -2451,8 +2451,12 @@ export default class AgentDeckPlugin extends Plugin {
       menu.addSeparator();
     }
     for (const agent of AGENT_ORDER.filter(a => this.agentEnabled(a) && !AGENTS[a].trackingOnly)) menu.addItem(mi => mi.setTitle(t("重新委派（新会话）· {agent}", { agent: AGENTS[agent].name })).onClick(() => this.delegateDrop(agent, { path, line: block.start, lineText: lines[block.start] }, null, { newSession: true })));
-    if (process.platform === "win32" && this.agentEnabled("teleagent")) {
-      menu.addItem(mi => mi.setTitle(t("派发到 TeleAgent（自动填写并发送）")).setIcon("send").onClick(() => this.dispatchToTeleagent(path, block.start, lines)));
+    if ((process.platform === "win32" || process.platform === "linux") && this.agentEnabled("teleagent")) {
+      // Linux 后端目前只做到“填入 + 提示手动提交”，菜单文案不能承诺自动发送。
+      const dispatchLabel = process.platform === "linux"
+        ? t("派发到 TeleAgent（自动填写，需手动点运行）")
+        : t("派发到 TeleAgent（自动填写并发送）");
+      menu.addItem(mi => mi.setTitle(dispatchLabel).setIcon("send").onClick(() => this.dispatchToTeleagent(path, block.start, lines)));
     }
     menu.addSeparator();
     menu.addItem(mi => mi.setTitle(t("在项目工作台拆解并分配小队")).setIcon("folder-kanban").onClick(() => this.openProjectWorkbench({ path, line: block.start })));
