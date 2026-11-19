@@ -20337,16 +20337,18 @@ var DROP_LABEL = { bind: "\u7ED1\u5B9A", fill: "\u65B0\u5EFA\u4E00\u9879", new: 
 var setDrop = import_state3.StateEffect.define();
 var dropField = import_state3.StateField.define({
   create: () => import_view4.Decoration.none,
-  update(deco, tr) {
-    deco = deco.map(tr.changes);
-    for (const e of tr.effects) {
+  // 参数不能叫 tr：i18n 的翻译函数就以 tr 导入（见文件顶部），同名会把翻译函数遮蔽掉，
+  // 之前用 tr(DROP_LABEL[...]) 取文案时实际调用的是事务对象，直接抛 “tr is not a function”。
+  update(deco, txn) {
+    deco = deco.map(txn.changes);
+    for (const e of txn.effects) {
       if (!e.is(setDrop)) continue;
       if (!e.value) {
         deco = import_view4.Decoration.none;
         continue;
       }
-      const line = tr.state.doc.line(e.value.line + 1);
-      deco = import_view4.Decoration.set([import_view4.Decoration.line({ class: `ad-drop-line ad-drop-line--${e.value.kind}`, attributes: { "data-ad-drop": tr(DROP_LABEL[e.value.kind] || "") } }).range(line.from)]);
+      const line = txn.state.doc.line(e.value.line + 1);
+      deco = import_view4.Decoration.set([import_view4.Decoration.line({ class: `ad-drop-line ad-drop-line--${e.value.kind}`, attributes: { "data-ad-drop": t(DROP_LABEL[e.value.kind] || "") } }).range(line.from)]);
     }
     return deco;
   },
@@ -20863,12 +20865,12 @@ function buildDecorations(view2, plugin) {
         const displayState = plugin.aiRecordDisplayField ? view2.state.field(plugin.aiRecordDisplayField, false) : null;
         const boardState = plugin.taskBoardField ? view2.state.field(plugin.taskBoardField, false) : null;
         const isTopLevelAiParent = Boolean(displayState?.topLevelLines?.has(n) || boardState?.boardLines?.has(n));
-        if (n === cursorLine && !isTopLevelAiParent && plugin.settings.dragGrip !== false && BULLET_RE.test(text) && (kwLine(text) || CONTEXT_RECORD_RE.test(text))) {
-          builder.add(line.to, line.to, import_view4.Decoration.widget({ widget: new GripWidget(plugin, path19, n, text), side: 1, block: false }));
-        }
         const prog = line.length < 2e3 && plugin.lineProgressInfo ? plugin.lineProgressInfo(text, map.lines, n, session, job) : null;
         if (!prog && typeof import_view4.Decoration.line === "function" && (RESULT_LINE_RE.test(text) || SUB_LINE_RE.test(text))) {
           builder.add(line.from, line.from, import_view4.Decoration.line({ class: "ad-said" }));
+        }
+        if (n === cursorLine && !isTopLevelAiParent && plugin.settings.dragGrip !== false && BULLET_RE.test(text) && (kwLine(text) || CONTEXT_RECORD_RE.test(text))) {
+          builder.add(line.to, line.to, import_view4.Decoration.widget({ widget: new GripWidget(plugin, path19, n, text), side: 1, block: false }));
         }
         if (prog) {
           builder.add(line.to, line.to, import_view4.Decoration.widget({ widget: new LineProgressWidget(plugin, path19, n, prog), side: 1, block: false }));

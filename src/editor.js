@@ -33,12 +33,14 @@ const DROP_LABEL = { bind: "绑定", fill: "新建一项", new: "新建一项", 
 const setDrop = StateEffect.define();
 const dropField = StateField.define({
   create: () => Decoration.none,
-  update(deco, tr) {
-    deco = deco.map(tr.changes);
-    for (const e of tr.effects) {
+  // 参数不能叫 tr：i18n 的翻译函数就以 tr 导入（见文件顶部），同名会把翻译函数遮蔽掉，
+  // 之前用 tr(DROP_LABEL[...]) 取文案时实际调用的是事务对象，直接抛 “tr is not a function”。
+  update(deco, txn) {
+    deco = deco.map(txn.changes);
+    for (const e of txn.effects) {
       if (!e.is(setDrop)) continue;
       if (!e.value) { deco = Decoration.none; continue; }
-      const line = tr.state.doc.line(e.value.line + 1);
+      const line = txn.state.doc.line(e.value.line + 1);
       deco = Decoration.set([Decoration.line({ class: `ad-drop-line ad-drop-line--${e.value.kind}`, attributes: { "data-ad-drop": tr(DROP_LABEL[e.value.kind] || "") } }).range(line.from)]);
     }
     return deco;
@@ -537,12 +539,16 @@ function buildDecorations(view, plugin) {
         const displayState = plugin.aiRecordDisplayField ? view.state.field(plugin.aiRecordDisplayField, false) : null;
         const boardState = plugin.taskBoardField ? view.state.field(plugin.taskBoardField, false) : null;
         const isTopLevelAiParent = Boolean(displayState?.topLevelLines?.has(n) || boardState?.boardLines?.has(n));
-        if (n === cursorLine && !isTopLevelAiParent && plugin.settings.dragGrip !== false && BULLET_RE.test(text) && (J.kwLine(text) || J.CONTEXT_RECORD_RE.test(text))) {
-          builder.add(line.to, line.to, Decoration.widget({ widget: new GripWidget(plugin, path, n, text), side: 1, block: false }));
-        }
+        // RangeSetBuilder 要求所有装饰按 (from, startSide) 升序添加：行装饰挂在 line.from，
+        // 行尾的 widget 挂在 line.to，所以必须先加行装饰再加任何 line.to 的东西，
+        // 否则 finish() 会抛 “Ranges must be added sorted by from position and startSide”，
+        // 本次更新的全部行装饰（pill、结果行底色、进度）都会一起丢掉。
         const prog = line.length < 2000 && plugin.lineProgressInfo ? plugin.lineProgressInfo(text, map.lines, n, session, job) : null;
         if (!prog && typeof Decoration.line === "function" && (RESULT_LINE_RE.test(text) || SUB_LINE_RE.test(text))) {
           builder.add(line.from, line.from, Decoration.line({ class: "ad-said" }));
+        }
+        if (n === cursorLine && !isTopLevelAiParent && plugin.settings.dragGrip !== false && BULLET_RE.test(text) && (J.kwLine(text) || J.CONTEXT_RECORD_RE.test(text))) {
+          builder.add(line.to, line.to, Decoration.widget({ widget: new GripWidget(plugin, path, n, text), side: 1, block: false }));
         }
         if (prog) {
           builder.add(line.to, line.to, Decoration.widget({ widget: new LineProgressWidget(plugin, path, n, prog), side: 1, block: false }));
