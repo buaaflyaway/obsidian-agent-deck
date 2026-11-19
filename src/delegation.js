@@ -977,6 +977,21 @@ export class Delegator {
     return job;
   }
 
+  // treeland 窗口激活 helper 随插件安装到 <plugin>/bin；运行时探测，缺失时回退到 PATH/环境变量。
+  // 只做存在性检查，不启动、不修改用户系统路径。
+  nativeActivationHelper() {
+    try {
+      const base = this.plugin?.app?.vault?.adapter?.basePath;
+      const dir = this.plugin?.manifest?.dir || this.plugin?.manifestDir;
+      if (!base || !dir) return "";
+      const candidate = path.join(base, dir, "bin", "treeland-activate");
+      fs.accessSync(candidate, fs.constants.X_OK);
+      return candidate;
+    } catch {
+      return "";
+    }
+  }
+
   // 尚未接入自动委派的客户端（或 Qoder 桌面模式）：复制任务并唤起应用，由用户发送。
   // 之后每轮扫描找这个 Agent 新出现、开头对得上的会话，找到就绑回这一行（🔗 + DELEGATED），面板里的卡片飞进「现在」。
   async handoff(opts) {
@@ -1010,7 +1025,7 @@ export class Delegator {
       autoSend: opts.autoSend,
       projectName: opts.projectName,
       text: resolved.prompt,
-      dispatchLinux: dispatchTeleagentLinux,
+      dispatchLinux: (payload) => dispatchTeleagentLinux(payload, { activationHelper: this.nativeActivationHelper() }),
     });
     if (dispatched.skipped === "no-project") this.plugin.notice(t("没有识别到项目名，已退回复制交接"), 8000);
     else if (dispatched.skipped === "platform") this.plugin.notice(t("派发只在 Windows/Linux 可用"), 8000);

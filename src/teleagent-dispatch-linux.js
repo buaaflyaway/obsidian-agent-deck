@@ -227,6 +227,61 @@ export async function focusTeleAgentWindow(window, { run = defaultRun, xdotool, 
   return { ok: true, id };
 }
 
+// treeland 原生窗口激活 helper：源码在 src/native/treeland-activate.c，产物 bin/treeland-activate
+// 不入库。运行时只在 PATH / 环境变量里探测；没有就降级为「请先手动切到 TeleAgent」。
+export function resolveActivationHelper({ env = process.env, which = findExecutable, explicit = "" } = {}) {
+  const candidates = [];
+  if (explicit) candidates.push(String(explicit));
+  if (env && env.AGENT_DECK_TREELAND_ACTIVATE) candidates.push(String(env.AGENT_DECK_TREELAND_ACTIVATE));
+  const onPath = which("treeland-activate", env);
+  if (onPath) candidates.push(onPath);
+  for (const candidate of candidates) {
+    try {
+      if (!candidate || !fs.statSync(candidate).isFile()) continue;
+      fs.accessSync(candidate, fs.constants.X_OK);
+      return candidate;
+    } catch {
+      // 继续找下一个
+    }
+  }
+  return "";
+}
+
+export async function activateTeleAgentWindow({ run = defaultRun, helper, env = process.env, title = TELEAGENT_MAIN_TITLE } = {}) {
+  if (!helper) {
+    return { ok: false, stage: "focus", error: t("缺少 treeland 窗口激活 helper（treeland-activate）；treeland 下无法自动把 TeleAgent 切到前台") };
+  }
+  const result = await run(helper, [title], { env, timeout: 6000 });
+  if (!result.ok) {
+    return { ok: false, stage: "focus", error: t("treeland-activate 激活 TeleAgent 失败：{error}", { error: String(result.error || result.stderr || "").slice(0, 200) }) };
+  }
+  return { ok: true, helper };
+}
+
+// 把 focus / getwindowfocus / 点输入框 / Ctrl+V 合并成**一次** xdotool 调用：
+// treeland 下 X 焦点会在两次独立进程之间被重置，分开调用必然出现竞态。
+export function buildFocusPasteArgs(window) {
+  const point = pointInWindow(window.geometry, COMPOSER_POINT_RATIO);
+  return [
+    "windowfocus", String(window.id),
+    "getwindowfocus",
+    "mousemove", "--window", String(window.id), String(point.x), String(point.y), "click", "1",
+    "key", "--clearmodifiers", "ctrl+v",
+  ];
+}
+
+export async function focusAndPaste(window, { run = defaultRun, xdotool, env = process.env } = {}) {
+  if (!geometryIsUsable(window && window.geometry)) {
+    return { ok: false, stage: "composer", error: t("窗口几何异常（{width}×{height}），已中止以免点错位置", { width: (window && window.geometry && window.geometry.width) || "?", height: (window && window.geometry && window.geometry.height) || "?" }) };
+  }
+  const args = buildFocusPasteArgs(window);
+  const result = await run(xdotool, args, { env, timeout: 8000 });
+  if (!result.ok) {
+    return { ok: false, stage: "paste", error: t("单进程粘贴失败：{error}", { error: String(result.error || result.stderr || "").slice(0, 200) }) };
+  }
+  return { ok: true, point: pointInWindow(window.geometry, COMPOSER_POINT_RATIO) };
+}
+
 // 按窗口相对比例点输入框；坐标在运行时用 getwindowgeometry 换算，不写死绝对像素。
 export async function clickTeleAgentComposer(window, { run = defaultRun, xdotool, env = process.env } = {}) {
   if (!geometryIsUsable(window && window.geometry)) {
@@ -406,11 +461,27 @@ export async function dispatchTeleagentLinux(payload, deps = {}) {
   if (!found.ok) return found;
   const window = found.window;
 
-  const focused = await focusTeleAgentWindow(window, { run, xdotool: environment.xdotool, env });
-  if (!focused.ok) return focused;
-
-  const clicked = await clickTeleAgentComposer(window, { run, xdotool: environment.xdotool, env });
-  if (!clicked.ok) return clicked;
+  // 1) 合成器级激活：treeland 下 X11 的 windowactivate 无效，只有原生 helper 能真抬前台。
+  const helper = deps.activationHelper !== undefined
+    ? String(deps.activationHelper || "")
+    : resolveActivationHelper({ env, which });
+  if (helper) {
+    const activated = await activateTeleAgentWindow({ run, helper, env });
+    if (!activated.ok) return activated;
+  } else {
+    // 没有 helper 时只能在“用户已把 TeleAgent 切到前台”这个前提继续；
+    // 否则绝不盲点/盲打（会点到 Obsidian 或把文本粘到错误窗口）。
+    const focusCheck = await run(environment.xdotool, ["getwindowfocus"], { env });
+    // getwindowfocus 在没有 X 焦点时本身会非零退出，那是正常状态，不要把原始命令错误当成焦点信息展示。
+    const actual = focusCheck.ok ? String(focusCheck.stdout || "").trim() : "";
+    if (!focusCheck.ok || actual !== String(window.id)) {
+      return {
+        ok: false,
+        stage: "focus",
+        error: t("缺少 treeland 窗口激活 helper：treeland-activate；treeland 下无法自动把 TeleAgent 切到前台。请先手动切到 TeleAgent 再派发（当前焦点：{actual}）", { actual: actual || t("未知（没有 X 焦点）") }),
+      };
+    }
+  }
 
   const capture = deps.capture || null;
   const beforeShot = await captureWindowPpm(window, { run, which, env, capture, tmpdir: deps.tmpdir });
@@ -422,7 +493,8 @@ export async function dispatchTeleagentLinux(payload, deps = {}) {
   });
   if (!written.ok) return written;
 
-  const pasted = await pasteClipboard({ run, xdotool: environment.xdotool, env });
+  // 2) 单进程完成 focus + 点输入框 + Ctrl+V，避免跨进程焦点竞态。
+  const pasted = await focusAndPaste(window, { run, xdotool: environment.xdotool, env });
   if (!pasted.ok) {
     if (typeof written.stop === "function") written.stop();
     return pasted;

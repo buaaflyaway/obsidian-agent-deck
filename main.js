@@ -1464,6 +1464,11 @@ var dialogs_default = {
   "\u5DF2\u586B\u5165\uFF0C\u4F46\u672A\u80FD\u81EA\u52A8\u786E\u8BA4\u8F93\u5165\u6846\u5185\u5BB9\uFF08\u6CA1\u6709\u622A\u56FE\u5DE5\u5177\uFF09\uFF0C\u8BF7\u76EE\u89C6\u786E\u8BA4\u540E\u518D\u70B9\u300C\u8FD0\u884C\u300D": "Filled in, but the composer content could not be verified automatically (no screenshot tool); check it before clicking Run",
   "\u70B9\u51FB\u300C\u8FD0\u884C\u300D\u5931\u8D25\uFF1A{error}": "Failed to click Run: {error}",
   "\u63D0\u4EA4\u9700\u8981\u663E\u5F0F\u786E\u8BA4\uFF08confirm:true\uFF09": "Submitting requires explicit confirmation (confirm:true)",
+  "\u7F3A\u5C11 treeland \u7A97\u53E3\u6FC0\u6D3B helper\uFF08treeland-activate\uFF09\uFF1Btreeland \u4E0B\u65E0\u6CD5\u81EA\u52A8\u628A TeleAgent \u5207\u5230\u524D\u53F0": "Missing the treeland window-activation helper (treeland-activate); on treeland TeleAgent cannot be brought to the foreground automatically",
+  "\u672A\u77E5\uFF08\u6CA1\u6709 X \u7126\u70B9\uFF09": "unknown (no X focus)",
+  "treeland-activate \u6FC0\u6D3B TeleAgent \u5931\u8D25\uFF1A{error}": "treeland-activate failed to activate TeleAgent: {error}",
+  "\u5355\u8FDB\u7A0B\u7C98\u8D34\u5931\u8D25\uFF1A{error}": "Single-process paste failed: {error}",
+  "\u7F3A\u5C11 treeland \u7A97\u53E3\u6FC0\u6D3B helper\uFF1Atreeland-activate\uFF1Btreeland \u4E0B\u65E0\u6CD5\u81EA\u52A8\u628A TeleAgent \u5207\u5230\u524D\u53F0\u3002\u8BF7\u5148\u624B\u52A8\u5207\u5230 TeleAgent \u518D\u6D3E\u53D1\uFF08\u5F53\u524D\u7126\u70B9\uFF1A{actual}\uFF09": "Missing the treeland window-activation helper (treeland-activate); TeleAgent cannot be brought to the foreground automatically. Switch to TeleAgent manually and dispatch again (current focus: {actual})",
   "\u6D3E\u53D1\u8D85\u65F6\uFF08{ms}ms\uFF09": "Dispatch timed out ({ms} ms)",
   "\u5EFA\u7ACB\u4F1A\u8BDD\u540E\u6253\u5F00 Harness\uFF1B\u5F53\u524D\u8F6E\u7ED3\u675F\u540E\u5728\u4FA7\u680F\u9009\u62E9\u540C\u4E00\u4F1A\u8BDD\u7EE7\u7EED\u3002": "Starts the session, then opens Harness; when this turn ends, pick the same session in the sidebar to continue.",
   "\u5148\u6267\u884C\u9996\u8F6E\uFF0C\u7ED3\u675F\u540E\u6253\u5F00\u684C\u9762\u4E2D\u7684\u540C\u4E00\u4F1A\u8BDD\uFF1B\u9996\u8F6E\u671F\u95F4\u907F\u514D\u4E24\u8FB9\u540C\u65F6\u53D1\u9001\u3002": "Runs the first turn, then opens the same session on the desktop; avoid sending from both sides during that turn.",
@@ -12351,6 +12356,7 @@ var import_node_fs2 = __toESM(require("node:fs"), 1);
 var import_node_os2 = __toESM(require("node:os"), 1);
 var import_node_path2 = __toESM(require("node:path"), 1);
 var TELEAGENT_MAIN_CLASS = "teleagent";
+var TELEAGENT_MAIN_TITLE = "TeleAgent \u661F\u8FB0\u8D85\u7EA7\u667A\u80FD\u4F53";
 var TELEAGENT_WINDOW_TITLE_RE = /TeleAgent/i;
 var TELEAGENT_AUX_TITLE_RE = /Screenshot/i;
 var COMPOSER_POINT_RATIO = Object.freeze({ x: 700 / 1513, y: 780 / 1005 });
@@ -12506,30 +12512,60 @@ async function findTeleAgentMainWindow({ run: run2 = defaultRun, xdotool, which 
   const main = usable2[0];
   return { ok: true, window: { ...main, candidates: candidates.length } };
 }
-async function focusTeleAgentWindow(window2, { run: run2 = defaultRun, xdotool, env = process.env } = {}) {
-  const id = String(window2 && window2.id || "").trim();
-  if (!id) return { ok: false, stage: "attach", error: t("\u627E\u4E0D\u5230 TeleAgent \u4E3B\u7A97\u53E3\uFF08\u7A97\u53E3 id \u4E3A\u7A7A\uFF09") };
-  const focused = await run2(xdotool, ["windowfocus", id], { env });
-  if (!focused.ok) {
-    return { ok: false, stage: "focus", error: t("\u65E0\u6CD5\u628A\u7126\u70B9\u5207\u5230 TeleAgent \u4E3B\u7A97\u53E3\uFF08\u5F53\u524D\u7126\u70B9\uFF1A{actual}\uFF09\uFF1B\u8BF7\u5148\u624B\u52A8\u5207\u5230\u8BE5\u7A97\u53E3\uFF0Ctreeland \u4E0B\u4E0D\u8981\u4F9D\u8D56 windowactivate", { actual: String(focused.error || focused.stderr || "?").slice(0, 120) }) };
+function resolveActivationHelper({ env = process.env, which = findExecutable, explicit = "" } = {}) {
+  const candidates = [];
+  if (explicit) candidates.push(String(explicit));
+  if (env && env.AGENT_DECK_TREELAND_ACTIVATE) candidates.push(String(env.AGENT_DECK_TREELAND_ACTIVATE));
+  const onPath = which("treeland-activate", env);
+  if (onPath) candidates.push(onPath);
+  for (const candidate of candidates) {
+    try {
+      if (!candidate || !import_node_fs2.default.statSync(candidate).isFile()) continue;
+      import_node_fs2.default.accessSync(candidate, import_node_fs2.default.constants.X_OK);
+      return candidate;
+    } catch {
+    }
   }
-  const check = await run2(xdotool, ["getwindowfocus"], { env });
-  const actual = String(check.stdout || "").trim();
-  if (!check.ok || actual !== id) {
-    return { ok: false, stage: "focus", error: t("\u65E0\u6CD5\u628A\u7126\u70B9\u5207\u5230 TeleAgent \u4E3B\u7A97\u53E3\uFF08\u5F53\u524D\u7126\u70B9\uFF1A{actual}\uFF09\uFF1B\u8BF7\u5148\u624B\u52A8\u5207\u5230\u8BE5\u7A97\u53E3\uFF0Ctreeland \u4E0B\u4E0D\u8981\u4F9D\u8D56 windowactivate", { actual: actual || String(check.error || "?").slice(0, 80) }) };
-  }
-  return { ok: true, id };
+  return "";
 }
-async function clickTeleAgentComposer(window2, { run: run2 = defaultRun, xdotool, env = process.env } = {}) {
+async function activateTeleAgentWindow({ run: run2 = defaultRun, helper, env = process.env, title = TELEAGENT_MAIN_TITLE } = {}) {
+  if (!helper) {
+    return { ok: false, stage: "focus", error: t("\u7F3A\u5C11 treeland \u7A97\u53E3\u6FC0\u6D3B helper\uFF08treeland-activate\uFF09\uFF1Btreeland \u4E0B\u65E0\u6CD5\u81EA\u52A8\u628A TeleAgent \u5207\u5230\u524D\u53F0") };
+  }
+  const result = await run2(helper, [title], { env, timeout: 6e3 });
+  if (!result.ok) {
+    return { ok: false, stage: "focus", error: t("treeland-activate \u6FC0\u6D3B TeleAgent \u5931\u8D25\uFF1A{error}", { error: String(result.error || result.stderr || "").slice(0, 200) }) };
+  }
+  return { ok: true, helper };
+}
+function buildFocusPasteArgs(window2) {
+  const point = pointInWindow(window2.geometry, COMPOSER_POINT_RATIO);
+  return [
+    "windowfocus",
+    String(window2.id),
+    "getwindowfocus",
+    "mousemove",
+    "--window",
+    String(window2.id),
+    String(point.x),
+    String(point.y),
+    "click",
+    "1",
+    "key",
+    "--clearmodifiers",
+    "ctrl+v"
+  ];
+}
+async function focusAndPaste(window2, { run: run2 = defaultRun, xdotool, env = process.env } = {}) {
   if (!geometryIsUsable(window2 && window2.geometry)) {
     return { ok: false, stage: "composer", error: t("\u7A97\u53E3\u51E0\u4F55\u5F02\u5E38\uFF08{width}\xD7{height}\uFF09\uFF0C\u5DF2\u4E2D\u6B62\u4EE5\u514D\u70B9\u9519\u4F4D\u7F6E", { width: window2 && window2.geometry && window2.geometry.width || "?", height: window2 && window2.geometry && window2.geometry.height || "?" }) };
   }
-  const point = pointInWindow(window2.geometry, COMPOSER_POINT_RATIO);
-  const click = await run2(xdotool, ["mousemove", "--window", String(window2.id), String(point.x), String(point.y), "click", "1"], { env });
-  if (!click.ok) {
-    return { ok: false, stage: "composer", error: t("\u70B9\u51FB TeleAgent \u8F93\u5165\u6846\u5931\u8D25\uFF1A{error}", { error: String(click.error || click.stderr || "").slice(0, 200) }) };
+  const args = buildFocusPasteArgs(window2);
+  const result = await run2(xdotool, args, { env, timeout: 8e3 });
+  if (!result.ok) {
+    return { ok: false, stage: "paste", error: t("\u5355\u8FDB\u7A0B\u7C98\u8D34\u5931\u8D25\uFF1A{error}", { error: String(result.error || result.stderr || "").slice(0, 200) }) };
   }
-  return { ok: true, point };
+  return { ok: true, point: pointInWindow(window2.geometry, COMPOSER_POINT_RATIO) };
 }
 function parsePpm(buffer) {
   const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
@@ -12663,13 +12699,6 @@ async function writeClipboard(text, { clipboard = null, run: run2 = defaultRun, 
   }
   return { ok: true, source: "xclip", stop };
 }
-async function pasteClipboard({ run: run2 = defaultRun, xdotool, env = process.env } = {}) {
-  const pasted = await run2(xdotool, ["key", "--clearmodifiers", "ctrl+v"], { env });
-  if (!pasted.ok) {
-    return { ok: false, stage: "paste", error: t("\u7C98\u8D34\u5230 TeleAgent \u8F93\u5165\u6846\u5931\u8D25\uFF1A{error}", { error: String(pasted.error || pasted.stderr || "").slice(0, 200) }) };
-  }
-  return { ok: true };
-}
 async function dispatchTeleagentLinux(payload, deps = {}) {
   const platform = deps.platform || process.platform;
   if (platform !== "linux") {
@@ -12692,10 +12721,21 @@ async function dispatchTeleagentLinux(payload, deps = {}) {
   const found = await findTeleAgentMainWindow({ run: run2, xdotool: environment.xdotool, which, env });
   if (!found.ok) return found;
   const window2 = found.window;
-  const focused = await focusTeleAgentWindow(window2, { run: run2, xdotool: environment.xdotool, env });
-  if (!focused.ok) return focused;
-  const clicked = await clickTeleAgentComposer(window2, { run: run2, xdotool: environment.xdotool, env });
-  if (!clicked.ok) return clicked;
+  const helper = deps.activationHelper !== void 0 ? String(deps.activationHelper || "") : resolveActivationHelper({ env, which });
+  if (helper) {
+    const activated = await activateTeleAgentWindow({ run: run2, helper, env });
+    if (!activated.ok) return activated;
+  } else {
+    const focusCheck = await run2(environment.xdotool, ["getwindowfocus"], { env });
+    const actual = focusCheck.ok ? String(focusCheck.stdout || "").trim() : "";
+    if (!focusCheck.ok || actual !== String(window2.id)) {
+      return {
+        ok: false,
+        stage: "focus",
+        error: t("\u7F3A\u5C11 treeland \u7A97\u53E3\u6FC0\u6D3B helper\uFF1Atreeland-activate\uFF1Btreeland \u4E0B\u65E0\u6CD5\u81EA\u52A8\u628A TeleAgent \u5207\u5230\u524D\u53F0\u3002\u8BF7\u5148\u624B\u52A8\u5207\u5230 TeleAgent \u518D\u6D3E\u53D1\uFF08\u5F53\u524D\u7126\u70B9\uFF1A{actual}\uFF09", { actual: actual || t("\u672A\u77E5\uFF08\u6CA1\u6709 X \u7126\u70B9\uFF09") })
+      };
+    }
+  }
   const capture = deps.capture || null;
   const beforeShot = await captureWindowPpm(window2, { run: run2, which, env, capture, tmpdir: deps.tmpdir });
   const written = await writeClipboard(normalized2.payload.text, {
@@ -12705,7 +12745,7 @@ async function dispatchTeleagentLinux(payload, deps = {}) {
     env
   });
   if (!written.ok) return written;
-  const pasted = await pasteClipboard({ run: run2, xdotool: environment.xdotool, env });
+  const pasted = await focusAndPaste(window2, { run: run2, xdotool: environment.xdotool, env });
   if (!pasted.ok) {
     if (typeof written.stop === "function") written.stop();
     return pasted;
@@ -15522,6 +15562,20 @@ ${source}`;
     await runner.start({ sessionId: sid, prompt, cwd: job.cwd, ...job.model ? { model: job.model } : {}, ...job.effort ? { effort: job.effort } : {} });
     return job;
   }
+  // treeland 窗口激活 helper 随插件安装到 <plugin>/bin；运行时探测，缺失时回退到 PATH/环境变量。
+  // 只做存在性检查，不启动、不修改用户系统路径。
+  nativeActivationHelper() {
+    try {
+      const base = this.plugin?.app?.vault?.adapter?.basePath;
+      const dir = this.plugin?.manifest?.dir || this.plugin?.manifestDir;
+      if (!base || !dir) return "";
+      const candidate = import_path13.default.join(base, dir, "bin", "treeland-activate");
+      import_fs15.default.accessSync(candidate, import_fs15.default.constants.X_OK);
+      return candidate;
+    } catch {
+      return "";
+    }
+  }
   // 尚未接入自动委派的客户端（或 Qoder 桌面模式）：复制任务并唤起应用，由用户发送。
   // 之后每轮扫描找这个 Agent 新出现、开头对得上的会话，找到就绑回这一行（🔗 + DELEGATED），面板里的卡片飞进「现在」。
   async handoff(opts) {
@@ -15553,7 +15607,7 @@ ${source}`;
       autoSend: opts.autoSend,
       projectName: opts.projectName,
       text: resolved.prompt,
-      dispatchLinux: dispatchTeleagentLinux
+      dispatchLinux: (payload) => dispatchTeleagentLinux(payload, { activationHelper: this.nativeActivationHelper() })
     });
     if (dispatched.skipped === "no-project") this.plugin.notice(t("\u6CA1\u6709\u8BC6\u522B\u5230\u9879\u76EE\u540D\uFF0C\u5DF2\u9000\u56DE\u590D\u5236\u4EA4\u63A5"), 8e3);
     else if (dispatched.skipped === "platform") this.plugin.notice(t("\u6D3E\u53D1\u53EA\u5728 Windows/Linux \u53EF\u7528"), 8e3);

@@ -8,9 +8,11 @@ import { test } from "node:test";
 import {
   COMPOSER_POINT_RATIO,
   RUN_POINT_RATIO,
+  buildFocusPasteArgs,
   composerLooksFilled,
   detectLinuxDispatchEnvironment,
   dispatchTeleagentLinux,
+  resolveActivationHelper,
   findTeleAgentMainWindow,
   geometryIsUsable,
   parsePpm,
@@ -48,12 +50,14 @@ function makeRunner({ focus = "102", pasteOk = true, searchIds = "101\n102\n103"
         if (id === "102") return ok("WINDOW=102\nX=176\nY=40\nWIDTH=1513\nHEIGHT=1005\nSCREEN=0\n");
         return ok("WINDOW=10\nX=10\nY=10\nWIDTH=10\nHEIGHT=10\nSCREEN=0\n");
       }
+      if (args.includes("ctrl+v")) return pasteOk ? ok() : fail("ctrl+v 失败");
       if (args[0] === "windowfocus") return ok();
       if (args[0] === "getwindowfocus") return ok(focus);
       if (args[0] === "mousemove") return ok();
-      if (args[0] === "key") return pasteOk ? ok() : fail("ctrl+v 失败");
+      if (args[0] === "key") return ok();
     }
     if (command === "/usr/bin/xprop" || command === "xprop") return ok("_NET_WM_PID(CARDINAL) = 50510\n");
+    if (command === "/bin/true" || command === "/usr/bin/treeland-activate") return ok("activated: TeleAgent 星辰超级智能体\n");
     return fail(`unexpected ${command} ${args.join(" ")}`);
   };
   return { run, calls };
@@ -151,13 +155,51 @@ test("成功路径：填入后停在 filled/manualSubmit，绝不自动点「运
   // 只点了输入框的相对坐标，没有点「运行」的坐标
   const composer = calls.find((call) => call.includes("mousemove"));
   assert.ok(composer, "应该点一次输入框");
-  // [cmd, "mousemove", "--window", "102", x, y, "click", "1"]
-  assert.equal(composer[3], "102");
-  assert.equal(composer[4], String(Math.round(1513 * COMPOSER_POINT_RATIO.x)));
-  assert.equal(composer[5], String(Math.round(1005 * COMPOSER_POINT_RATIO.y)));
+  // 单进程批：["/usr/bin/xdotool","windowfocus","102","getwindowfocus","mousemove","--window","102",x,y,"click","1","key","--clearmodifiers","ctrl+v"]
+  assert.equal(composer[1], "windowfocus");
+  assert.equal(composer[2], "102");
+  assert.equal(composer[4], "mousemove");
+  assert.equal(composer[6], "102");
+  assert.equal(composer[7], String(Math.round(1513 * COMPOSER_POINT_RATIO.x)));
+  assert.equal(composer[8], String(Math.round(1005 * COMPOSER_POINT_RATIO.y)));
+  assert.ok(composer.includes("ctrl+v"), "批处理里必须包含 Ctrl+V");
   const runX = String(Math.round(1513 * RUN_POINT_RATIO.x));
   const runY = String(Math.round(1005 * RUN_POINT_RATIO.y));
-  assert.equal(calls.some((call) => call.includes("mousemove") && call[4] === runX && call[5] === runY), false);
+  assert.equal(calls.some((call) => call.includes("mousemove") && call[7] === runX && call[8] === runY), false);
+});
+
+test("激活 helper：可显式注入/环境变量/PATH 探测；缺失时返回 focus 且不点不粘", async () => {
+  assert.equal(resolveActivationHelper({ explicit: "/bin/true", env: {}, which: () => "" }), "/bin/true");
+  assert.equal(resolveActivationHelper({ env: { AGENT_DECK_TREELAND_ACTIVATE: "/bin/true" }, which: () => "" }), "/bin/true");
+  assert.equal(resolveActivationHelper({ env: {}, which: (name) => (name === "treeland-activate" ? "/bin/true" : "") }), "/bin/true");
+  assert.equal(resolveActivationHelper({ env: {}, which: () => "" }), "");
+
+  const { run, calls } = makeRunner({ focus: "999" });
+  const blocked = await dispatchTeleagentLinux(
+    { project: "p", text: "t" },
+    { platform: "linux", env: { DISPLAY: ":1", PATH: "/usr/bin" }, which, run, clipboard: makeClipboard(), activationHelper: "" },
+  );
+  assert.equal(blocked.ok, false);
+  assert.equal(blocked.stage, "focus");
+  assert.match(blocked.error, /treeland-activate/);
+  assert.equal(calls.some((call) => call.includes("mousemove")), false);
+  assert.equal(calls.some((call) => call.includes("ctrl+v")), false);
+
+  const { run: run2, calls: calls2 } = makeRunner();
+  const ok2 = await dispatchTeleagentLinux(
+    { project: "p", text: "t" },
+    { platform: "linux", env: { DISPLAY: ":1", PATH: "/usr/bin" }, which, run: run2, clipboard: makeClipboard(), activationHelper: "/bin/true", capture: async () => null },
+  );
+  assert.equal(ok2.ok, true);
+  assert.equal(ok2.stage, "filled");
+  assert.ok(calls2.some((call) => call[0] === "/bin/true"), "应先调用激活 helper");
+  assert.ok(calls2.some((call) => call.includes("ctrl+v")), "激活后应走单进程粘贴");
+});
+
+test("buildFocusPasteArgs 把 focus/点击/粘贴合并成一次 xdotool 调用", () => {
+  const args = buildFocusPasteArgs({ id: "102", geometry: { x: 0, y: 0, width: 1513, height: 1005 } });
+  assert.deepEqual(args.slice(0, 4), ["windowfocus", "102", "getwindowfocus", "mousemove"]);
+  assert.ok(args.includes("click") && args.includes("ctrl+v"));
 });
 
 test("提交原语必须显式 confirm:true；未确认时不动鼠标", async () => {

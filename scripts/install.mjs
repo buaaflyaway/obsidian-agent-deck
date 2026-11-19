@@ -19,6 +19,13 @@ for (const file of ["main.js", "manifest.json", "styles.css", "README.md", "READ
   fs.copyFileSync(path.join(root, file), path.join(dest, file));
 }
 fs.copyFileSync(path.join(root, "docs", "task-workflow.zh-CN.md"), path.join(dest, "README-交接.md"));
+// 可选的 treeland 窗口激活 helper：只有本机构建过才复制，不改用户系统路径。
+const nativeHelper = path.join(root, "bin", "treeland-activate");
+if (fs.existsSync(nativeHelper)) {
+  fs.mkdirSync(path.join(dest, "bin"), { recursive: true });
+  fs.copyFileSync(nativeHelper, path.join(dest, "bin", "treeland-activate"));
+  fs.chmodSync(path.join(dest, "bin", "treeland-activate"), 0o755);
+}
 // 运行时记忆查询：装进插件目录，派发提示行指的就是这份（向上四层即库根）。
 fs.mkdirSync(path.join(dest, "scripts"), { recursive: true });
 fs.copyFileSync(path.join(root, "scripts", "memory-query.mjs"), path.join(dest, "scripts", "memory-query.mjs"));

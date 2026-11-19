@@ -109,6 +109,11 @@ export default {
   "已填入，但未能自动确认输入框内容（没有截图工具），请目视确认后再点「运行」": "Filled in, but the composer content could not be verified automatically (no screenshot tool); check it before clicking Run",
   "点击「运行」失败：{error}": "Failed to click Run: {error}",
   "提交需要显式确认（confirm:true）": "Submitting requires explicit confirmation (confirm:true)",
+  "缺少 treeland 窗口激活 helper（treeland-activate）；treeland 下无法自动把 TeleAgent 切到前台": "Missing the treeland window-activation helper (treeland-activate); on treeland TeleAgent cannot be brought to the foreground automatically",
+  "未知（没有 X 焦点）": "unknown (no X focus)",
+  "treeland-activate 激活 TeleAgent 失败：{error}": "treeland-activate failed to activate TeleAgent: {error}",
+  "单进程粘贴失败：{error}": "Single-process paste failed: {error}",
+  "缺少 treeland 窗口激活 helper：treeland-activate；treeland 下无法自动把 TeleAgent 切到前台。请先手动切到 TeleAgent 再派发（当前焦点：{actual}）": "Missing the treeland window-activation helper (treeland-activate); TeleAgent cannot be brought to the foreground automatically. Switch to TeleAgent manually and dispatch again (current focus: {actual})",
   "派发超时（{ms}ms）": "Dispatch timed out ({ms} ms)",
   "建立会话后打开 Harness；当前轮结束后在侧栏选择同一会话继续。":
     "Starts the session, then opens Harness; when this turn ends, pick the same session in the sidebar to continue.",

@@ -4,6 +4,7 @@
   "description": "Track local AI agents, delegate from notes, and review daily token usage and project activity in a dashboard.",
   "scripts": {
     "build": "node esbuild.config.mjs",
+    "build:native": "node scripts/build-native.mjs",
     "dev": "node esbuild.config.mjs --watch",
     "install:plugin": "node scripts/install.mjs",
     "eval": "node scripts/eval-context.mjs",
