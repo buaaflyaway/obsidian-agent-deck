@@ -11,6 +11,7 @@ import {
   encodePayload,
   normalizePayload,
   parseDispatchOutput,
+  runHandoffDispatch,
 } from '../src/teleagent-dispatch.js';
 
 test('normalizePayload 校验必填项并给节奏/超时默认值', () => {
@@ -108,4 +109,33 @@ test('载荷不合法时返回 input，不写临时脚本', async () => {
   assert.equal(result.ok, false);
   assert.equal(result.stage, 'input');
   assert.equal(wrote, 0);
+});
+
+test("runHandoffDispatch 只在“用户点了自动发送 + TeleAgent + Windows + 有项目名”四条同时成立时才真的派发", async () => {
+  const calls = [];
+  const dispatch = async (payload) => { calls.push(payload); return { ok: true, stage: "sent" }; };
+
+  // 没点自动发送 / 目标不是 TeleAgent：一律不派发
+  assert.deepEqual(await runHandoffDispatch({ agent: "teleagent", autoSend: false, projectName: "p", text: "t", platform: "win32", dispatch }), { skipped: "not-requested" });
+  assert.deepEqual(await runHandoffDispatch({ agent: "workbuddy", autoSend: true, projectName: "p", text: "t", platform: "win32", dispatch }), { skipped: "not-requested" });
+  // 非 Windows：不派发（UI Automation 只在 Windows 可用）
+  assert.deepEqual(await runHandoffDispatch({ agent: "teleagent", autoSend: true, projectName: "p", text: "t", platform: "darwin", dispatch }), { skipped: "platform" });
+  // 没有项目名：退回复制交接，绝不猜目录
+  assert.deepEqual(await runHandoffDispatch({ agent: "teleagent", autoSend: true, projectName: "   ", text: "t", platform: "win32", dispatch }), { skipped: "no-project" });
+  assert.equal(calls.length, 0, "上述四种情况都不该触发真实派发");
+
+  // 四条成立：真正调用，并把项目名带回给调用方提示
+  const ok = await runHandoffDispatch({ agent: "teleagent", autoSend: true, projectName: " jifang_data_analysis ", text: "请发送你好", platform: "win32", dispatch });
+  assert.equal(ok.ok, true);
+  assert.equal(ok.project, "jifang_data_analysis");
+  assert.deepEqual(calls, [{ project: "jifang_data_analysis", text: "请发送你好" }]);
+
+  // 失败时 stage/error 原样透传，不静默降级
+  const failed = await runHandoffDispatch({
+    agent: "teleagent", autoSend: true, projectName: "p", text: "t", platform: "win32",
+    dispatch: async () => ({ ok: false, stage: "project", error: "找不到「运行环境」选择器" }),
+  });
+  assert.equal(failed.ok, false);
+  assert.equal(failed.stage, "project");
+  assert.match(failed.error, /运行环境/);
 });

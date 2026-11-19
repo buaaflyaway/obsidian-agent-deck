@@ -242,7 +242,8 @@ Group '任务列表'  (372,392) 205×1529
 - **幂等**：派发前用 SQLite 查最近会话是否已有同文本，避免重复建同名任务（标题是客户端自动生成的，会撞车）。
 - **失败口径**：任何一步失败都返回结构化结果（`stage` + `error`），不静默降级成“剪贴板交接”，避免用户以为发出去了实际没有。
 - **已落地并真机验证**（2026-11-19 18:26）：模块 `src/teleagent-dispatch.js` + 测试 `test/teleagent-dispatch.test.mjs`（10 个契约用例，已加入 `npm test`）。对真实客户端跑通一次派发，**11.7 秒**完成，SQLite 回读得到会话 `ses_e0ca84e5bffeqDRrt6LJnFZk4y`：标题「Agent Deck派发链路自检」、`directory=E:\Project_test\jifang_data_analysis`、正文与注入文本逐字一致、assistant 2 秒后回复「收到」、`finish=stop`。
-- **接线（2026-11-19）**：在 Obsidian 的**任务行右键菜单**加「派发到 TeleAgent（自动填写并发送）」，仅 Windows 且 TeleAgent 启用时出现。点击后走 `dispatchToTeleagent`：用 `resolveProjectForTask` 从任务上下文（`[[wikilink]]` / 标题前缀 / 笔记路径）解析项目名，**解析不到就拒绝并提示去设置里登记项目文件夹**——猜错项目会把任务派进别的代码库。解析成功后仍**保留剪贴板兜底**（照旧复制全文），再调用 UIA 派发，并按结果提示成功或失败阶段。
+- **接线（2026-11-19）**：在 Obsidian 的**任务行右键菜单**加「派发到 TeleAgent（自动填写并发送）」，仅 Windows 且 TeleAgent 启用时出现。点击后走 `dispatchToTeleagent`：先借 `delegateTarget` 把笔记文件对象、整篇行数组与块结构补齐（`handoff` 里的 `resolveBlockContext` 要的是 `file/lines/block`，只给 `path/line` 会报“没有当前笔记”——这是接线时真实踩到的坑），再用 `resolveProjectForTask` 从任务上下文（`[[wikilink]]` / 标题前缀 / 笔记路径）解析项目名，**解析不到就拒绝并提示去设置里登记项目文件夹**——猜错项目会把任务派进别的代码库。解析成功后仍**保留剪贴板兜底**（照旧复制全文），再调用 UIA 派发，并按结果提示成功或失败阶段。
+- **派发闸门收敛到一处**：`runHandoffDispatch`（`src/teleagent-dispatch.js`）集中判断“用户点了自动发送 + 目标是 TeleAgent + Windows + 有项目名”四条是否同时成立，只有四条都满足才真正调 `dispatchTeleagentTask`；四条都有单元测试（含“没项目名时绝不猜目录”这条），避免以后改接线时把闸门改漏。
 - **已知缺口**：PowerShell 侧的错误文案仍是中文（`Fail 'project' '找不到「运行环境」选择器'`），英文界面下会显示中文详情；阶段名（`stage`）已统一，下一步可做 stage → 本地化文案的映射。
 
 ### 9.2 真机跑通时踩到的三个坑

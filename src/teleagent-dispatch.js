@@ -333,6 +333,25 @@ Send-Result @{ ok = $true; stage = 'sent'; project = $project; chars = $text.Len
 exit 0
 `;
 
+// handoff 接线层的可测入口：判断“这次交接要不要顺手自动派发”，并把结果原样带回。
+// 只有三个条件同时成立才会真的派发：用户点了自动发送、目标就是 TeleAgent、当前是 Windows；
+// 另外必须有项目名——没有就退回复制交接，绝不猜一个目录把任务发错地方。
+export async function runHandoffDispatch({
+  agent,
+  autoSend,
+  projectName,
+  text,
+  platform = process.platform,
+  dispatch = dispatchTeleagentTask,
+} = {}) {
+  if (!autoSend || agent !== "teleagent") return { skipped: "not-requested" };
+  if (platform !== "win32") return { skipped: "platform" };
+  const project = String(projectName || "").trim();
+  if (!project) return { skipped: "no-project" };
+  const result = await dispatch({ project, text: String(text || "") });
+  return { ...result, project };
+}
+
 // 解析脚本输出：取最后一行能解析成 JSON 的对象；前面的噪声（警告等）不算失败。
 export function parseDispatchOutput(stdout) {
   const lines = String(stdout || "").split(/\r?\n/).map((x) => x.trim()).filter(Boolean);

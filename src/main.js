@@ -2383,15 +2383,30 @@ export default class AgentDeckPlugin extends Plugin {
   // 项目名从任务上下文里解析（wikilink / 标题前缀 / 笔记路径），解析不到就明确拒绝——
   // 猜错项目会把任务派进别的代码库，比不派发更糟。
   async dispatchToTeleagent(path, line, lines) {
-    const blockText = String(lines[line] || "");
-    const context = lines.slice(Math.max(0, line - 4), line + 1);
+    // 复用拖拽入口的解析：它会把笔记文件对象、整篇行数组和块结构都补齐，
+    // handoff 里的 resolveBlockContext 要的就是 file/lines/block，只给 path/line 会报“没有当前笔记”。
+    const target = await this.delegateTarget({ path, line, lineText: lines[line] }, { newSession: true });
+    if (target.error) {
+      this.notice(target.error, 6000);
+      return;
+    }
+    const blockText = String(target.lines[target.line] || "");
+    const context = target.lines.slice(Math.max(0, target.line - 4), target.line + 1);
     const resolved = resolveProjectForTask({ settings: this.settings, notePath: path, contextLines: context, blockText });
     const project = String(resolved?.name || "").trim();
     if (!project) {
       this.notice(t("这个任务没有登记过项目目录，先在设置里登记项目文件夹"), 8000);
       return;
     }
-    await this.delegator.handoff({ agent: "teleagent", path, line, lineText: blockText, projectName: project, autoSend: true });
+    await this.delegator.handoff({
+      agent: "teleagent",
+      file: target.file,
+      lines: target.lines,
+      line: target.line,
+      block: target.block,
+      projectName: project,
+      autoSend: true,
+    });
   }
 
   async taskActions(path, line, event) {

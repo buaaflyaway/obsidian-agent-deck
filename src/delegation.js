@@ -24,7 +24,7 @@ import { RunTrace } from "./trace.js";
 import * as J from "./journal.js";
 import { mentionOptions, stripTaskMention, mentionTrigger } from "./task-mentions.js";
 import { hasAgentCapability, canContinueInApp } from "./agent-registry.js";
-import { dispatchTeleagentTask } from "./teleagent-dispatch.js";
+import { runHandoffDispatch } from "./teleagent-dispatch.js";
 import { isPrivateFrontmatter, isPathExcluded } from "./memory-query-core.js";
 import {
   ancestorLines, withContext, freshTaskText, stripInternalIdentifiers,
@@ -1004,16 +1004,16 @@ export class Delegator {
     this.plugin.notice(t("📋 任务已复制，粘贴到 {agent} 里发出", { agent: AGENTS[agent]?.name || agent }), 10000);
     // 人的在场的一键派发：只在 Windows + TeleAgent + 用户明确点了“自动发送”时走。
     // 失败不静默——剪贴板里仍然有全文，但要明确告诉用户哪一步没成，别让人以为发出去了。
-    if (opts.autoSend && agent === "teleagent" && process.platform === "win32") {
-      const project = String(opts.projectName || "").trim();
-      if (!project) {
-        this.plugin.notice(t("没有识别到项目名，已退回复制交接"), 8000);
-        return job;
-      }
-      const result = await dispatchTeleagentTask({ project, text: resolved.prompt });
-      if (result.ok) this.plugin.notice(t("已派发到 TeleAgent · {project}", { project }), 6000);
-      else this.plugin.notice(t("派发失败（{stage}）：{error}", { stage: result.stage, error: String(result.error || "").slice(0, 120) }), 12000);
-    }
+    const dispatched = await runHandoffDispatch({
+      agent,
+      autoSend: opts.autoSend,
+      projectName: opts.projectName,
+      text: resolved.prompt,
+    });
+    if (dispatched.skipped === "no-project") this.plugin.notice(t("没有识别到项目名，已退回复制交接"), 8000);
+    else if (dispatched.skipped === "platform") this.plugin.notice(t("UI Automation 派发只在 Windows 可用"), 8000);
+    else if (dispatched.ok) this.plugin.notice(t("已派发到 TeleAgent · {project}", { project: dispatched.project }), 6000);
+    else if (!dispatched.skipped) this.plugin.notice(t("派发失败（{stage}）：{error}", { stage: dispatched.stage, error: String(dispatched.error || "").slice(0, 120) }), 12000);
     this.plugin.refreshUI();
     return job;
   }

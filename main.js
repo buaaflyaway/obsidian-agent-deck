@@ -12157,6 +12157,21 @@ Start-Sleep -Milliseconds 1200
 Send-Result @{ ok = $true; stage = 'sent'; project = $project; chars = $text.Length }
 exit 0
 `;
+async function runHandoffDispatch({
+  agent,
+  autoSend,
+  projectName: projectName2,
+  text,
+  platform = process.platform,
+  dispatch = dispatchTeleagentTask
+} = {}) {
+  if (!autoSend || agent !== "teleagent") return { skipped: "not-requested" };
+  if (platform !== "win32") return { skipped: "platform" };
+  const project = String(projectName2 || "").trim();
+  if (!project) return { skipped: "no-project" };
+  const result = await dispatch({ project, text: String(text || "") });
+  return { ...result, project };
+}
 function parseDispatchOutput(stdout) {
   const lines = String(stdout || "").split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
   for (let i = lines.length - 1; i >= 0; i--) {
@@ -15062,16 +15077,16 @@ ${source}`;
     this.copyText(resolved.prompt);
     await this.openAgentApp(agent);
     this.plugin.notice(t("\u{1F4CB} \u4EFB\u52A1\u5DF2\u590D\u5236\uFF0C\u7C98\u8D34\u5230 {agent} \u91CC\u53D1\u51FA", { agent: AGENTS[agent]?.name || agent }), 1e4);
-    if (opts.autoSend && agent === "teleagent" && process.platform === "win32") {
-      const project = String(opts.projectName || "").trim();
-      if (!project) {
-        this.plugin.notice(t("\u6CA1\u6709\u8BC6\u522B\u5230\u9879\u76EE\u540D\uFF0C\u5DF2\u9000\u56DE\u590D\u5236\u4EA4\u63A5"), 8e3);
-        return job;
-      }
-      const result = await dispatchTeleagentTask({ project, text: resolved.prompt });
-      if (result.ok) this.plugin.notice(t("\u5DF2\u6D3E\u53D1\u5230 TeleAgent \xB7 {project}", { project }), 6e3);
-      else this.plugin.notice(t("\u6D3E\u53D1\u5931\u8D25\uFF08{stage}\uFF09\uFF1A{error}", { stage: result.stage, error: String(result.error || "").slice(0, 120) }), 12e3);
-    }
+    const dispatched = await runHandoffDispatch({
+      agent,
+      autoSend: opts.autoSend,
+      projectName: opts.projectName,
+      text: resolved.prompt
+    });
+    if (dispatched.skipped === "no-project") this.plugin.notice(t("\u6CA1\u6709\u8BC6\u522B\u5230\u9879\u76EE\u540D\uFF0C\u5DF2\u9000\u56DE\u590D\u5236\u4EA4\u63A5"), 8e3);
+    else if (dispatched.skipped === "platform") this.plugin.notice(t("UI Automation \u6D3E\u53D1\u53EA\u5728 Windows \u53EF\u7528"), 8e3);
+    else if (dispatched.ok) this.plugin.notice(t("\u5DF2\u6D3E\u53D1\u5230 TeleAgent \xB7 {project}", { project: dispatched.project }), 6e3);
+    else if (!dispatched.skipped) this.plugin.notice(t("\u6D3E\u53D1\u5931\u8D25\uFF08{stage}\uFF09\uFF1A{error}", { stage: dispatched.stage, error: String(dispatched.error || "").slice(0, 120) }), 12e3);
     this.plugin.refreshUI();
     return job;
   }
@@ -38186,15 +38201,28 @@ ${t("\u8BF7\u6309\u8FD9\u4E2A\u7EE7\u7EED\uFF0C\u4E0D\u7528\u518D\u95EE\u540C\u4
   // 项目名从任务上下文里解析（wikilink / 标题前缀 / 笔记路径），解析不到就明确拒绝——
   // 猜错项目会把任务派进别的代码库，比不派发更糟。
   async dispatchToTeleagent(path19, line, lines) {
-    const blockText2 = String(lines[line] || "");
-    const context = lines.slice(Math.max(0, line - 4), line + 1);
+    const target = await this.delegateTarget({ path: path19, line, lineText: lines[line] }, { newSession: true });
+    if (target.error) {
+      this.notice(target.error, 6e3);
+      return;
+    }
+    const blockText2 = String(target.lines[target.line] || "");
+    const context = target.lines.slice(Math.max(0, target.line - 4), target.line + 1);
     const resolved = resolveProjectForTask({ settings: this.settings, notePath: path19, contextLines: context, blockText: blockText2 });
     const project = String(resolved?.name || "").trim();
     if (!project) {
       this.notice(t("\u8FD9\u4E2A\u4EFB\u52A1\u6CA1\u6709\u767B\u8BB0\u8FC7\u9879\u76EE\u76EE\u5F55\uFF0C\u5148\u5728\u8BBE\u7F6E\u91CC\u767B\u8BB0\u9879\u76EE\u6587\u4EF6\u5939"), 8e3);
       return;
     }
-    await this.delegator.handoff({ agent: "teleagent", path: path19, line, lineText: blockText2, projectName: project, autoSend: true });
+    await this.delegator.handoff({
+      agent: "teleagent",
+      file: target.file,
+      lines: target.lines,
+      line: target.line,
+      block: target.block,
+      projectName: project,
+      autoSend: true
+    });
   }
   async taskActions(path19, line, event) {
     let text;
