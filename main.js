@@ -3208,9 +3208,9 @@ function collectSelectedRootLines(lines, ranges = [], { fenced = null, skipLine 
     const minW = Math.min(...items.map((l) => width(lines[l])));
     for (let l of items) {
       while (width(lines[l]) > minW) {
-        const p2 = parentItem(lines, l);
-        if (p2 < 0) break;
-        l = p2;
+        const p = parentItem(lines, l);
+        if (p < 0) break;
+        l = p;
       }
       if (width(lines[l]) === minW) picked.add(l);
     }
@@ -3678,7 +3678,7 @@ function answerConclusion(raw, max = 160) {
     const paras = cleaned.split(/\n+/).map((l) => l.replace(/\s+/g, " ").trim()).filter(Boolean);
     if (!paras.length) return "";
     if (paras.length === 1) return resultText(paras[0], max);
-    const marked = [...paras].reverse().find((p2) => CLAIM_MARK_RE.test(p2) && [...p2].length >= 20);
+    const marked = [...paras].reverse().find((p) => CLAIM_MARK_RE.test(p) && [...p].length >= 20);
     let pick = marked || "";
     if (!pick) {
       for (let i = paras.length - 1; i >= Math.max(0, paras.length - 5); i--) {
@@ -4093,9 +4093,9 @@ function bindInto(text, at, s, { below = false, rules = null } = {}) {
     return { line: lineStr, blockId: "" };
   };
   if (target.kind === "bind") {
-    const p2 = splitTask(lines[n]);
-    if (p2 && !p2.cb && (!p2.kw || OPEN_KWS.includes(p2.kw) || p2.kw === "DOING" || AGENT_KW_RE.test(p2.kw))) {
-      lines[n] = p2.auto ? formatAutoTaskLine({ prefix: p2.prefix, kw: want, start: p2.since || since, end: p2.until || until || p2.since || since, title: p2.title, preserveTitle: true, showTimeRange: r.showTimeRange || Boolean(p2.since || p2.until), blockId: p2.blockId }) : `${p2.prefix}${want} ${p2.since || since} ${p2.rest}`.replace(/ {2,}/g, " ").trimEnd();
+    const p = splitTask(lines[n]);
+    if (p && !p.cb && (!p.kw || OPEN_KWS.includes(p.kw) || p.kw === "DOING" || AGENT_KW_RE.test(p.kw))) {
+      lines[n] = p.auto ? formatAutoTaskLine({ prefix: p.prefix, kw: want, start: p.since || since, end: p.until || until || p.since || since, title: p.title, preserveTitle: true, showTimeRange: r.showTimeRange || Boolean(p.since || p.until), blockId: p.blockId }) : `${p.prefix}${want} ${p.since || since} ${p.rest}`.replace(/ {2,}/g, " ").trimEnd();
     }
     const eb2 = maybeAddBlockId(lines[n]);
     lines[n] = eb2.line;
@@ -4655,22 +4655,22 @@ ${custom.sections.active.text}
   };
   const normalizeChunkHeader = (chunkLines, forceDone = false, container = false) => {
     if (container || !chunkLines.length) return chunkLines;
-    const p2 = splitTask(chunkLines[0]);
-    if (!p2) return chunkLines;
+    const p = splitTask(chunkLines[0]);
+    if (!p) return chunkLines;
     const cs = clockSpanFromLines(chunkLines, 0);
-    if (p2.auto && !p2.cb) {
-      const s = p2.since || cs?.start || "";
-      const e = (p2.until && p2.until !== p2.since ? p2.until : cs?.end) || p2.until || p2.since || s;
+    if (p.auto && !p.cb) {
+      const s = p.since || cs?.start || "";
+      const e = (p.until && p.until !== p.since ? p.until : cs?.end) || p.until || p.since || s;
       if (s || e || forceDone) {
         return [
           formatAutoTaskLine({
-            prefix: p2.prefix,
-            kw: forceDone ? "DONE" : p2.kw || "TODO",
+            prefix: p.prefix,
+            kw: forceDone ? "DONE" : p.kw || "TODO",
             start: s,
             end: e,
-            title: p2.title,
+            title: p.title,
             preserveTitle: true,
-            blockId: p2.blockId
+            blockId: p.blockId
           }),
           ...chunkLines.slice(1)
         ];
@@ -4678,8 +4678,8 @@ ${custom.sections.active.text}
       return chunkLines;
     }
     if (forceDone) {
-      const stamp = cs?.end || p2.until || p2.since || "";
-      return [`${p2.prefix}DONE ${stamp ? stamp + " " : ""}${p2.rest}`.trimEnd(), ...chunkLines.slice(1)];
+      const stamp = cs?.end || p.until || p.since || "";
+      return [`${p.prefix}DONE ${stamp ? stamp + " " : ""}${p.rest}`.trimEnd(), ...chunkLines.slice(1)];
     }
     return chunkLines;
   };
@@ -4787,11 +4787,11 @@ ${custom.sections.active.text}
   for (const [a, b] of moved) movedAt.fill(1, a, b);
   for (let n = headEnd; n < regionEnd; n++) {
     if (fence.has(n) || drop.has(n) || !isRule(lines[n])) continue;
-    let p2 = n - 1;
-    while (p2 >= headEnd && !lines[p2].trim()) p2--;
-    if (p2 < headEnd) continue;
-    const title = lines[p2].trim();
-    if (drop.has(p2) || LEGACY_HEADINGS.includes(title) || title === DONE_HEADING || title === ACTIVE_HEADING || movedAt[p2]) drop.add(n);
+    let p = n - 1;
+    while (p >= headEnd && !lines[p].trim()) p--;
+    if (p < headEnd) continue;
+    const title = lines[p].trim();
+    if (drop.has(p) || LEGACY_HEADINGS.includes(title) || title === DONE_HEADING || title === ACTIVE_HEADING || movedAt[p]) drop.add(n);
   }
   done.sort((a, b) => b.turns - a.turns || a.at - b.at);
   active2.sort((a, b) => rank(a.keyword) - rank(b.keyword) || b.turns - a.turns || a.at - b.at);
@@ -5067,27 +5067,27 @@ var JournalOrganizer = class {
     schedule();
   }
   async check() {
-    const p2 = this.plugin;
-    if (this.checking || p2._unloaded || p2.settings.organizeJournalSuggest === false) return;
+    const p = this.plugin;
+    if (this.checking || p._unloaded || p.settings.organizeJournalSuggest === false) return;
     this.checking = true;
     try {
-      await p2._usageReady;
-      if (p2._unloaded) return;
-      const view2 = p2.app.workspace.getActiveViewOfType(import_obsidian.MarkdownView);
+      await p._usageReady;
+      if (p._unloaded) return;
+      const view2 = p.app.workspace.getActiveViewOfType(import_obsidian.MarkdownView);
       const file = view2?.file;
-      if (!file || view2.editor?.cm?.composing || file.path !== p2.journalTarget()?.path) return;
-      const day = dayKeyToday(p2.settings);
-      const previous = p2.settings.journalOrganizePrompt || { notes: {} };
+      if (!file || view2.editor?.cm?.composing || file.path !== p.journalTarget()?.path) return;
+      const day = dayKeyToday(p.settings);
+      const previous = p.settings.journalOrganizePrompt || { notes: {} };
       const count = previous.day === day ? previous.count || 0 : 0;
       if (count >= 2) return;
-      const base = await p2.readNote(file.path);
-      const plan = await p2.journalPlan(file, base);
+      const base = await p.readNote(file.path);
+      const plan = await p.journalPlan(file, base);
       const keys = unorganizedRecordKeys(plan);
       const acknowledged = previous.notes?.[file.path] || [];
-      if (keys.filter((key) => !acknowledged.includes(key)).length < 4 || p2.app.workspace.getActiveFile()?.path !== file.path || p2._unloaded || p2.settings.organizeJournalSuggest === false) return;
-      p2.settings.journalOrganizePrompt = { day, count: count + 1, notes: { ...previous.notes, [file.path]: [.../* @__PURE__ */ new Set([...acknowledged, ...keys])] } };
-      await p2.saveSettings();
-      if (p2._unloaded) return;
+      if (keys.filter((key) => !acknowledged.includes(key)).length < 4 || p.app.workspace.getActiveFile()?.path !== file.path || p._unloaded || p.settings.organizeJournalSuggest === false) return;
+      p.settings.journalOrganizePrompt = { day, count: count + 1, notes: { ...previous.notes, [file.path]: [.../* @__PURE__ */ new Set([...acknowledged, ...keys])] } };
+      await p.saveSettings();
+      if (p._unloaded) return;
       this.notice?.hide();
       const fragment = document.createDocumentFragment();
       fragment.createEl("div", { text: t("\u8FD9\u7BC7\u65E5\u8BB0\u7684 AI \u8BB0\u5F55\u6709\u4E9B\u5206\u6563\u6216\u987A\u5E8F\u6DF7\u4E71\uFF0C\u8981\u6574\u7406\u65E5\u5FD7\u5417\uFF1F") });
@@ -5095,9 +5095,9 @@ var JournalOrganizer = class {
       actions.createEl("button", { text: t("\u6574\u7406\u65E5\u5FD7") }).onclick = async () => {
         this.notice?.hide();
         try {
-          await p2.organizeJournal(file);
+          await p.organizeJournal(file);
         } catch (error) {
-          p2.notice(error.message);
+          p.notice(error.message);
         }
       };
       actions.createEl("button", { text: t("\u7A0D\u540E") }).onclick = () => this.notice?.hide();
@@ -5230,8 +5230,8 @@ function evaluatePermissionPolicy(toolCall, { cwd = "", vaultPath = "", autoAppr
     }
   }
   const paths = extractToolPaths(toolCall);
-  for (const p2 of paths) {
-    if (SENSITIVE_PATH_RE.test(p2)) {
+  for (const p of paths) {
+    if (SENSITIVE_PATH_RE.test(p)) {
       return { allowAuto: false, escalated: true, risk: "sensitive_path", reason: "sensitive_path" };
     }
   }
@@ -5239,8 +5239,8 @@ function evaluatePermissionPolicy(toolCall, { cwd = "", vaultPath = "", autoAppr
   const kind = String(toolCall?.kind || "").toLowerCase();
   const isMutating = /edit|write|delete|remove|move|exec|execute|shell/.test(kind) || /\b(?:delete|remove|write|rm)\b/i.test(String(toolCall?.title || ""));
   if (roots.length && isMutating) {
-    for (const p2 of paths) {
-      if (!roots.some((r) => isInsideRoot(p2, r))) {
+    for (const p of paths) {
+      if (!roots.some((r) => isInsideRoot(p, r))) {
         return { allowAuto: false, escalated: true, risk: "outside_workspace", reason: "outside_workspace" };
       }
     }
@@ -5316,9 +5316,9 @@ function resolveBin(name, configured = "", homeDir = home(), env = process.env) 
   ];
   for (const dir of dirs) {
     for (const ext of exts) {
-      const p2 = import_path2.default.join(dir, `${name}${ext}`);
+      const p = import_path2.default.join(dir, `${name}${ext}`);
       try {
-        if (import_fs2.default.existsSync(p2) && import_fs2.default.statSync(p2).isFile()) return p2;
+        if (import_fs2.default.existsSync(p) && import_fs2.default.statSync(p).isFile()) return p;
       } catch {
       }
     }
@@ -5422,8 +5422,8 @@ function detectJournalProviders({ homeDir = home(), env = process.env, cfg = {} 
       models: spec.models
     };
   });
-  const available = providers.filter((p2) => p2.available);
-  const recommended = (available[0] || providers.find((p2) => p2.found) || providers[0]).id;
+  const available = providers.filter((p) => p.available);
+  const recommended = (available[0] || providers.find((p) => p.found) || providers[0]).id;
   return { providers, available, recommended };
 }
 function inferProviderFromPath(binPath) {
@@ -6036,10 +6036,10 @@ async function desktopMessages(db, agent, sid) {
     if (!["user", "assistant"].includes(role)) return [];
     const parts = json(row.parts, []);
     const content = parts.length ? parts : d.content || [];
-    const rawText = typeof d.text === "string" ? d.text : (Array.isArray(content) ? content : []).filter((p2) => p2.type === "text" && !p2.synthetic && !p2.ignored).map((p2) => p2.text || "").join("\n");
+    const rawText = typeof d.text === "string" ? d.text : (Array.isArray(content) ? content : []).filter((p) => p.type === "text" && !p.synthetic && !p.ignored).map((p) => p.text || "").join("\n");
     const strip = role === "user" ? agent === "qwenwork" ? stripQwenWorkContext : agent === "teleagent" ? stripTeleAgentContext : null : null;
     const text = strip ? strip(rawText) : rawText;
-    const tool = [...Array.isArray(content) ? content : [], ...d.tools || []].filter((p2) => p2.type === "tool" || p2.name).at(-1);
+    const tool = [...Array.isArray(content) ? content : [], ...d.tools || []].filter((p) => p.type === "tool" || p.name).at(-1);
     const tokens = d.tokens;
     const completed = desktopTime(d.completedAt || d.time?.completed);
     const finish = String(d.finish || "").replace(/_/g, "-");
@@ -7185,13 +7185,13 @@ function ingestCodexLine(ctx, line, fc, touched) {
   } catch {
     return;
   }
-  const p2 = d.payload || {};
+  const p = d.payload || {};
   if (d.type === "session_meta") {
-    fc.sid = p2.id || fc.sid;
-    fc.cwd = p2.cwd || fc.cwd;
-    fc.app = p2.originator || fc.app || "codex";
-    const spawn6 = p2.source && typeof p2.source === "object" && p2.source.subagent && p2.source.subagent.thread_spawn;
-    const parent = p2.parent_thread_id || spawn6 && spawn6.parent_thread_id || "";
+    fc.sid = p.id || fc.sid;
+    fc.cwd = p.cwd || fc.cwd;
+    fc.app = p.originator || fc.app || "codex";
+    const spawn6 = p.source && typeof p.source === "object" && p.source.subagent && p.source.subagent.thread_spawn;
+    const parent = p.parent_thread_id || spawn6 && spawn6.parent_thread_id || "";
     if (parent && parent !== fc.sid) {
       fc.parentSid = String(parent);
       usage.noteMeta(fc, fc.sid, { parentSid: fc.parentSid });
@@ -7199,14 +7199,14 @@ function ingestCodexLine(ctx, line, fc, touched) {
     return;
   }
   if (d.type === "turn_context") {
-    if (p2.model) fc.model = p2.model;
+    if (p.model) fc.model = p.model;
     return;
   }
   const ms = Date.parse(d.timestamp);
   if (!ms || d.type !== "event_msg" && d.type !== "response_item") return;
   const sid = fc.sid;
-  const tokUsage = d.type === "event_msg" && p2.type === "token_count" && p2.info && p2.info.total_token_usage;
-  const isDialogue = d.type === "response_item" ? p2.type === "message" || p2.type === "function_call" || p2.type === "custom_tool_call" || p2.type === "local_shell_call" : d.type === "event_msg" && ["task_started", "user_message", "agent_message", "task_complete", "turn_aborted", "error"].includes(p2.type);
+  const tokUsage = d.type === "event_msg" && p.type === "token_count" && p.info && p.info.total_token_usage;
+  const isDialogue = d.type === "response_item" ? p.type === "message" || p.type === "function_call" || p.type === "custom_tool_call" || p.type === "local_shell_call" : d.type === "event_msg" && ["task_started", "user_message", "agent_message", "task_complete", "turn_aborted", "error"].includes(p.type);
   if (usage.stale("codex", ms)) {
     if (tokUsage) fc.tot = { out: tokUsage.output_tokens || 0, fresh: Math.max(0, (tokUsage.input_tokens || 0) - (tokUsage.cached_input_tokens || 0)), cached: tokUsage.cached_input_tokens || 0 };
     return;
@@ -7227,17 +7227,17 @@ function ingestCodexLine(ctx, line, fc, touched) {
   v.app = fc.app;
   v.title = usage.titles.get(sid) || v.title;
   if (d.type === "event_msg") {
-    if (p2.type === "task_complete") v.state = fc.parentSid ? "done" : "wait";
-    else if (p2.type === "turn_aborted") v.state = "cancelled";
-    else if (p2.type === "error") {
+    if (p.type === "task_complete") v.state = fc.parentSid ? "done" : "wait";
+    else if (p.type === "turn_aborted") v.state = "cancelled";
+    else if (p.type === "error") {
       v.state = "error";
-      v.err = String(p2.message || "").replace(/\s+/g, " ").slice(0, 80);
-    } else if (p2.type === "task_started" || p2.type === "user_message") v.state = "run";
-    else if (p2.type === "agent_message" && p2.message) v.lastText = String(p2.message);
+      v.err = String(p.message || "").replace(/\s+/g, " ").slice(0, 80);
+    } else if (p.type === "task_started" || p.type === "user_message") v.state = "run";
+    else if (p.type === "agent_message" && p.message) v.lastText = String(p.message);
   }
   if (d.type === "response_item") {
-    if (p2.type === "message" && p2.role === "user") {
-      const text = cleanUserPrompt((Array.isArray(p2.content) ? p2.content : []).filter((b) => b && b.type === "input_text").map((b) => b.text || "").join(""));
+    if (p.type === "message" && p.role === "user") {
+      const text = cleanUserPrompt((Array.isArray(p.content) ? p.content : []).filter((b) => b && b.type === "input_text").map((b) => b.text || "").join(""));
       if (text && isPromptText(text)) {
         day.prompts++;
         startRound(fc, ms, text, String(ms), v);
@@ -7246,17 +7246,17 @@ function ingestCodexLine(ctx, line, fc, touched) {
         if (s.text.length < 300) s.text += (s.text ? " / " : "") + text.replace(/\s+/g, " ").slice(0, 300 - s.text.length);
       }
     }
-    if (p2.type === "message" && p2.role === "assistant") {
-      const text = (Array.isArray(p2.content) ? p2.content : []).filter((b) => b && (b.type === "output_text" || b.type === "text")).map((b) => b.text || "").join(" ");
+    if (p.type === "message" && p.role === "assistant") {
+      const text = (Array.isArray(p.content) ? p.content : []).filter((b) => b && (b.type === "output_text" || b.type === "text")).map((b) => b.text || "").join(" ");
       if (text) v.lastText = text;
     }
-    if (p2.type === "function_call" || p2.type === "custom_tool_call" || p2.type === "local_shell_call") {
+    if (p.type === "function_call" || p.type === "custom_tool_call" || p.type === "local_shell_call") {
       let a = {};
       try {
-        a = typeof p2.arguments === "string" ? JSON.parse(p2.arguments) : p2.arguments || p2.action || {};
+        a = typeof p.arguments === "string" ? JSON.parse(p.arguments) : p.arguments || p.action || {};
       } catch {
       }
-      v.step = stepText(p2.name || p2.type, a);
+      v.step = stepText(p.name || p.type, a);
       v.state = "run";
     }
   }
@@ -8684,18 +8684,18 @@ var AI_IDLE = 5;
 var LIVE_STALE = 90 * 1e3;
 var MAX_TS = 2e4;
 var home2 = () => import_os8.default.homedir();
-var norm = (p2) => String(p2 || "").replace(/^~(?=\/)/, home2());
+var norm = (p) => String(p || "").replace(/^~(?=\/)/, home2());
 var qwenWorkHome = () => process.env.QWENWORK_HOME ? norm(process.env.QWENWORK_HOME) : import_path7.default.join(home2(), ".qwenworkcn");
 function isScratchCwd(cwd) {
-  const p2 = String(cwd || "").replace(/\\/g, "/").replace(/\/+$/, "");
-  if (!p2) return false;
-  const leaf = p2.split("/").pop() || "";
+  const p = String(cwd || "").replace(/\\/g, "/").replace(/\/+$/, "");
+  if (!p) return false;
+  const leaf = p.split("/").pop() || "";
   if (/^\d+-[0-9a-f-]{16,}$/i.test(leaf) || /^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(leaf)) return true;
   if (/^[a-z]$/i.test(leaf)) return true;
   if (/^[a-z]{1,3}-[a-z]{1,3}$/i.test(leaf)) return true;
   if (leaf === "default-workspace") return true;
-  if (p2 === home2().replace(/\\/g, "/")) return true;
-  if (/\/Codex\/\d{4}-\d{2}-\d{2}(?:\/|$)/i.test(p2)) return true;
+  if (p === home2().replace(/\\/g, "/")) return true;
+  if (/\/Codex\/\d{4}-\d{2}-\d{2}(?:\/|$)/i.test(p)) return true;
   return false;
 }
 function projectName(cwd) {
@@ -8705,8 +8705,8 @@ function projectName(cwd) {
   if (/\/\.dsh\/sessions\//.test(normCwd)) return "DSH";
   if (/\/\.gemini\/antigravity\//.test(normCwd)) return "Antigravity";
   if (/\/\.qwenworkcn\/workspace\//.test(normCwd)) return "QwenWork";
-  const p2 = normCwd.split("/.claude/worktrees/")[0].replace(/\/+$/, "");
-  return p2 === home2().replace(/\\/g, "/") ? "~" : p2.split("/").pop() || p2;
+  const p = normCwd.split("/.claude/worktrees/")[0].replace(/\/+$/, "");
+  return p === home2().replace(/\\/g, "/") ? "~" : p.split("/").pop() || p;
 }
 var WORKSPACE_MARKERS = [".git", "package.json", "pnpm-workspace.yaml", "pyproject.toml", "Cargo.toml", "go.mod", ".hg", ".obsidian"];
 function inferWorkspaceRoot(target) {
@@ -8765,7 +8765,7 @@ function disambiguateProjectLabels(entries = []) {
       const segs = String(e.root || "").replace(/\\/g, "/").replace(/\/+$/, "").split("/").filter(Boolean);
       return segs.slice(0, -1);
     });
-    const maxDepth = Math.max(1, ...parentsOf.map((p2) => p2.length));
+    const maxDepth = Math.max(1, ...parentsOf.map((p) => p.length));
     const resolved = new Array(list.length).fill("");
     for (let depth = 1; depth <= maxDepth; depth++) {
       const counts = /* @__PURE__ */ new Map();
@@ -8887,8 +8887,8 @@ var AgentUsage = class {
     this.lastScan = 0;
   }
   get primaries() {
-    const p2 = this.settings.primaryAgents;
-    const list = Array.isArray(p2) ? p2 : [p2].filter(Boolean);
+    const p = this.settings.primaryAgents;
+    const list = Array.isArray(p) ? p : [p].filter(Boolean);
     return list.filter((x) => AGENTS[x]).slice(0, 3);
   }
   isPrimary(agent) {
@@ -9037,30 +9037,30 @@ var AgentUsage = class {
     for (const [root, agent] of this.roots()) {
       if (onlyAgent && agent !== onlyAgent) continue;
       const files = await this.walk(root, agent === "dsh" || agent === "antigravity" ? 4 : 5, agent);
-      for (const p2 of files) {
+      for (const p of files) {
         if (agent === "qoder") {
-          const base = import_path7.default.basename(p2).replace(/\.jsonl(\.zstd|\.zst)?$/, "");
+          const base = import_path7.default.basename(p).replace(/\.jsonl(\.zstd|\.zst)?$/, "");
           const baseSid = (/([0-9a-f]{8}-[0-9a-f-]{27})/.exec(base) || [])[1] || base;
           if ([...this.files.keys()].some((k) => k.endsWith(`#${baseSid}`))) continue;
         }
         let st;
         try {
-          st = await fsp2.stat(p2);
+          st = await fsp2.stat(p);
         } catch {
           continue;
         }
-        const fc = this.files.get(p2);
+        const fc = this.files.get(p);
         if (strictSince && st.mtimeMs < floor) continue;
         if (!fc && st.mtimeMs < floor && !this.isPrimary(agent)) continue;
         if (fc && st.size === fc.size && st.mtimeMs === fc.mtime) continue;
         try {
-          if (agent === "dsh") await this.readDsh(p2, st, touched);
-          else await this.readJsonl(p2, agent, st, touched);
+          if (agent === "dsh") await this.readDsh(p, st, touched);
+          else await this.readJsonl(p, agent, st, touched);
         } catch (e) {
-          this.errors.push({ path: p2, message: String(e && e.message || e) });
+          this.errors.push({ path: p, message: String(e && e.message || e) });
           if (this.errors.length > 20) this.errors.shift();
         }
-        if (onProgress) onProgress(p2);
+        if (onProgress) onProgress(p);
         await new Promise((r) => setImmediate(r));
       }
     }
@@ -9188,27 +9188,27 @@ var AgentUsage = class {
       return out;
     }
     for (const e of ents) {
-      const p2 = import_path7.default.join(dir, e.name);
+      const p = import_path7.default.join(dir, e.name);
       if (e.isDirectory()) {
         if (agent === "antigravity" && (e.name === "steps" || e.name === "chunks" || e.name === "browser_sandbox" || e.name === "scratch")) continue;
-        if (depth > 0) out.push(...await this.walk(p2, depth - 1, agent));
+        if (depth > 0) out.push(...await this.walk(p, depth - 1, agent));
       } else if (e.isFile()) {
         if (agent === "antigravity") {
-          if (e.name === "transcript.jsonl") out.push(p2);
+          if (e.name === "transcript.jsonl") out.push(p);
         } else if (e.name.endsWith(".jsonl") || e.name.endsWith(".jsonl.zstd") || e.name.endsWith(".jsonl.zst")) {
-          out.push(p2);
+          out.push(p);
         }
       }
     }
     return out;
   }
   async readCodexTitles() {
-    const p2 = import_path7.default.join(process.env.CODEX_HOME || import_path7.default.join(home2(), ".codex"), "session_index.jsonl");
+    const p = import_path7.default.join(process.env.CODEX_HOME || import_path7.default.join(home2(), ".codex"), "session_index.jsonl");
     try {
-      const st = await fsp2.stat(p2);
+      const st = await fsp2.stat(p);
       if (st.mtimeMs === this.codexIndexAt) return;
       this.codexIndexAt = st.mtimeMs;
-      const text = await fsp2.readFile(p2, "utf8");
+      const text = await fsp2.readFile(p, "utf8");
       for (const line of text.split("\n")) {
         if (!line) continue;
         try {
@@ -9304,24 +9304,24 @@ var AgentUsage = class {
         return;
       }
       for (const e of ents) {
-        const p2 = import_path7.default.join(dir, e.name);
+        const p = import_path7.default.join(dir, e.name);
         if (e.isDirectory()) {
-          if (depth < 3) await walk(p2, depth + 1);
+          if (depth < 3) await walk(p, depth + 1);
           continue;
         }
         if (!e.isFile() || !/^local_.*\.json$/.test(e.name)) continue;
         let st;
         try {
-          st = await fsp2.stat(p2);
+          st = await fsp2.stat(p);
         } catch {
           continue;
         }
         if (st.mtimeMs < cutoff) continue;
-        let d = this.desk.get(p2);
+        let d = this.desk.get(p);
         if (!d || d.mtime !== st.mtimeMs) {
           let raw;
           try {
-            raw = JSON.parse(await fsp2.readFile(p2, "utf8"));
+            raw = JSON.parse(await fsp2.readFile(p, "utf8"));
           } catch {
             continue;
           }
@@ -9337,7 +9337,7 @@ var AgentUsage = class {
             parentSid: "",
             parentTitle: ""
           };
-          this.desk.set(p2, d);
+          this.desk.set(p, d);
         }
         if (!d.sid) continue;
         this.deskBySid.set(d.sid, d);
@@ -9351,7 +9351,7 @@ var AgentUsage = class {
       d.parentTitle = par ? par.title : "";
       if (d.archived) this.archivedClaude.add(d.sid);
     }
-    for (const [p2, d] of this.desk) if (!this.deskBySid.has(d.sid)) this.desk.delete(p2);
+    for (const [p, d] of this.desk) if (!this.deskBySid.has(d.sid)) this.desk.delete(p);
   }
   // 开着的 side chat：桌面版给每个 side chat 起一个 claude 子进程，参数里带
   // --fork-session --no-session-persistence --resume <母会话 sid>；进程不在就是关了。
@@ -9572,16 +9572,16 @@ var AgentUsage = class {
     return this.archivedClaude.has(sid) || this.archived.has(sid) || !!this.meta.get(sid)?.archived;
   }
   // ----- file caches -----
-  ensureFile(p2, agent) {
-    let fc = this.files.get(p2);
+  ensureFile(p, agent) {
+    let fc = this.files.get(p);
     if (!fc) {
-      const base = import_path7.default.basename(p2).replace(/\.jsonl(\.zstd|\.zst)?$/, "");
-      const flat = p2.replace(/\\/g, "/");
+      const base = import_path7.default.basename(p).replace(/\.jsonl(\.zstd|\.zst)?$/, "");
+      const flat = p.replace(/\\/g, "/");
       const sm = /([0-9a-f]{8}-[0-9a-f-]{27})\/subagents\/agent-([^/]+)\.jsonl$/.exec(flat);
       const agm = agent === "antigravity" ? /\/brain\/([^/]+)\/\.system_generated\/logs\/transcript\.jsonl$/.exec(flat) : null;
       const sid = sm ? sm[1] : agm ? agm[1] : base.startsWith("session-") ? base : (/([0-9a-f]{8}-[0-9a-f-]{27})/.exec(base) || [])[1] || base;
       fc = {
-        path: p2,
+        path: p,
         agent,
         size: 0,
         offset: 0,
@@ -9595,12 +9595,12 @@ var AgentUsage = class {
         msgs: /* @__PURE__ */ new Map(),
         titles: /* @__PURE__ */ new Map(),
         live: null,
-        zstd: p2.endsWith(".zstd") || p2.endsWith(".zst"),
+        zstd: p.endsWith(".zstd") || p.endsWith(".zst"),
         sub: sm ? sm[2] : "",
         parentSid: sm ? sm[1] : "",
         metaRead: false
       };
-      this.files.set(p2, fc);
+      this.files.set(p, fc);
     }
     return fc;
   }
@@ -9662,11 +9662,11 @@ var AgentUsage = class {
     return m;
   }
   // ----- JSONL agents -----
-  async readJsonl(p2, agent, st, touched) {
-    const fc = this.ensureFile(p2, agent);
+  async readJsonl(p, agent, st, touched) {
+    const fc = this.ensureFile(p, agent);
     if (fc.sub && !fc.metaRead) {
       fc.metaRead = true;
-      this.readSubMeta(p2, fc).catch(() => {
+      this.readSubMeta(p, fc).catch(() => {
       });
     }
     if (st.size < fc.size) {
@@ -9685,7 +9685,7 @@ var AgentUsage = class {
       fc.size = st.size;
       return;
     }
-    const fh = await fsp2.open(p2, "r");
+    const fh = await fsp2.open(p, "r");
     try {
       const len = st.size - fc.offset;
       const buf = Buffer.alloc(len);
@@ -9749,9 +9749,9 @@ var AgentUsage = class {
   subsOf(sid) {
     return [...(this.subs.get(sid) || /* @__PURE__ */ new Map()).values()].filter((r) => r.start).sort((a, b) => a.start - b.start);
   }
-  async readSubMeta(p2, fc) {
+  async readSubMeta(p, fc) {
     try {
-      const m = JSON.parse(await fsp2.readFile(p2.replace(/\.jsonl$/, ".meta.json"), "utf8"));
+      const m = JSON.parse(await fsp2.readFile(p.replace(/\.jsonl$/, ".meta.json"), "utf8"));
       const r = this.subOf(fc.parentSid, fc.sub);
       r.desc = String(m.description || "");
       r.type = String(m.agentType || "");
@@ -9807,10 +9807,10 @@ var AgentUsage = class {
     r.state = st === "completed" ? "done" : "fail";
   }
   // ----- DeepSeek Harness (zstd JSONL) -----
-  async readDsh(p2, st, touched) {
-    const fc = this.ensureFile(p2, "dsh");
+  async readDsh(p, st, touched) {
+    const fc = this.ensureFile(p, "dsh");
     if (fc.mtime === st.mtimeMs && fc.size === st.size) return;
-    const fd = await fsp2.open(p2, "r");
+    const fd = await fsp2.open(p, "r");
     try {
       const head = Buffer.alloc(Math.min(64, st.size));
       await fd.read(head, 0, head.length, 0);
@@ -10007,10 +10007,10 @@ var AgentUsage = class {
     res.wall = Math.round(res.wall);
     res.agent = Math.round(res.agent);
     res.segs = res.segs.map(([a, b]) => [Math.round(a), Math.round(b)]);
-    for (const p2 of Object.values(res.proj)) {
-      p2.min = Math.round(p2.min);
-      p2.out = Math.round(p2.out);
-      for (const k in p2.agents || {}) p2.agents[k] = Math.round(p2.agents[k]);
+    for (const p of Object.values(res.proj)) {
+      p.min = Math.round(p.min);
+      p.out = Math.round(p.out);
+      for (const k in p.agents || {}) p.agents[k] = Math.round(p.agents[k]);
     }
     res.list.sort((a, b) => (b.segs[b.segs.length - 1]?.[1] || 0) - (a.segs[a.segs.length - 1]?.[1] || 0));
     return res;
@@ -11280,20 +11280,20 @@ var import_os11 = __toESM(require("os"), 1);
 var import_path10 = __toESM(require("path"), 1);
 var home3 = () => import_os11.default.homedir();
 function normalizeProjectFolder(raw) {
-  let p2 = String(raw || "").trim().replace(/^~(?=\/)/, home3()).replace(/\\/g, "/");
-  if (!p2) return "";
-  p2 = p2.replace(/\/+$/, "");
+  let p = String(raw || "").trim().replace(/^~(?=\/)/, home3()).replace(/\\/g, "/");
+  if (!p) return "";
+  p = p.replace(/\/+$/, "");
   const homePath = home3().replace(/\\/g, "/").replace(/\/+$/, "");
-  const isHome = process.platform === "win32" ? p2.toLowerCase() === homePath.toLowerCase() : p2 === homePath;
-  if (!p2 || p2 === "~" || p2 === "/" || isHome) return "";
-  if (!import_path10.default.isAbsolute(p2)) return "";
-  return p2;
+  const isHome = process.platform === "win32" ? p.toLowerCase() === homePath.toLowerCase() : p === homePath;
+  if (!p || p === "~" || p === "/" || isHome) return "";
+  if (!import_path10.default.isAbsolute(p)) return "";
+  return p;
 }
-function realFolder(p2) {
+function realFolder(p) {
   try {
-    return import_fs12.default.realpathSync(p2);
+    return import_fs12.default.realpathSync(p);
   } catch {
-    return p2;
+    return p;
   }
 }
 function sameFolder(a, b) {
@@ -11305,10 +11305,10 @@ function sameFolder(a, b) {
   return process.platform === "win32" ? rx.toLowerCase() === ry.toLowerCase() : rx === ry;
 }
 function folderExists(folder) {
-  const p2 = normalizeProjectFolder(folder);
-  if (!p2) return false;
+  const p = normalizeProjectFolder(folder);
+  if (!p) return false;
   try {
-    return import_fs12.default.statSync(p2).isDirectory();
+    return import_fs12.default.statSync(p).isDirectory();
   } catch {
     return false;
   }
@@ -11717,7 +11717,7 @@ function taskMention(line, trigger = "@") {
   if (found.length > 1) throw new Error(t("\u4E00\u6761\u4EFB\u52A1\u53EA\u80FD\u6307\u5B9A\u4E00\u4E2A Agent \u6807\u8BB0"));
   if (!found.length) return null;
   const m = found[0], parts = (m[3] || "").split("/");
-  if (parts.length > 2 || m[3] !== void 0 && parts.some((p2) => !p2)) throw new Error(t("\u4F7F\u7528 {trigger}agent/model/effort \u6307\u5B9A\u59D4\u6D3E", { trigger }));
+  if (parts.length > 2 || m[3] !== void 0 && parts.some((p) => !p)) throw new Error(t("\u4F7F\u7528 {trigger}agent/model/effort \u6307\u5B9A\u59D4\u6D3E", { trigger }));
   const start = m.index + (m[0].startsWith(m[1]) ? 0 : 1);
   return { agent: m[2], trigger: m[1], model: parts[0] || "", effort: parts[1] || "", from: start, to: m.index + m[0].length };
 }
@@ -12198,7 +12198,7 @@ function renderContextBundle(bundle) {
     tail.promptSuffix,
     tail.sourceLine,
     tail.confirmFirst
-  ].map((p2) => String(p2 || "").trim()).filter(Boolean);
+  ].map((p) => String(p || "").trim()).filter(Boolean);
   const prompt = parts.join("\n\n");
   if (bundle.stats) bundle.stats.injectedChars = prompt.length;
   return prompt;
@@ -12356,7 +12356,7 @@ var taskHash = (text) => (0, import_crypto8.createHash)("sha1").update(String(te
 function codexDesktopBinary(configured) {
   if (configured) return configured;
   const bundled = ["/Applications/Codex.app/Contents/Resources/codex", "/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex"];
-  return bundled.find((p2) => import_fs13.default.existsSync(p2)) || "codex";
+  return bundled.find((p) => import_fs13.default.existsSync(p)) || "codex";
 }
 var CodexDesktopRunner = class {
   constructor(delegator, job, openDesktop) {
@@ -12451,7 +12451,7 @@ var CodexDesktopRunner = class {
     } catch {
       return "";
     }
-    const found = (projects?.data || []).find((p2) => (p2.roots || []).some((r) => sameFolder(r.path, roots)));
+    const found = (projects?.data || []).find((p) => (p.roots || []).some((r) => sameFolder(r.path, roots)));
     if (found?.id) return found.id;
     const name = this.job.project || projectNameForFolder(this.d.settings, roots) || import_path11.default.basename(roots);
     try {
@@ -12542,7 +12542,7 @@ var CodexDesktopRunner = class {
 // src/delegation-runners.js
 var fsp4 = import_fs14.default.promises;
 var home4 = () => import_os12.default.homedir();
-var norm2 = (p2) => String(p2 || "").replace(/^~(?=\/)/, home4());
+var norm2 = (p) => String(p || "").replace(/^~(?=\/)/, home4());
 var AGENT_BINARY_SPECS = {
   codex: {
     fallback: "codex",
@@ -12696,9 +12696,9 @@ function findInPathDirs(name, dirs) {
 function findBinary(configured, candidates, fallback) {
   const custom = configured && String(configured).trim();
   if (custom) return norm2(custom);
-  for (const p2 of candidates) {
+  for (const p of candidates) {
     try {
-      if (import_fs14.default.existsSync(p2)) return p2;
+      if (import_fs14.default.existsSync(p)) return p;
     } catch {
     }
   }
@@ -12767,15 +12767,15 @@ var findWorkbuddyBinary = (configured = "") => findAgentBinary("workbuddy", conf
 var findClaudeBinary = (configured = "") => findAgentBinary("claude", configured);
 function pickTrusted(list, vaultPath) {
   if (list.includes(vaultPath)) return vaultPath;
-  const isDir = (p2) => {
+  const isDir = (p) => {
     try {
-      return import_fs14.default.statSync(p2).isDirectory();
+      return import_fs14.default.statSync(p).isDirectory();
     } catch {
       return false;
     }
   };
-  const trusted = list.filter((p2) => isDir(p2) && !/^\/(private\/)?(tmp|var)\//.test(p2));
-  const notAncestor = trusted.filter((p2) => p2 !== vaultPath && !String(vaultPath).startsWith(p2.replace(/\/+$/, "") + "/"));
+  const trusted = list.filter((p) => isDir(p) && !/^\/(private\/)?(tmp|var)\//.test(p));
+  const notAncestor = trusted.filter((p) => p !== vaultPath && !String(vaultPath).startsWith(p.replace(/\/+$/, "") + "/"));
   notAncestor.sort((a, b) => a.length - b.length);
   if (notAncestor.length) return notAncestor[0];
   trusted.sort((a, b) => a.length - b.length);
@@ -12784,7 +12784,7 @@ function pickTrusted(list, vaultPath) {
 async function findTrustedDir(vaultPath) {
   try {
     const projects = JSON.parse(await fsp4.readFile(import_path12.default.join(home4(), ".claude.json"), "utf8")).projects || {};
-    return pickTrusted(Object.keys(projects).filter((p2) => projects[p2] && projects[p2].hasTrustDialogAccepted), vaultPath);
+    return pickTrusted(Object.keys(projects).filter((p) => projects[p] && projects[p].hasTrustDialogAccepted), vaultPath);
   } catch {
     return vaultPath;
   }
@@ -13372,14 +13372,14 @@ var AcpRunner = class extends BaseRunner {
   }
   onMessage(msg) {
     if (msg.id != null && this.pending.has(msg.id)) {
-      const p2 = this.pending.get(msg.id);
+      const p = this.pending.get(msg.id);
       this.pending.delete(msg.id);
-      clearTimeout(p2.timer);
+      clearTimeout(p.timer);
       if (msg.error) {
         const errMsg = msg.error.message || JSON.stringify(msg.error);
         this.trace?.recordFrame("acp.rpc_error", errMsg);
-        p2.reject(new Error(errMsg));
-      } else p2.resolve(msg.result);
+        p.reject(new Error(errMsg));
+      } else p.resolve(msg.result);
       return;
     }
     if (this.finished) return;
@@ -13522,9 +13522,9 @@ var AcpRunner = class extends BaseRunner {
     this.close();
   }
   clearPending() {
-    for (const p2 of this.pending.values()) {
-      clearTimeout(p2.timer);
-      p2.reject(new Error(t("{agent} \u8FDE\u63A5\u5DF2\u7ED3\u675F", { agent: this.label })));
+    for (const p of this.pending.values()) {
+      clearTimeout(p.timer);
+      p.reject(new Error(t("{agent} \u8FDE\u63A5\u5DF2\u7ED3\u675F", { agent: this.label })));
     }
     this.pending.clear();
   }
@@ -13562,7 +13562,7 @@ function getRunnerClasses(overrides = {}) {
 // src/delegation.js
 var fsp5 = import_fs15.default.promises;
 var home5 = () => import_os13.default.homedir();
-var norm3 = (p2) => String(p2 || "").replace(/^~(?=\/)/, home5());
+var norm3 = (p) => String(p || "").replace(/^~(?=\/)/, home5());
 var BULLET_RE = /^(\s*)([-*+]|\d+[.)])\s+(.*)$/;
 var LINK_RE2 = LINK_RE;
 var STATUS_RE = new RegExp(`^(\\s*(?:[-*+]|\\d+[.)])\\s+(?:\\*\\*\\d{1,2}[:\uFF1A]\\d{2}\\*\\*\\s*)?)(${TASK_KWS})(?=\\s|$)`, "i");
@@ -13641,7 +13641,7 @@ var TERMINAL_BUNDLE = { terminal: "com.apple.Terminal", iterm: "com.googlecode.i
 var TERMINAL_APP = { herdr: "Herdr.app", tern: "Tern.app", iterm: "iTerm.app", warp: "Warp.app", terminal: "Terminal.app" };
 var TERMINAL_ORDER = ["herdr", "tern", "iterm", "warp", "terminal"];
 var HERDR_SPACE = "spagentdeck";
-var findBin = (name) => [import_path13.default.join(home5(), ".local/bin", name), `/opt/homebrew/bin/${name}`, `/usr/local/bin/${name}`].find((p2) => import_fs15.default.existsSync(p2)) || "";
+var findBin = (name) => [import_path13.default.join(home5(), ".local/bin", name), `/opt/homebrew/bin/${name}`, `/usr/local/bin/${name}`].find((p) => import_fs15.default.existsSync(p)) || "";
 var TERN_BIN = "/Applications/Tern.app/Contents/MacOS/tern";
 var TERN_SESSION = "Agent Deck";
 var osa = (script) => new Promise((resolve) => (0, import_child_process7.execFile)("/usr/bin/osascript", ["-e", script], { timeout: 8e3 }, (err2, out) => resolve(err2 ? null : String(out || "").trim())));
@@ -13818,8 +13818,8 @@ async function cliProcess(agent, sid) {
   return { pid, tty: `/dev/${tty}`, host: await terminalHost(pid) };
 }
 async function terminalHost(pid) {
-  for (let i = 0, p2 = pid; i < 12 && p2 > 1; i++) {
-    const out = (await run("/bin/ps", ["-o", "ppid=,comm=", "-p", String(p2)])).trim();
+  for (let i = 0, p = pid; i < 12 && p > 1; i++) {
+    const out = (await run("/bin/ps", ["-o", "ppid=,comm=", "-p", String(p)])).trim();
     const m = /^(\d+)\s+(.*)$/.exec(out);
     if (!m) break;
     if (/(^|\/)herdr-core$|Herdr\.app/.test(m[2])) return "herdr";
@@ -13827,7 +13827,7 @@ async function terminalHost(pid) {
     if (/Tern\.app|(^|\/)tern$/.test(m[2])) return "tern";
     if (/iTerm/i.test(m[2])) return "iterm";
     if (/Terminal\.app/i.test(m[2])) return "terminal";
-    p2 = Number(m[1]);
+    p = Number(m[1]);
   }
   return "";
 }
@@ -13870,9 +13870,9 @@ return ""`);
     if (ok === "ok") return "tab";
   } else if (proc.host === "tern" && import_fs15.default.existsSync(TERN_BIN)) {
     const chain = /* @__PURE__ */ new Set([proc.pid]);
-    for (let i = 0, p2 = proc.pid; i < 12 && p2 > 1; i++) {
-      p2 = Number((await run("/bin/ps", ["-o", "ppid=", "-p", String(p2)])).trim()) || 0;
-      if (p2) chain.add(p2);
+    for (let i = 0, p = proc.pid; i < 12 && p > 1; i++) {
+      p = Number((await run("/bin/ps", ["-o", "ppid=", "-p", String(p)])).trim()) || 0;
+      if (p) chain.add(p);
     }
     let blocks = [];
     try {
@@ -13897,9 +13897,9 @@ return ""`);
   if (proc.host === "herdr" && findBin("hc")) {
     const hc = findBin("hc"), app = findBin("herdr-app");
     const chain = /* @__PURE__ */ new Set([proc.pid]);
-    for (let i = 0, p2 = proc.pid; i < 12 && p2 > 1; i++) {
-      p2 = Number((await run("/bin/ps", ["-o", "ppid=", "-p", String(p2)])).trim()) || 0;
-      if (p2) chain.add(p2);
+    for (let i = 0, p = proc.pid; i < 12 && p > 1; i++) {
+      p = Number((await run("/bin/ps", ["-o", "ppid=", "-p", String(p)])).trim()) || 0;
+      if (p) chain.add(p);
     }
     let list = [];
     try {
@@ -14122,7 +14122,7 @@ var Delegator = class {
       }
       const notesHead = t("\u4EFB\u52A1\u91CC\u5F15\u7528\u7684\u7B14\u8BB0\uFF08\u53EF\u76F4\u63A5\u8BFB\u5168\u6587\uFF09\uFF1A");
       const notePathsBlock = notePaths.length ? `${notesHead}
-${notePaths.map((p2) => `- ${p2}`).join("\n")}` : "";
+${notePaths.map((p) => `- ${p}`).join("\n")}` : "";
       const memoryHint = await this.memoryToolHint();
       const replyText = replyPromptText(parseThread(resolved.lines, resolved.block));
       const plainSkill = [...scan.matchAll(/\[\[([^\]|#]+)/g)].map((m) => m[1].trim().replace(/\.md$/i, "")).find((name) => vault.getAbstractFileByPath(`\u6280\u80FD/${name}.md`)) || "";
@@ -15248,7 +15248,7 @@ function parseAiRecordRow(rawLine, childLines = [], agentNames = null) {
     kind = "clock";
     kindLabel = "\u7528\u65F6";
     const rest = body.replace(/^⏱\s+/, "");
-    const parts = rest.split(/\s+·\s+/).map((p2) => p2.trim()).filter(Boolean);
+    const parts = rest.split(/\s+·\s+/).map((p) => p.trim()).filter(Boolean);
     if (parts.length > 1) {
       content = parts[0];
       meta = parts.slice(1).join(" \xB7 ");
@@ -17807,8 +17807,8 @@ var LIST_STATUS_LEAD = /^(\s*(?:[-*+]|\d+[.)])\s+(?:\[[ xX/\-]\]\s*)?(?:\*\*\d{1
 var EXTRA_STATE_KWS = ["YES", "NO", "MAYBE", "ARCHIVED"];
 function knownTaskKeywords(app = null) {
   const words = /* @__PURE__ */ new Set([...TASK_KWS.split("|"), ...EXTRA_STATE_KWS]);
-  for (const p2 of Object.values(app?.plugins?.plugins || {})) {
-    for (const [key, value] of Object.entries(p2?.settings || {})) {
+  for (const p of Object.values(app?.plugins?.plugins || {})) {
+    for (const [key, value] of Object.entries(p?.settings || {})) {
       if (/^additional.*Keywords$/.test(key) && Array.isArray(value)) {
         for (const kw of value) {
           if (/^[A-Z][A-Z0-9_-]*$/.test(kw)) words.add(kw);
@@ -18002,8 +18002,8 @@ function appendStatusChoices(menu, plugin, { currentKeyword = "", suggested = ""
     [t("\u5176\u4ED6\u5173\u952E\u8BCD"), ["IN-PROGRESS", "CANCELLED", "FAILED"]]
   ];
   const known = new Set(TASK_KWS.split("|"));
-  for (const p2 of Object.values(plugin.app?.plugins?.plugins || {})) {
-    for (const [key, value] of Object.entries(p2.settings || {})) {
+  for (const p of Object.values(plugin.app?.plugins?.plugins || {})) {
+    for (const [key, value] of Object.entries(p.settings || {})) {
       if (/^additional.*Keywords$/.test(key) && Array.isArray(value)) {
         for (const kw of value) {
           if (/^[A-Z][A-Z0-9_-]*$/.test(kw) && !known.has(kw)) {
@@ -19917,7 +19917,7 @@ var PillWidget = class extends import_view4.WidgetType {
     return other.path === this.path && other.line === this.line && other.sig === this.sig;
   }
   toDOM(view2) {
-    const p2 = this.plugin;
+    const p = this.plugin;
     const info = this.info;
     const el = document.createElement("span");
     const background = info.job?.destination === "background";
@@ -19926,7 +19926,7 @@ var PillWidget = class extends import_view4.WidgetType {
     el.dataset.line = String(this.line);
     const job = info.job;
     const session = info.session;
-    const agent = job && job.agent || session && session.agent || p2.defaultTarget();
+    const agent = job && job.agent || session && session.agent || p.defaultTarget();
     const a = AGENTS[agent] || AGENTS.claude;
     el.style.setProperty("--ad-agent", a.color);
     el.style.setProperty("--ad-agent-soft", a.soft);
@@ -19949,8 +19949,8 @@ var PillWidget = class extends import_view4.WidgetType {
     const right = document.createElement("span");
     right.className = "ad-pill__right";
     el.appendChild(right);
-    const modelName2 = job && p2.modelLabel(job.model) || session && p2.modelLabel(session.model) || "";
-    const progText = p2.sessionProgressText ? p2.sessionProgressText(session, job) : "";
+    const modelName2 = job && p.modelLabel(job.model) || session && p.modelLabel(session.model) || "";
+    const progText = p.sessionProgressText ? p.sessionProgressText(session, job) : "";
     if (info.kind === "idle") {
       label.textContent = t("\u59D4\u6D3E");
       meta.textContent = modelName2 || (agent === "dsh" ? "DeepSeek" : "Claude");
@@ -19960,7 +19960,7 @@ var PillWidget = class extends import_view4.WidgetType {
       chev.addEventListener("mousedown", (e) => {
         e.preventDefault();
         e.stopPropagation();
-        p2.openDelegateModal(this.path, this.line);
+        p.openDelegateModal(this.path, this.line);
       });
       right.appendChild(chev);
     } else if (info.kind === "running" || info.kind === "starting") {
@@ -19984,11 +19984,11 @@ var PillWidget = class extends import_view4.WidgetType {
         cancel.addEventListener("mousedown", (e) => {
           e.preventDefault();
           e.stopPropagation();
-          p2.cancelJob(job && job.id);
+          p.cancelJob(job && job.id);
         });
         right.appendChild(cancel);
       }
-      const progress = p2.jobProgress(job, session);
+      const progress = p.jobProgress(job, session);
       if (job?.destination === "background") {
         el.setAttribute("role", "progressbar");
         el.setAttribute("aria-label", label.textContent);
@@ -20013,7 +20013,7 @@ var PillWidget = class extends import_view4.WidgetType {
       open.addEventListener("mousedown", (e) => {
         e.preventDefault();
         e.stopPropagation();
-        p2.taskActions(this.path, this.line, e);
+        p.taskActions(this.path, this.line, e);
       });
       right.appendChild(open);
     } else if (info.kind === "error") {
@@ -20027,7 +20027,7 @@ var PillWidget = class extends import_view4.WidgetType {
       retry.addEventListener("mousedown", (e) => {
         e.preventDefault();
         e.stopPropagation();
-        p2.taskActions(this.path, this.line, e);
+        p.taskActions(this.path, this.line, e);
       });
       right.appendChild(retry);
     } else {
@@ -20048,11 +20048,11 @@ var PillWidget = class extends import_view4.WidgetType {
       if (e.target.closest(".ad-pill__cancel, .ad-pill__chev, .ad-pill__open")) return;
       e.preventDefault();
       e.stopPropagation();
-      if (info.kind === "idle") p2.delegateAtLine(this.path, this.line).catch((err2) => p2.notice(String(err2.message || err2)));
-      else if (info.kind === "error") p2.taskActions(this.path, this.line, e);
-      else p2.taskActions(this.path, this.line, e);
+      if (info.kind === "idle") p.delegateAtLine(this.path, this.line).catch((err2) => p.notice(String(err2.message || err2)));
+      else if (info.kind === "error") p.taskActions(this.path, this.line, e);
+      else p.taskActions(this.path, this.line, e);
     });
-    el.title = p2.pillTitle(info);
+    el.title = p.pillTitle(info);
     return el;
   }
   destroy(dom) {
@@ -20511,15 +20511,15 @@ var AgentDeckView = class extends import_obsidian5.ItemView {
     root.addClass("ad-view");
     const dash = root.createDiv({ cls: "ad-dash" });
     if (this._bottomSlack > 0) dash.style.setProperty("--ad-slack", `${this._bottomSlack}px`);
-    const p2 = this.plugin;
+    const p = this.plugin;
     const now = Date.now();
-    const todayKey = dayKeyToday(p2.settings);
-    const today = p2.store.get(todayKey);
-    const live = p2.liveSessions({ hours: 6 });
+    const todayKey = dayKeyToday(p.settings);
+    const today = p.store.get(todayKey);
+    const live = p.liveSessions({ hours: 6 });
     const running = live.filter((x) => ["run", "starting", "running"].includes(x.state) || x.agent && x.state === "busy");
     const waiting = live.filter((x) => isWaitingSession(x, now));
     const days = this.recentDays();
-    const recent = p2.recentSessions({ days, limit: 1e3 });
+    const recent = p.recentSessions({ days, limit: 1e3 });
     const head = dash.createDiv({ cls: "ad-head" });
     const search = head.createDiv({ cls: "ad-search" });
     setLucide(search.createSpan({ cls: "ad-search__icon" }), "search");
@@ -20527,18 +20527,18 @@ var AgentDeckView = class extends import_obsidian5.ItemView {
     const actions = head.createDiv({ cls: "ad-head__actions" });
     const workbenchBtn = actions.createEl("button", { cls: "ad-iconbtn", attr: { "aria-label": t("\u6253\u5F00\u9879\u76EE\u5DE5\u4F5C\u53F0\uFF08\u5C0F\u961F\u7F16\u6392\u4E0E\u62C6\u89E3\u6D3E\u53D1\uFF09") } });
     setLucide(workbenchBtn.createSpan({ cls: "ad-iconbtn__icon" }), "folder-kanban");
-    workbenchBtn.onclick = () => p2.openProjectWorkbench?.();
-    if (p2.settings.experimentalDashboard !== false) {
+    workbenchBtn.onclick = () => p.openProjectWorkbench?.();
+    if (p.settings.experimentalDashboard !== false) {
       const review = actions.createEl("button", { cls: "ad-iconbtn", attr: { "aria-label": t("\u6253\u5F00 Agent Deck \u56DE\u987E Dashboard") } });
       setLucide(review.createSpan({ cls: "ad-iconbtn__icon" }), "chart-no-axes-combined");
-      review.onclick = () => p2.activateDashboard();
+      review.onclick = () => p.activateDashboard();
     }
     const scan = actions.createEl("button", { cls: "ad-iconbtn", attr: { "aria-label": t("\u91CD\u65B0\u626B\u63CF\u672C\u673A\u4F1A\u8BDD") } });
     setLucide(scan.createSpan({ cls: "ad-iconbtn__icon" }), "refresh-cw");
-    scan.onclick = () => p2.scanNow();
+    scan.onclick = () => p.scanNow();
     const gear = actions.createEl("button", { cls: "ad-iconbtn", attr: { "aria-label": t("\u8BBE\u7F6E") } });
     setLucide(gear.createSpan({ cls: "ad-iconbtn__icon" }), "settings-2");
-    gear.onclick = () => p2.openSettings();
+    gear.onclick = () => p.openSettings();
     input.addEventListener("compositionstart", () => {
       this._composing = true;
     });
@@ -20585,8 +20585,8 @@ var AgentDeckView = class extends import_obsidian5.ItemView {
     }
     const journalActions = dash.createDiv({ cls: "ad-btnrow" });
     for (const action of [
-      { label: t("\u6574\u7406\u65E5\u5FD7"), hint: t("\u6309\u6B63\u5728\u505A\u3001\u8FD8\u8981\u505A\u3001\u5DF2\u5B8C\u6210\u6574\u7406\u5206\u533A\uFF0C\u5206\u5272\u7EBF\u5916\u7684\u7B14\u8BB0\u4FDD\u6301\u539F\u6837"), run: () => p2.organizeJournal() },
-      { label: t("\u5F52\u6863\u5DF2\u5B8C\u6210\u7684\u65E5\u5FD7\u5230\u2026"), hint: t("\u628A\u5DF2\u5B8C\u6210\u7684 AI \u65E5\u5FD7\u79FB\u51FA\u8FD9\u7BC7\u65E5\u8BB0\uFF0C\u5199\u8FDB\u4F60\u9009\u7684\u5F52\u6863\u6587\u4EF6"), run: () => p2.archiveCompletedJournal() }
+      { label: t("\u6574\u7406\u65E5\u5FD7"), hint: t("\u6309\u6B63\u5728\u505A\u3001\u8FD8\u8981\u505A\u3001\u5DF2\u5B8C\u6210\u6574\u7406\u5206\u533A\uFF0C\u5206\u5272\u7EBF\u5916\u7684\u7B14\u8BB0\u4FDD\u6301\u539F\u6837"), run: () => p.organizeJournal() },
+      { label: t("\u5F52\u6863\u5DF2\u5B8C\u6210\u7684\u65E5\u5FD7\u5230\u2026"), hint: t("\u628A\u5DF2\u5B8C\u6210\u7684 AI \u65E5\u5FD7\u79FB\u51FA\u8FD9\u7BC7\u65E5\u8BB0\uFF0C\u5199\u8FDB\u4F60\u9009\u7684\u5F52\u6863\u6587\u4EF6"), run: () => p.archiveCompletedJournal() }
     ]) {
       const button = journalActions.createEl("button", { text: action.label });
       button.title = action.hint;
@@ -20595,13 +20595,13 @@ var AgentDeckView = class extends import_obsidian5.ItemView {
         try {
           await action.run();
         } catch (e) {
-          p2.notice(e.message);
+          p.notice(e.message);
         } finally {
           button.disabled = false;
         }
       };
     }
-    journalActions.createEl("button", { text: t("\u8DF3\u5230\u6B63\u5728\u505A") }).onclick = () => p2.jumpRunningProject();
+    journalActions.createEl("button", { text: t("\u8DF3\u5230\u6B63\u5728\u505A") }).onclick = () => p.jumpRunningProject();
     const hero = dash.createDiv({ cls: "ad-hero" });
     const nums = hero.createDiv({ cls: "ad-hero__nums" });
     this.num(nums, fmtMin(today ? today.wall : 0), t("\u534F\u4F5C\u65F6\u957F"), this.vsWeek(today));
@@ -20622,9 +20622,9 @@ var AgentDeckView = class extends import_obsidian5.ItemView {
       b.onclick = () => {
         var _a;
         if (this.nowGroupBy() === id) return;
-        ((_a = p2.settings).ui || (_a.ui = {})).nowGroupBy = id;
-        p2.saveSettings();
-        p2.menubar?.update?.(true);
+        ((_a = p.settings).ui || (_a.ui = {})).nowGroupBy = id;
+        p.saveSettings();
+        p.menubar?.update?.(true);
         this.render();
       };
     }
@@ -20642,7 +20642,7 @@ var AgentDeckView = class extends import_obsidian5.ItemView {
       this.nowReorder(nowList);
     }
     this.agentSection(dash, today);
-    if (p2.settings.ui.showUsageBars !== false) {
+    if (p.settings.ui.showUsageBars !== false) {
       const usageSec = dash.createDiv({ cls: "ad-sec" });
       this.secHead(usageSec, t("\u6700\u8FD1 14 \u5929"));
       this.usageBars(usageSec);
@@ -20658,8 +20658,8 @@ var AgentDeckView = class extends import_obsidian5.ItemView {
         var _a;
         if (this.recentGroupBy() === id) return;
         this._bottomSlack = 0;
-        ((_a = p2.settings).ui || (_a.ui = {})).recentGroupBy = id;
-        p2.saveSettings();
+        ((_a = p.settings).ui || (_a.ui = {})).recentGroupBy = id;
+        p.saveSettings();
         this.render();
       };
     }
@@ -20669,8 +20669,8 @@ var AgentDeckView = class extends import_obsidian5.ItemView {
         var _a;
         if (this.recentDays() === d) return;
         this._bottomSlack = 0;
-        ((_a = p2.settings).ui || (_a.ui = {})).recentDays = d;
-        p2.saveSettings();
+        ((_a = p.settings).ui || (_a.ui = {})).recentDays = d;
+        p.saveSettings();
         this.render();
       };
     }
@@ -20804,12 +20804,12 @@ var AgentDeckView = class extends import_obsidian5.ItemView {
     this.render();
   }
   renderNowProjects(nowList, liveRows) {
-    const p2 = this.plugin;
-    const hidden = p2.settings?.nowHidden || {};
+    const p = this.plugin;
+    const hidden = p.settings?.nowHidden || {};
     const visibleRows = this.nowOrdered(liveRows);
     const groups = buildProjectGroups(visibleRows, {
-      jobs: p2.jobs || {},
-      agentEnabled: (id) => p2.agentEnabled(id)
+      jobs: p.jobs || {},
+      agentEnabled: (id) => p.agentEnabled(id)
     }).map((g) => ({
       ...g,
       sessions: g.sessions.filter((s) => !hidden[s.sid])
@@ -20835,28 +20835,28 @@ var AgentDeckView = class extends import_obsidian5.ItemView {
         this.render();
       };
       const actions = head.createDiv({ cls: "ad-projgroup__actions" });
-      if (!g.isStandalone && g.cwds[0] && p2.openProjectFolder) {
+      if (!g.isStandalone && g.cwds[0] && p.openProjectFolder) {
         const dirBtn = actions.createEl("button", { cls: "ad-iconbtn ad-iconbtn--xs", attr: { type: "button", "aria-label": t("\u6253\u5F00\u9879\u76EE\u76EE\u5F55\uFF1A{cwd}", { cwd: g.cwds[0] }), title: t("\u6253\u5F00\u9879\u76EE\u76EE\u5F55\uFF1A{cwd}", { cwd: g.cwds[0] }) } });
         setLucide(dirBtn.createSpan({ cls: "ad-iconbtn__icon" }), "folder-open");
         dirBtn.onclick = (e) => {
           e.stopPropagation();
-          p2.openProjectFolder(g.cwds[0]);
+          p.openProjectFolder(g.cwds[0]);
         };
       }
-      if (p2.openProjectWorkbench) {
+      if (p.openProjectWorkbench) {
         const wb = actions.createEl("button", { cls: "ad-iconbtn ad-iconbtn--xs", attr: { type: "button", "aria-label": t("\u5728\u9879\u76EE\u5DE5\u4F5C\u53F0\u7F16\u6392\u5C0F\u961F"), title: t("\u5728\u9879\u76EE\u5DE5\u4F5C\u53F0\u7F16\u6392\u5C0F\u961F") } });
         setLucide(wb.createSpan({ cls: "ad-iconbtn__icon" }), "folder-kanban");
         wb.onclick = (e) => {
           e.stopPropagation();
-          p2.openProjectWorkbench({ projectName: g.isStandalone ? "" : g.name, cwd: g.cwds[0] || p2.vaultPath });
+          p.openProjectWorkbench({ projectName: g.isStandalone ? "" : g.name, cwd: g.cwds[0] || p.vaultPath });
         };
       }
-      if (g.activeJobIds.length && p2.cancelProjectJobs) {
+      if (g.activeJobIds.length && p.cancelProjectJobs) {
         const stop = actions.createEl("button", { cls: "ad-iconbtn ad-iconbtn--xs is-danger", attr: { type: "button", "aria-label": t("\u505C\u6B62\u672C\u9879\u76EE\u7684\u6D3B\u8DC3\u4EFB\u52A1"), title: t("\u505C\u6B62\u672C\u9879\u76EE\u7684\u6D3B\u8DC3\u4EFB\u52A1") } });
         setLucide(stop.createSpan({ cls: "ad-iconbtn__icon" }), "square");
         stop.onclick = (e) => {
           e.stopPropagation();
-          p2.cancelProjectJobs(g.id, g.activeJobIds);
+          p.cancelProjectJobs(g.id, g.activeJobIds);
         };
       }
       if (!collapsed) {
@@ -20866,11 +20866,11 @@ var AgentDeckView = class extends import_obsidian5.ItemView {
     }
   }
   renderNowStatus(nowList, liveRows, now = Date.now()) {
-    const p2 = this.plugin;
-    const hidden = p2.settings?.nowHidden || {};
+    const p = this.plugin;
+    const hidden = p.settings?.nowHidden || {};
     const groups = buildNowStatusGroups(this.nowOrdered(liveRows), {
-      jobs: p2.jobs || {},
-      agentEnabled: (id) => p2.agentEnabled(id),
+      jobs: p.jobs || {},
+      agentEnabled: (id) => p.agentEnabled(id),
       now
     }).map((g) => ({
       ...g,
@@ -20902,9 +20902,9 @@ var AgentDeckView = class extends import_obsidian5.ItemView {
     const list = sec._list || sec.querySelector(".ad-sessionlist");
     if (!list) return;
     list.empty();
-    const p2 = this.plugin;
+    const p = this.plugin;
     const days = this.recentDays();
-    const rows = sec._rows || filterRecentRows(p2.recentSessions({ days, limit: 1e3 }), this.filter);
+    const rows = sec._rows || filterRecentRows(p.recentSessions({ days, limit: 1e3 }), this.filter);
     sec._rows = rows;
     if (!rows.length) return this.empty(list, t("\u6CA1\u6709\u7B26\u5408\u6761\u4EF6\u7684\u4F1A\u8BDD"));
     const tree = treePlan(rows);
@@ -20914,8 +20914,8 @@ var AgentDeckView = class extends import_obsidian5.ItemView {
       const plan2 = planRecentProjectDisplay(rows, {
         expanded: this.expandedProjects,
         maxCards: MAX_RECENT_CARDS,
-        jobs: p2.jobs || {},
-        agentEnabled: (id) => p2.agentEnabled(id)
+        jobs: p.jobs || {},
+        agentEnabled: (id) => p.agentEnabled(id)
       });
       for (const g of plan2.groups) {
         if (g.items.length === 1) {
@@ -21086,10 +21086,10 @@ var AgentDeckView = class extends import_obsidian5.ItemView {
   // 今天的协作时长比前 7 天里有用量的日子平均多还是少（有 3 天以上才算）
   vsWeek(today) {
     if (!today || !today.wall) return "";
-    const p2 = this.plugin;
+    const p = this.plugin;
     const prev = [];
     for (let i = 1; i <= 7; i++) {
-      const d = p2.store.get(dayKey(Date.now() - i * 864e5, p2.settings));
+      const d = p.store.get(dayKey(Date.now() - i * 864e5, p.settings));
       if (d && d.wall) prev.push(d.wall);
     }
     if (prev.length < 3) return "";
@@ -21098,9 +21098,9 @@ var AgentDeckView = class extends import_obsidian5.ItemView {
   }
   // 今天哪几段在用：从第一段所在的整点画到现在，每个 Agent 一条
   dayTimeline(parent, today) {
-    const p2 = this.plugin;
-    const start = startOfDay(Date.now(), p2.settings);
-    const nowMin = dayMinute(Date.now(), p2.settings);
+    const p = this.plugin;
+    const start = startOfDay(Date.now(), p.settings);
+    const nowMin = dayMinute(Date.now(), p.settings);
     const first = Math.min(...(today.segs || []).map((s) => s[0]), nowMin);
     const from = Math.floor(first / 60) * 60;
     const to = Math.max(Math.ceil(nowMin / 60) * 60, from + 180);
@@ -21145,10 +21145,10 @@ var AgentDeckView = class extends import_obsidian5.ItemView {
     }
   }
   agentCard(parent, id, today, mode = "grid") {
-    const p2 = this.plugin;
+    const p = this.plugin;
     const a = AGENTS[id];
-    const enabled = p2.agentEnabled(id);
-    const primary = p2.isPrimary(id);
+    const enabled = p.agentEnabled(id);
+    const primary = p.isPrimary(id);
     const by = today && today.by && today.by[id] || null;
     const card = parent.createDiv({ cls: `ad-agentcard ad-agentcard--${mode} ${enabled ? "" : "is-off"} ${primary ? "is-primary" : ""}` });
     card.dataset.agent = id;
@@ -21158,12 +21158,12 @@ var AgentDeckView = class extends import_obsidian5.ItemView {
     const handoff = id === "codex" || id === "workbuddy" || id === "teleagent";
     const cliCapable = cliHandoffAgents().includes(id);
     const hint = handoff ? t("\u4EA4\u7ED9 {name}", { name: a.short }) : t("\u59D4\u6D3E\u7ED9 {name}", { name: a.short });
-    const toTerm = (meta) => cliCapable && !!meta !== !!p2.settings.delegateInTerminal;
+    const toTerm = (meta) => cliCapable && !!meta !== !!p.settings.delegateInTerminal;
     const hintFor = (meta) => toTerm(meta) ? t("\u5728\u7EC8\u7AEF\u91CC\u5F00 {name}", { name: a.short }) : hint;
     if (!a.trackingOnly) card.setAttr("data-drop-hint", hintFor(false));
     card.addEventListener("dragover", (e) => {
       if (this._dragAgent || a.trackingOnly) return;
-      if (!p2.acceptsItemDrag(e)) return;
+      if (!p.acceptsItemDrag(e)) return;
       e.preventDefault();
       e.dataTransfer.dropEffect = "copy";
       card.addClass("is-drop");
@@ -21179,12 +21179,12 @@ var AgentDeckView = class extends import_obsidian5.ItemView {
     });
     card.addEventListener("drop", (e) => {
       if (this._dragAgent || a.trackingOnly) return;
-      if (!p2.acceptsItemDrag(e)) return;
+      if (!p.acceptsItemDrag(e)) return;
       e.preventDefault();
       card.removeClass("is-drop");
       card.removeClass("is-cli");
       card.setAttr("data-drop-hint", hintFor(false));
-      p2.delegateDrop(id, p2.readItemDrag(e), null, { cli: toTerm(e.metaKey) });
+      p.delegateDrop(id, p.readItemDrag(e), null, { cli: toTerm(e.metaKey) });
     });
     const top = card.createDiv({ cls: "ad-agentcard__top" });
     const grip = top.createEl("button", { cls: "ad-agentcard__grip ad-linkbtn", attr: { draggable: "true", "aria-label": t("\u62D6\u52A8\u6392\u5E8F\uFF1B\u65B9\u5411\u952E\u8C03\u6574\u4F4D\u7F6E"), title: t("\u62D6\u52A8\u6392\u5E8F\uFF1B\u65B9\u5411\u952E\u8C03\u6574\u4F4D\u7F6E") } });
@@ -21193,11 +21193,11 @@ var AgentDeckView = class extends import_obsidian5.ItemView {
     agentIcon(mark.createSpan({ cls: "ad-glyph" }), id);
     mark.onclick = (e) => {
       e.stopPropagation();
-      p2.openAgentApp(id);
+      p.openAgentApp(id);
     };
     const name = top.createDiv({ cls: "ad-agentcard__name" });
     name.createDiv({ cls: "ad-agentcard__title", text: mode === "list" ? a.name : a.short, attr: { title: a.name } });
-    const live = p2.liveSessions({ hours: 24 }).filter((x) => x.agent === id);
+    const live = p.liveSessions({ hours: 24 }).filter((x) => x.agent === id);
     const running = live.filter((x) => ["run", "starting", "running", "busy"].includes(x.state)).length;
     card.toggleClass("is-running", running > 0);
     const where = name.createDiv({ cls: "ad-agentcard__where", text: running ? t("{n} \u4E2A\u5728\u8DD1", { n: running }) : by ? t("{n} \u4E2A\u4F1A\u8BDD", { n: by.sessions || 0 }) : t("\u4ECA\u5929\u8FD8\u6CA1\u52A8") });
@@ -21209,7 +21209,7 @@ var AgentDeckView = class extends import_obsidian5.ItemView {
     setLucide(star, primary ? "star" : "star-off");
     star.onclick = (e) => {
       e.stopPropagation();
-      p2.togglePrimary(id);
+      p.togglePrimary(id);
     };
     const stats = card.createDiv({ cls: "ad-agentcard__stats" });
     stats.createSpan({ text: fmtMin(by ? by.wall : 0) });
@@ -21222,13 +21222,13 @@ var AgentDeckView = class extends import_obsidian5.ItemView {
         const context = card.createDiv({ cls: "ad-agentcard__context", text: current.title || current.step || workspaceLabel(current.cwd) });
         context.title = [current.title, current.cwd, current.step].filter(Boolean).join(" \xB7 ");
       }
-      if (p2.settings.ui.showSparkline !== false) {
+      if (p.settings.ui.showSparkline !== false) {
         const trend = card.createDiv({ cls: "ad-agentcard__trend" });
         trend.createSpan({ text: t("\u8FD1 14 \u5929") });
         this.sparkline(trend.createDiv({ cls: "ad-spark" }), id);
       }
     }
-    for (const job of Object.values(p2.jobs).filter((j) => j.agent === id && j.handoff && j.state === "starting" && !j.sessionId)) {
+    for (const job of Object.values(p.jobs).filter((j) => j.agent === id && j.handoff && j.state === "starting" && !j.sessionId)) {
       const row = card.createDiv({ cls: "ad-handoff" });
       lattice(row.createSpan({ cls: "ad-handoff__icon" }), "ripple");
       row.createSpan({ cls: "ad-handoff__text", text: job.cli ? t("\u7B49\u7EC8\u7AEF\u91CC\u7684\u4F1A\u8BDD\uFF1A{name}", { name: truncate(job.name, 16) }) : t("\u7B49\u4F60\u5728 {agent} \u91CC\u53D1\u51FA\uFF1A{name}", { agent: a.short, name: truncate(job.name, 18) }) });
@@ -21236,7 +21236,7 @@ var AgentDeckView = class extends import_obsidian5.ItemView {
       setLucide(x, "x");
       x.onclick = (e) => {
         e.stopPropagation();
-        p2.cancelJob(job.id);
+        p.cancelJob(job.id);
       };
     }
     grip.ondragstart = (e) => {
@@ -21263,11 +21263,11 @@ var AgentDeckView = class extends import_obsidian5.ItemView {
     setLucide(more, "ellipsis");
     more.onclick = (e) => {
       const menu = new import_obsidian5.Menu();
-      menu.addItem((item) => item.setTitle(t("\u626B\u63CF\u6700\u8FD1 7 \u5929\u7684\u4F1A\u8BDD")).setIcon("refresh-cw").onClick(() => p2.scanNow(false, { agent: id, days: 7 })));
+      menu.addItem((item) => item.setTitle(t("\u626B\u63CF\u6700\u8FD1 7 \u5929\u7684\u4F1A\u8BDD")).setIcon("refresh-cw").onClick(() => p.scanNow(false, { agent: id, days: 7 })));
       menu.addItem((item) => item.setTitle(pinned ? t("\u53D6\u6D88\u7F6E\u9876") : t("\u7F6E\u9876\u5361\u7247")).setIcon(pinned ? "pin-off" : "pin").onClick(() => this.updateAgentCards((layout) => {
         layout.pinned = pinned ? layout.pinned.filter((x) => x !== id) : [...layout.pinned, id];
       })));
-      menu.addItem((item) => item.setTitle(t("\u5173\u95ED\u8FFD\u8E2A\u5E76\u9690\u85CF")).setIcon("eye-off").setDisabled(primary).onClick(() => p2.setAgentEnabled(id, false)));
+      menu.addItem((item) => item.setTitle(t("\u5173\u95ED\u8FFD\u8E2A\u5E76\u9690\u85CF")).setIcon("eye-off").setDisabled(primary).onClick(() => p.setAgentEnabled(id, false)));
       menu.addItem((item) => item.setTitle(t("\u4ECE\u4FA7\u8FB9\u680F\u79FB\u9664")).setIcon("minus").onClick(() => this.updateAgentCards((layout) => {
         layout.hidden.push(id);
       })));
@@ -21275,8 +21275,8 @@ var AgentDeckView = class extends import_obsidian5.ItemView {
     };
   }
   sparkline(parent, agent) {
-    const p2 = this.plugin;
-    const days = p2.store.range(14, p2.settings);
+    const p = this.plugin;
+    const days = p.store.range(14, p.settings);
     const vals = days.map((d) => d.by && d.by[agent] ? d.by[agent].wall : 0);
     const max = Math.max(1, ...vals);
     const w = 120, h = 26, gap = 2, bw = (w - gap * (vals.length - 1)) / vals.length;
@@ -21301,8 +21301,8 @@ var AgentDeckView = class extends import_obsidian5.ItemView {
     parent.appendChild(svg);
   }
   usageBars(parent) {
-    const p2 = this.plugin;
-    const days = p2.store.range(14, p2.settings);
+    const p = this.plugin;
+    const days = p.store.range(14, p.settings);
     const max = Math.max(1, ...days.map((d) => d.wall || 0));
     const box = parent.createDiv({ cls: "ad-bars" });
     for (const d of days) {
@@ -21332,7 +21332,7 @@ var AgentDeckView = class extends import_obsidian5.ItemView {
     }
   }
   sessionCard(parent, s, compact, depth = 0) {
-    const p2 = this.plugin;
+    const p = this.plugin;
     const a = AGENTS[s.agent] || AGENTS.claude;
     const card = parent.createDiv({ cls: `ad-sess ${compact ? "is-now" : ""}` });
     card.dataset.sid = s.sid;
@@ -21360,7 +21360,7 @@ var AgentDeckView = class extends import_obsidian5.ItemView {
       }
     });
     card.addEventListener("dragover", (e) => {
-      if (!p2.acceptsItemDrag(e)) return;
+      if (!p.acceptsItemDrag(e)) return;
       e.preventDefault();
       e.dataTransfer.dropEffect = "link";
       card.addClass("is-drop");
@@ -21369,10 +21369,10 @@ var AgentDeckView = class extends import_obsidian5.ItemView {
       if (!a.trackingOnly && !card.contains(e.relatedTarget)) card.removeClass("is-drop");
     });
     card.addEventListener("drop", (e) => {
-      if (!p2.acceptsItemDrag(e)) return;
+      if (!p.acceptsItemDrag(e)) return;
       e.preventDefault();
       card.removeClass("is-drop");
-      p2.bindItemToSession(p2.readItemDrag(e), { agent: s.agent, sid: s.sid, title: s.title || truncate(s.text || s.step || "\u672A\u547D\u540D\u4F1A\u8BDD", 60), app: s.app || "", state: s.state || "" });
+      p.bindItemToSession(p.readItemDrag(e), { agent: s.agent, sid: s.sid, title: s.title || truncate(s.text || s.step || "\u672A\u547D\u540D\u4F1A\u8BDD", 60), app: s.app || "", state: s.state || "" });
     });
     card.style.setProperty("--ad-agent", a.color);
     card.style.setProperty("--ad-agent-soft", a.soft);
@@ -21398,7 +21398,7 @@ var AgentDeckView = class extends import_obsidian5.ItemView {
       else stateIcon(sic, s.state);
       chip.createSpan({ text: st.label });
     }
-    const subs = p2.usage.subsOf ? p2.usage.subsOf(s.sid).filter((r) => r.state !== "done" && r.state !== "fail" && Date.now() - (r.at || r.start || 0) < 5 * 6e4) : [];
+    const subs = p.usage.subsOf ? p.usage.subsOf(s.sid).filter((r) => r.state !== "done" && r.state !== "fail" && Date.now() - (r.at || r.start || 0) < 5 * 6e4) : [];
     if (subs.length) {
       const sb = titleRow.createSpan({ cls: "ad-side" });
       setLucide(sb.createSpan({ cls: "ad-side__icon" }), "bot");
@@ -21415,7 +21415,7 @@ var AgentDeckView = class extends import_obsidian5.ItemView {
     sub.createSpan({ text: a.short });
     if (s.cwd) sub.createSpan({ text: "\xB7" });
     if (s.cwd) sub.createSpan({ cls: "ad-sess__cwd", text: truncate(workspaceLabel(s.cwd), 34), attr: { title: s.cwd } });
-    const prog = p2.sessionProgressText ? p2.sessionProgressText(s, s.job) : "";
+    const prog = p.sessionProgressText ? p.sessionProgressText(s, s.job) : "";
     if (prog) {
       sub.createSpan({ text: "\xB7" });
       sub.createSpan({ cls: "ad-sess__prog", text: prog });
@@ -21443,13 +21443,13 @@ var AgentDeckView = class extends import_obsidian5.ItemView {
       setLucide(conversation.createSpan({ cls: "ad-arrow__icon" }), "messages-square");
       conversation.onclick = (e) => {
         e.stopPropagation();
-        p2.openConversation(s);
+        p.openConversation(s);
       };
     }
     const open = () => {
-      if (isPending && s.job?.path && p2.openMirrorSource) return p2.openMirrorSource(s.job.path, s.job.line || 0);
-      if (isPending && s.job?.id && p2.openJob) return p2.openJob(s.job.id);
-      return p2.openSession(s.agent, s.sid, s.app, s);
+      if (isPending && s.job?.path && p.openMirrorSource) return p.openMirrorSource(s.job.path, s.job.line || 0);
+      if (isPending && s.job?.id && p.openJob) return p.openJob(s.job.id);
+      return p.openSession(s.agent, s.sid, s.app, s);
     };
     if (compact) {
       card.addClass("has-x");
@@ -21656,7 +21656,7 @@ function journalSources(text, path17, { autoState = null } = {}) {
   const seen = /* @__PURE__ */ new Set();
   const collectBlock = (owner) => {
     const parents = [];
-    for (let p2 = owners[owner]; p2 >= 0; p2 = owners[p2]) parents.unshift(lines[p2]);
+    for (let p = owners[owner]; p >= 0; p = owners[p]) parents.unshift(lines[p]);
     const end = subtreeEnd(lines, owner);
     const own = lines.slice(owner, end).filter((_, n) => !fenced.has(owner + n) && (n === 0 || owners[owner + n] === owner));
     return { path: path17, line: owner, blockId: blockIdOf(lines[owner]), text: [...parents, ...own].join("\n") };
@@ -21708,7 +21708,7 @@ function aliasTest(alias) {
 }
 function resolveProjects(rows, pages, overrides = {}) {
   const candidates = pages.map((page) => ({ ...page, tests: [.../* @__PURE__ */ new Set([page.name, ...page.aliases || []])].filter((a) => /\p{L}/u.test(a) && normalized(a).length >= (/[\u3400-\u9fff]/.test(a) ? 2 : 3)).map((alias) => ({ test: aliasTest(alias), length: normalized(alias).length })) }));
-  const pageMap = new Map(pages.map((p2) => [p2.path, p2]));
+  const pageMap = new Map(pages.map((p) => [p.path, p]));
   const evidence = rows.map((row) => {
     const sources = row.sources || [], text = sources.map((s) => s.text || "").join("\n");
     const links = new Set(sources.flatMap((s) => s.links || []));
@@ -21997,7 +21997,7 @@ function aggregateDashboard(rows, from, to, projectOrOpts = null) {
     share: result.tokens > 0 ? g.tokens / result.tokens : 0,
     wall: Object.values(g.days).reduce((n, segs) => n + minutes(segs), 0)
   })).sort((a, b) => compareProjects(a, b, opts.projectSortBy, opts.projectSortDir));
-  result.projectsMaxTokens = result.projects.reduce((m, p2) => Math.max(m, p2.tokens), 0);
+  result.projectsMaxTokens = result.projects.reduce((m, p) => Math.max(m, p.tokens), 0);
   result.agents = [...agents.values()].map((g) => ({
     agent: g.agent,
     tokens: g.tokens,
@@ -22117,27 +22117,27 @@ var DashboardData = class {
     this.cache = /* @__PURE__ */ new Map();
   }
   async load() {
-    const p2 = this.plugin, vault = p2.app.vault, metadata = p2.app.metadataCache;
+    const p = this.plugin, vault = p.app.vault, metadata = p.app.metadataCache;
     const paths = /* @__PURE__ */ new Set(), pathDay = /* @__PURE__ */ new Map();
-    for (const day of Object.keys(p2.store.days)) {
-      const jp = journalPath(p2.app, p2.settings, day);
+    for (const day of Object.keys(p.store.days)) {
+      const jp = journalPath(p.app, p.settings, day);
       paths.add(jp);
       pathDay.set(jp, isoDay(day));
     }
-    for (const binding of Object.values(p2.settings.taskBindings || {})) if (binding.path) paths.add(binding.path);
-    for (const job of Object.values(p2.jobs || {})) if (job.path) paths.add(job.path);
-    if (p2.settings.doneArchivePath) paths.add(p2.settings.doneArchivePath);
+    for (const binding of Object.values(p.settings.taskBindings || {})) if (binding.path) paths.add(binding.path);
+    for (const job of Object.values(p.jobs || {})) if (job.path) paths.add(job.path);
+    if (p.settings.doneArchivePath) paths.add(p.settings.doneArchivePath);
     const sources = /* @__PURE__ */ new Map();
     let unreadable = 0;
     const files = [...paths].map((path17) => vault.getAbstractFileByPath(path17)).filter((f) => f?.extension === "md");
     for (let i = 0; i < files.length; i += 6) {
       await Promise.all(files.slice(i, i + 6).map(async (file) => {
         try {
-          const editor = p2.autoLog?.viewFor(file)?.editor;
+          const editor = p.autoLog?.viewFor(file)?.editor;
           const signature2 = `${file.stat.mtime}:${file.stat.size}`;
           const text = editor?.getValue();
           const day = pathDay.get(file.path) || dayFromNotePath(file.path);
-          const autoState = day ? p2.settings.autoLogState?.[day] || null : null;
+          const autoState = day ? p.settings.autoLogState?.[day] || null : null;
           const autoSig = autoState ? JSON.stringify(Object.entries(autoState).map(([sid, r]) => [sid, r?.blockId || "", r?.key || ""]).sort()) : "";
           let cached2 = this.cache.get(file.path);
           if (!cached2 || cached2.signature !== signature2 || cached2.editorText !== text || cached2.autoSig !== autoSig) {
@@ -22162,10 +22162,10 @@ var DashboardData = class {
       return { path: file.path, name: file.basename, aliases: typeof aliases === "string" ? [aliases] : Array.isArray(aliases) ? aliases.filter((a) => typeof a === "string") : [] };
     });
     const rows = [];
-    for (const [day, data] of Object.entries(p2.store.days)) {
+    for (const [day, data] of Object.entries(p.store.days)) {
       const list = data.list?.length ? data.list : [{ sid: `legacy:${day}`, out: data.out, fresh: data.fresh, cached: data.cached, segs: data.segs, legacy: true }];
       for (const session of list) {
-        const meta = p2.usage.meta.get(session.sid);
+        const meta = p.usage.meta.get(session.sid);
         const byModels = Object.keys(data.by?.[session.agent]?.models || {}).filter(Boolean);
         const singleDayModel = byModels.length === 1 ? byModels[0] : "";
         rows.push({
@@ -22181,9 +22181,9 @@ var DashboardData = class {
         if (Object.values(remainder).some(Boolean)) rows.push({ ...remainder, sid: `legacy:${day}`, day: isoDay(day), legacy: true, residual: true, sources: [] });
       }
     }
-    const signature = JSON.stringify([rows, pages, p2.settings.dashboardProjects]);
+    const signature = JSON.stringify([rows, pages, p.settings.dashboardProjects]);
     if (this.signature !== signature) {
-      this.resolved = resolveProjects(rows, pages, p2.settings.dashboardProjects || {});
+      this.resolved = resolveProjects(rows, pages, p.settings.dashboardProjects || {});
       this.signature = signature;
     }
     return { rows: this.resolved, pages, unreadable };
@@ -22206,16 +22206,16 @@ var ProjectPicker = class extends import_obsidian6.FuzzySuggestModal {
     return item.path ? `${item.name}  \xB7  ${item.path}` : item.name;
   }
   async onChooseItem(item) {
-    const p2 = this.view.plugin, previous = p2.settings.dashboardProjects;
-    p2.settings.dashboardProjects = { ...previous };
-    if (item.path === null) delete p2.settings.dashboardProjects[this.row.sid];
-    else p2.settings.dashboardProjects[this.row.sid] = item.path;
+    const p = this.view.plugin, previous = p.settings.dashboardProjects;
+    p.settings.dashboardProjects = { ...previous };
+    if (item.path === null) delete p.settings.dashboardProjects[this.row.sid];
+    else p.settings.dashboardProjects[this.row.sid] = item.path;
     try {
-      await p2.saveSettings();
+      await p.saveSettings();
       await this.view.render();
     } catch (e) {
-      p2.settings.dashboardProjects = previous;
-      p2.notice(t("\u9879\u76EE\u5F52\u5C5E\u4FDD\u5B58\u5931\u8D25\uFF1A{error}", { error: e.message }));
+      p.settings.dashboardProjects = previous;
+      p.notice(t("\u9879\u76EE\u5F52\u5C5E\u4FDD\u5B58\u5931\u8D25\uFF1A{error}", { error: e.message }));
     }
   }
 };
@@ -22428,7 +22428,7 @@ var DashboardView = class extends import_obsidian6.ItemView {
     this._heatRange = heatRange;
   }
   async copySummary(data, from, to, projectScope) {
-    const selectedProj = this.project === null ? "" : projectScope.projects.find((p2) => p2.path === this.project)?.name || t("\u672A\u5F52\u7C7B");
+    const selectedProj = this.project === null ? "" : projectScope.projects.find((p) => p.path === this.project)?.name || t("\u672A\u5F52\u7C7B");
     const selectedAgent = this.agent ? AGENTS[this.agent]?.name || this.agent : "";
     const selectedModel = this.model === null ? "" : this.model || t("\u672A\u8BB0\u5F55\u6A21\u578B");
     const md = formatDashboardSummaryMarkdown(data, {
@@ -22736,7 +22736,7 @@ var DashboardView = class extends import_obsidian6.ItemView {
       const sortBtn = this.button(th, text, () => this.setProjectSort(key), "ad-review__th-sort" + (active2 ? " is-active" : ""));
       sortBtn.setAttribute("aria-pressed", String(active2));
     }
-    const body = table.createEl("tbody"), max = Math.max(1, data.projectsMaxTokens || data.projects.reduce((m, p2) => Math.max(m, p2.tokens), 0));
+    const body = table.createEl("tbody"), max = Math.max(1, data.projectsMaxTokens || data.projects.reduce((m, p) => Math.max(m, p.tokens), 0));
     for (const project of data.projects) {
       const tr = body.createEl("tr");
       if (project.path === this.project) tr.addClass("is-selected");
@@ -22881,11 +22881,11 @@ var MEMORY_LABELS = {
 var hash = (text) => (0, import_crypto11.createHash)("sha256").update(text).digest("hex").slice(0, 24);
 var memoryId = (text) => "m-" + hash(text.toLowerCase().replace(/[\s\p{P}\p{S}]/gu, ""));
 function notePath(value) {
-  const p2 = String(value || "").trim().replace(/\\/g, "/");
-  if (!p2 || p2.startsWith("/") || /^[a-z]:/i.test(p2) || p2.split("/").some((x) => !x || x === "." || x === "..") || !p2.endsWith(".md")) {
+  const p = String(value || "").trim().replace(/\\/g, "/");
+  if (!p || p.startsWith("/") || /^[a-z]:/i.test(p) || p.split("/").some((x) => !x || x === "." || x === "..") || !p.endsWith(".md")) {
     throw new Error(t("\u8BB0\u5FC6\u8DEF\u5F84\u5FC5\u987B\u662F\u5E93\u5185\u7684 .md \u6587\u4EF6\u8DEF\u5F84"));
   }
-  return p2;
+  return p;
 }
 function memoryEntries(text) {
   const lines = String(text || "").split("\n");
@@ -23605,7 +23605,7 @@ function matchVerbatimQuote(sourceText, quote2) {
   if (sourceText.includes(quote2)) return quote2;
   const trimmed = quote2.trim();
   if (trimmed.length >= 2 && sourceText.includes(trimmed)) return trimmed;
-  const parts = trimmed.split(/\s+/).filter(Boolean).map((p2) => p2.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  const parts = trimmed.split(/\s+/).filter(Boolean).map((p) => p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
   if (!parts.length) return "";
   const hit = new RegExp(parts.join("\\s+")).exec(sourceText);
   return hit && hit[0].length <= 300 ? hit[0] : "";
@@ -23746,8 +23746,8 @@ var Dreaming = class {
   get memoryPath() {
     return notePath(this.cfg.path);
   }
-  async read(p2) {
-    const file = this.plugin.app.vault.getAbstractFileByPath(p2);
+  async read(p) {
+    const file = this.plugin.app.vault.getAbstractFileByPath(p);
     return file ? this.plugin.app.vault.read(file) : "";
   }
   // 派发上下文用：按任务文本挑出相关记忆段落；开关关闭或没有相关条目时返回空串。
@@ -23788,16 +23788,16 @@ var Dreaming = class {
     return out;
   }
   async writeEntry(memory, evidence = [], state = "\u6709\u6548") {
-    const taken = new Set((await this.listEntryPaths()).map((p2) => p2.split("/").pop().replace(/\.md$/, "")));
+    const taken = new Set((await this.listEntryPaths()).map((p) => p.split("/").pop().replace(/\.md$/, "")));
     const date = /^\d{4}-\d{2}-\d{2}$/.test(String(memory.date || "")) ? memory.date : (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
     const name = memoryFileName({ date, text: memory.text, taken });
     await this.write(`${this.dir}/${name}.md`, serializeMemoryFile({ id: memory.id, kind: memory.kind, text: memory.text, state, date, sources: evidence, evidence }));
     return `${this.dir}/${name}.md`;
   }
   isEntryPath(path17) {
-    const p2 = String(path17 || "");
+    const p = String(path17 || "");
     const prefix = `${this.dir}/`;
-    return p2.startsWith(prefix) && p2.endsWith(".md") && p2 !== `${this.dir}/\u7D22\u5F15.md` && !p2.slice(prefix.length).includes("/");
+    return p.startsWith(prefix) && p.endsWith(".md") && p !== `${this.dir}/\u7D22\u5F15.md` && !p.slice(prefix.length).includes("/");
   }
   async reconcileFile(file) {
     if (!file || !this.isEntryPath(file.path)) return false;
@@ -24206,26 +24206,26 @@ ${String(rawReply || "").slice(0, 2e3)}`;
     await this.write(this.memoryPath, overview ?? rest);
     return added;
   }
-  async write(p2, text) {
+  async write(p, text) {
     const vault = this.plugin.app.vault;
-    const file = vault.getAbstractFileByPath(p2);
+    const file = vault.getAbstractFileByPath(p);
     if (file) return vault.modify(file, text);
-    const parts = p2.split("/");
+    const parts = p.split("/");
     parts.pop();
     let dir = "";
     for (const part of parts) {
       dir = dir ? `${dir}/${part}` : part;
       if (!vault.getAbstractFileByPath(dir)) await vault.createFolder(dir);
     }
-    return vault.create(p2, text);
+    return vault.create(p, text);
   }
   async collect() {
-    const p2 = this.plugin, candidates = /* @__PURE__ */ new Set();
+    const p = this.plugin, candidates = /* @__PURE__ */ new Set();
     const aiOnly = this.cfg?.scope === "ai-records";
-    for (let i = 0; i < 14; i++) candidates.add(journalPath(p2.app, p2.settings, dayKey(Date.now() - i * 864e5, p2.settings)));
-    for (const job of Object.values(p2.jobs || {}).sort((a, b) => b.startedAt - a.startedAt).slice(0, 14)) if (job.path) candidates.add(job.path);
+    for (let i = 0; i < 14; i++) candidates.add(journalPath(p.app, p.settings, dayKey(Date.now() - i * 864e5, p.settings)));
+    for (const job of Object.values(p.jobs || {}).sort((a, b) => b.startedAt - a.startedAt).slice(0, 14)) if (job.path) candidates.add(job.path);
     const sources = /* @__PURE__ */ new Map(), seen = /* @__PURE__ */ new Set();
-    const plugins = p2.app.plugins, companion = plugins?.getPlugin?.("telegram-companion") || plugins?.plugins?.["telegram-companion"];
+    const plugins = p.app.plugins, companion = plugins?.getPlugin?.("telegram-companion") || plugins?.plugins?.["telegram-companion"];
     for (const filePath of candidates) {
       if (filePath === this.memoryPath || filePath === companion?.companion?.cfg?.profilePath) continue;
       const text = await this.read(filePath);
@@ -24255,15 +24255,15 @@ ${String(rawReply || "").slice(0, 2e3)}`;
     this.busy = true;
     const aiOnly = this.cfg?.scope === "ai-records";
     this.progress = { phase: "collect", message: aiOnly ? t("\u6B63\u5728\u91C7\u96C6\u542B AI \u81EA\u52A8\u8BB0\u5F55\u7684\u6761\u76EE\u2026") : t("\u6B63\u5728\u91C7\u96C6\u7528\u6237\u65E5\u5FD7\u4E0E AI \u8BB0\u5F55\u2026"), startedAt: Date.now(), endedAt: 0 };
-    const p2 = this.plugin;
+    const p = this.plugin;
     try {
       this.cfg.lastAttempt = Date.now();
-      await p2.saveSettings();
+      await p.saveSettings();
       const memoryPath = this.memoryPath;
       (_a = this.cfg).states || (_a.states = {});
       const state = (_b = this.cfg.states)[memoryPath] || (_b[memoryPath] = { processed: [], index: {}, rejected: [] });
       const all = await this.collect(), processed = new Set(state.processed);
-      const modelCfg = dreamModelConfig(p2.settings);
+      const modelCfg = dreamModelConfig(p.settings);
       let latestText = await this.read(memoryPath), totalAdded = 0, pending = 0;
       const maxBatches = drain ? 30 : 1;
       for (let batch = 0; batch < maxBatches; batch++) {
@@ -24362,8 +24362,8 @@ ${body}
         };
         if (this.storeMode) text = await mergeStore(previous);
         else {
-          const file = p2.app.vault.getAbstractFileByPath(memoryPath);
-          if (file) await p2.app.vault.process(file, merge);
+          const file = p.app.vault.getAbstractFileByPath(memoryPath);
+          if (file) await p.app.vault.process(file, merge);
           else {
             merge("");
             if (text.trim()) await this.write(memoryPath, text);
@@ -24374,7 +24374,7 @@ ${body}
         for (const s of sources.values()) processed.add(s.key);
         state.processed = [...all.values()].filter((s) => processed.has(s.key)).map((s) => s.key);
         this.cfg.coverage = { files: new Set([...all.values()].map((s) => s.path)).size, total: all.size, processed: state.processed.length, pending };
-        await p2.saveSettings();
+        await p.saveSettings();
         if (!pending || !sources.size) break;
       }
       this.setProgress("sync", t("\u6B63\u5728\u540C\u6B65\u957F\u671F\u8BB0\u5FC6\u2026"));
@@ -24391,14 +24391,14 @@ ${body}
       if (profileError) throw profileError;
       this.cfg.lastRun = Date.now();
       this.cfg.lastError = "";
-      await p2.saveSettings();
+      await p.saveSettings();
       this.setProgress("done", t("\u6574\u7406\u5B8C\u6210\uFF1A\u65B0\u589E {added} \u6761\u8BB0\u5FC6\uFF1B\u5DF2\u5904\u7406 {done}/{total} \u5757\uFF0C\u5F85\u5904\u7406 {pending} \u5757", { added: totalAdded, done: state.processed.length, total: all.size, pending }) + (this.cfg.share.enabled ? "\uFF1B" + this.sharing.status : ""));
-      if (manual) p2.notice(t("Dreaming \u65B0\u589E {added} \u6761\u8BB0\u5FC6\uFF1B\u5DF2\u5904\u7406 {done}/{total} \u5757\uFF0C\u5F85\u5904\u7406 {pending} \u5757\uFF1B{sync}", { added: totalAdded, done: state.processed.length, total: all.size, pending, sync }), 7e3);
+      if (manual) p.notice(t("Dreaming \u65B0\u589E {added} \u6761\u8BB0\u5FC6\uFF1B\u5DF2\u5904\u7406 {done}/{total} \u5757\uFF0C\u5F85\u5904\u7406 {pending} \u5757\uFF1B{sync}", { added: totalAdded, done: state.processed.length, total: all.size, pending, sync }), 7e3);
     } catch (e) {
       this.cfg.lastError = e.message;
       this.setProgress("error", t("\u6574\u7406\u5931\u8D25\uFF1A{error}", { error: e.message }));
-      await p2.saveSettings();
-      p2.notice(t("Dreaming \u672A\u5B8C\u6210\uFF1A{error}", { error: e.message }), 8e3);
+      await p.saveSettings();
+      p.notice(t("Dreaming \u672A\u5B8C\u6210\uFF1A{error}", { error: e.message }), 8e3);
     } finally {
       this.busy = false;
       this.progress.endedAt = Date.now();
@@ -24410,9 +24410,9 @@ ${body}
     const companion = plugins?.getPlugin?.("telegram-companion") || plugins?.plugins?.["telegram-companion"];
     const target = companion?.companion?.cfg?.profilePath;
     if (!target) return t("Telegram Companion \u672A\u542F\u7528\uFF0C\u8BB0\u5FC6\u5DF2\u4FDD\u7559\uFF0C\u7A0D\u540E\u53EF\u91CD\u8BD5\u540C\u6B65");
-    const p2 = notePath(target);
-    if (p2 === this.memoryPath) throw new Error(t("\u966A\u4F34\u6863\u6848\u4E0D\u80FD\u4E0E\u957F\u671F\u8BB0\u5FC6\u4F7F\u7528\u540C\u4E00\u4E2A\u6587\u4EF6"));
-    const vault = this.plugin.app.vault, file = vault.getAbstractFileByPath(p2);
+    const p = notePath(target);
+    if (p === this.memoryPath) throw new Error(t("\u966A\u4F34\u6863\u6848\u4E0D\u80FD\u4E0E\u957F\u671F\u8BB0\u5FC6\u4F7F\u7528\u540C\u4E00\u4E2A\u6587\u4EF6"));
+    const vault = this.plugin.app.vault, file = vault.getAbstractFileByPath(p);
     if (!file) return t("\u966A\u4F34\u6863\u6848\u5C1A\u672A\u521B\u5EFA\uFF0C\u8BB0\u5FC6\u5DF2\u4FDD\u7559");
     await vault.process(file, (current) => profileWithDream(current, activeMemory(memory)));
     return t("\u5DF2\u540C\u6B65\u5F53\u524D\u6709\u6548\u8BB0\u5FC6\u5230\u966A\u4F34\u6863\u6848\uFF08\u6700\u591A 6000 \u5B57\uFF09");
@@ -24454,7 +24454,7 @@ function syncModelGroups(settings, agentEnabled) {
 var HOTKEY_MOD_SYMBOL = { control: "\u2303", option: "\u2325", shift: "\u21E7", command: "\u2318", ctrl: "\u2303", alt: "\u2325", cmd: "\u2318" };
 function hotkeyDisplay(spec) {
   const parts = String(spec || DEFAULTS.menuBarHotkey).split("+").map((x) => x.trim()).filter(Boolean);
-  return parts.map((p2) => HOTKEY_MOD_SYMBOL[p2.toLowerCase()] || p2.toUpperCase()).join("");
+  return parts.map((p) => HOTKEY_MOD_SYMBOL[p.toLowerCase()] || p.toUpperCase()).join("");
 }
 function hotkeyKeyFromEvent(event) {
   const key = String(event.key || "");
@@ -24518,9 +24518,9 @@ var AgentDeckSettingsTab = class extends import_obsidian7.PluginSettingTab {
     this._aboutComp = null;
   }
   renderAcpCard(body, cfg, spec) {
-    const p2 = this.plugin;
+    const p = this.plugin;
     const card = this.agentCard(body, spec.id, spec.title, spec.sub);
-    this.modelSelect(card, spec.id, p2.defaultModel(spec.id), (v) => {
+    this.modelSelect(card, spec.id, p.defaultModel(spec.id), (v) => {
       this.setDefaultModel(spec.id, v);
       this.display();
     });
@@ -24530,40 +24530,40 @@ var AgentDeckSettingsTab = class extends import_obsidian7.PluginSettingTab {
     });
     this.rowToggle(card, t("\u81EA\u52A8\u5141\u8BB8\u5DE5\u5177\u8C03\u7528"), t("\u5173\u95ED\u540E\u9010\u6B21\u786E\u8BA4\u5DE5\u5177\u6743\u9650"), cfg.autoApprove === true, (v) => {
       cfg.autoApprove = v;
-      p2.saveSettings();
+      p.saveSettings();
     });
     const more = this.subDetails(card, spec.moreKey, t("\u66F4\u591A\u8BBE\u7F6E"));
     if (spec.openDesktopToggle) {
       this.rowToggle(more, t("\u5B8C\u6210\u540E\u81EA\u52A8\u5728\u684C\u9762\u7248\u6253\u5F00"), "", cfg.openDesktop === true, (v) => {
         cfg.openDesktop = v;
-        p2.saveSettings();
+        p.saveSettings();
       });
     }
     this.rowText(more, spec.pathLabel || t("\u547D\u4EE4\u884C\u8DEF\u5F84"), spec.pathHint, cfg.path || "", spec.pathPlaceholder || spec.pathHint, (v) => {
       cfg.path = v.trim();
-      p2.saveSettings();
+      p.saveSettings();
     }, "ad-input--wide");
     this.rowText(card, t("\u5DE5\u4F5C\u76EE\u5F55"), spec.cwdHint || t("\u7559\u7A7A = \u5E93\u6839\u76EE\u5F55"), cfg.cwd || "", t("\u7559\u7A7A = \u5E93\u6839\u76EE\u5F55"), (v) => {
       cfg.cwd = v.trim();
-      p2.saveSettings();
+      p.saveSettings();
     }, "ad-input--wide");
     if (spec.hasExtraArgs !== false) {
       this.rowText(more, t("\u989D\u5916 ACP \u53C2\u6570"), t("\u53EF\u7559\u7A7A"), cfg.extraArgs || "", t("\u53EF\u7559\u7A7A"), (v) => {
         cfg.extraArgs = spec.trimExtraArgs === false ? v : v.trim();
-        p2.saveSettings();
+        p.saveSettings();
       }, "ad-input--wide");
     }
     const btns = more.createDiv({ cls: "ad-btnrow" });
     this.bigButton(btns, spec.refreshLabel, async () => {
       try {
-        const models = await p2.refreshAcpModels(spec.id);
+        const models = await p.refreshAcpModels(spec.id);
         new import_obsidian7.Notice(spec.refreshNotice ? spec.refreshNotice(models.length) : t("\u5DF2\u8BFB\u53D6 {n} \u4E2A\u6A21\u578B", { n: models.length }));
         this.display();
       } catch (e) {
         new import_obsidian7.Notice(t("\u8BFB\u53D6\u5931\u8D25\uFF1A{msg}", { msg: e.message }), 8e3);
       }
     });
-    this.bigButton(btns, spec.checkLabel, async () => new import_obsidian7.Notice(await p2.checkBinary(spec.id), 6e3));
+    this.bigButton(btns, spec.checkLabel, async () => new import_obsidian7.Notice(await p.checkBinary(spec.id), 6e3));
     card.appendChild(more.parentElement);
     return card;
   }
@@ -24893,21 +24893,21 @@ var AgentDeckSettingsTab = class extends import_obsidian7.PluginSettingTab {
   // ---------- Delegation ----------
   renderDelegate(body) {
     var _a;
-    const p2 = this.plugin;
-    const s = p2.settings;
+    const p = this.plugin;
+    const s = p.settings;
     const d = s.delegate;
-    if (syncModelGroups(s, (id) => p2.agentEnabled(id))) p2.saveSettings();
+    if (syncModelGroups(s, (id) => p.agentEnabled(id))) p.saveSettings();
     const destinations2 = this.card(body, t("\u9ED8\u8BA4\u59D4\u6D3E\u5230"), t("\u8FFD\u8E2A\u4E3B\u529B\u4E0E\u9ED8\u8BA4\u59D4\u6D3E\u5206\u522B\u8BBE\u7F6E"));
     const targetRow = destinations2.createDiv({ cls: "ad-targetpick" });
     const targetHints = { workbuddy: t("\u5BA2\u6237\u7AEF\u4EA4\u63A5"), teleagent: t("\u5BA2\u6237\u7AEF\u4EA4\u63A5"), claude: t("\u684C\u9762\u7248 / \u540E\u53F0"), codex: t("\u684C\u9762\u7248 / \u7EC8\u7AEF"), qoder: t("\u684C\u9762\u7248 / CLI") };
-    for (const id of settingsAgentOrder(s, "delegation", (id2) => p2.agentEnabled(id2))) {
+    for (const id of settingsAgentOrder(s, "delegation", (id2) => p.agentEnabled(id2))) {
       const a = AGENTS[id];
       const available = id !== "workbuddy" && id !== "teleagent" && !a.trackingOnly;
       const item = targetRow.createDiv({ cls: "ad-settings-target" });
       item.dataset.agent = id;
       this.sortHandle(item, targetRow, "delegation", id);
-      const b = item.createEl(available ? "button" : "div", { cls: "ad-target" + (available && p2.defaultTarget() === id ? " is-on" : ""), attr: { "data-agent": id } });
-      if (available) b.setAttribute("aria-pressed", String(p2.defaultTarget() === id));
+      const b = item.createEl(available ? "button" : "div", { cls: "ad-target" + (available && p.defaultTarget() === id ? " is-on" : ""), attr: { "data-agent": id } });
+      if (available) b.setAttribute("aria-pressed", String(p.defaultTarget() === id));
       b.style.setProperty("--ad-agent", a.color);
       b.style.setProperty("--ad-agent-soft", a.soft);
       agentIcon(b.createSpan({ cls: "ad-glyph" }), id);
@@ -24915,7 +24915,7 @@ var AgentDeckSettingsTab = class extends import_obsidian7.PluginSettingTab {
       b.createSpan({ cls: "ad-target__hint", text: a.trackingOnly ? t("\u6682\u4E0D\u652F\u6301\u59D4\u6D3E") : targetHints[id] || t("ACP / \u81EA\u5E26\u8D26\u53F7") });
       if (available) b.onclick = async () => {
         d.target = id;
-        await p2.saveSettings();
+        await p.saveSettings();
         this.display();
       };
     }
@@ -24926,33 +24926,33 @@ var AgentDeckSettingsTab = class extends import_obsidian7.PluginSettingTab {
       stewardCard,
       t("\u7BA1\u5BB6 Agent"),
       t("\u9009\u300C\u5173\u95ED\u300D\u5C31\u4E0D\u81EA\u52A8\u8D77\u7BA1\u5BB6\u4F1A\u8BDD"),
-      [{ id: "off", label: t("\u5173\u95ED") }, ...settingsAgentOrder(s, "delegation", (id) => p2.agentEnabled(id) && !AGENTS[id].trackingOnly).map((id) => ({ id, label: AGENTS[id].name }))],
+      [{ id: "off", label: t("\u5173\u95ED") }, ...settingsAgentOrder(s, "delegation", (id) => p.agentEnabled(id) && !AGENTS[id].trackingOnly).map((id) => ({ id, label: AGENTS[id].name }))],
       stewardNow.enabled === false || !stewardNow.agent ? "off" : stewardNow.agent,
       (v) => {
         var _a2;
         s.projectTeams || (s.projectTeams = {});
         (_a2 = s.projectTeams).stewards || (_a2.stewards = {});
         s.projectTeams.stewards.default = v === "off" ? { enabled: false } : { enabled: true, agent: v };
-        p2.saveSettings();
+        p.saveSettings();
       }
     );
     this.rowToggle(stewardCard, t("\u7BA1\u5BB6\u4E2D\u9014\u770B\u62A4"), t("\u6BCF 5 \u5206\u949F\u770B\u4E00\u773C\u6CE2\u6B21\uFF1A\u6709\u4F1A\u8BDD 15 \u5206\u949F\u6CA1\u6709\u8F93\u51FA\uFF0C\u5C31\u63D0\u9192\u4E00\u6B21\u5E76\u5199\u56DE\u5B50\u5361\u3002\u9ED8\u8BA4\u5173"), s.stewardWatch === true, (v) => {
       s.stewardWatch = v;
-      p2.saveSettings();
-      p2.startStewardWatch?.();
+      p.saveSettings();
+      p.startStewardWatch?.();
     });
     const projectCard = this.card(body, t("\u9879\u76EE\u6587\u4EF6\u5939"), t("\u6D3E\u6D3B\u65F6\u6309\u9879\u76EE\u9009\u76EE\u5F55\uFF1B\u7B14\u8BB0\u91CC\u7684\u53CC\u94FE\u3001\u8DEF\u5F84\u6216\u300C\u9879\u76EE -> \u6807\u9898\u300D\u4E5F\u80FD\u8BA4\u51FA\u9879\u76EE\uFF0C\u7B14\u8BB0\u9879\u76EE\u4F18\u5148\u4E8E\u5404 Agent \u7684\u9ED8\u8BA4\u76EE\u5F55\u3002Codex \u4F1A\u628A\u4F1A\u8BDD\u5F52\u5230\u540C\u540D\u9879\u76EE\u3002"));
     this.rowToggle(projectCard, t("\u6309\u9879\u76EE\u6587\u4EF6\u5939\u6D3E\u6D3B"), t("\u4ECE\u7B14\u8BB0\u8BA4\u51FA\u9879\u76EE\u540E\uFF0C\u6D3E\u5230\u8FD9\u4E2A\u9879\u76EE\u7684\u76EE\u5F55\uFF1B\u8BA4\u4E0D\u51FA\u518D\u7528\u5404 Agent \u7684\u9ED8\u8BA4\u76EE\u5F55\u6216\u5E93\u6839"), s.autoProjectFolder !== false, (v) => {
       s.autoProjectFolder = v;
-      p2.saveSettings();
+      p.saveSettings();
     });
     this.rowToggle(projectCard, t("\u975E\u65E5\u8BB0\u7B14\u8BB0\u7684\u6D3E\u53D1\u4E5F\u8BB0\u8FDB\u5F53\u5929\u65E5\u8BB0"), t("\u9ED8\u8BA4\u4E0D\u8BB0\uFF0C\u7ED3\u8BBA\u4ECD\u5199\u56DE\u539F\u7B14\u8BB0\uFF1B\u6253\u5F00\u540E\u548C\u666E\u901A\u4F1A\u8BDD\u4E00\u6837\u8FDB\u5F53\u5929\u65E5\u8BB0"), s.noteDispatchJournal === true, (v) => {
       s.noteDispatchJournal = v;
-      p2.saveSettings();
+      p.saveSettings();
     });
     this.renderProjectFolders(projectCard);
     const claude = this.agentCard(body, "claude", "Claude Code", "");
-    this.modelSelect(claude, "claude", p2.defaultModel("claude"), (v) => {
+    this.modelSelect(claude, "claude", p.defaultModel("claude"), (v) => {
       this.setDefaultModel("claude", v);
       this.display();
     });
@@ -24962,52 +24962,52 @@ var AgentDeckSettingsTab = class extends import_obsidian7.PluginSettingTab {
     });
     this.rowSegmented(claude, t("\u6743\u9650\u6A21\u5F0F\uFF08\u9ED8\u8BA4\uFF09"), t("plan\uFF1A\u89C4\u5212\uFF1Bauto\uFF1A\u81EA\u52A8\u5224\u65AD\uFF1BacceptEdits\uFF1A\u5141\u8BB8\u4FEE\u6539\u6587\u4EF6\uFF1Bmanual\uFF1A\u6BCF\u6B65\u90FD\u95EE\u3002\u6D3E\u53D1\u65F6\u53EF\u4EE5\u5728\u786E\u8BA4\u6846\u91CC\u4E34\u65F6\u6539"), CLAUDE_PERMISSIONS, d.claude.permission, (v) => {
       d.claude.permission = v;
-      p2.saveSettings();
+      p.saveSettings();
       this.display();
     });
     const claudeMore = this.subDetails(claude, "claude-more", t("\u66F4\u591A\u8BBE\u7F6E"));
     this.rowText(claudeMore, t("\u547D\u4EE4\u884C\u8DEF\u5F84"), t("\u7559\u7A7A\u81EA\u52A8\u67E5\u627E"), d.claude.path || "", t("\u81EA\u52A8\u67E5\u627E"), (v) => {
       d.claude.path = v.trim();
-      p2.saveSettings();
+      p.saveSettings();
     }, "ad-input--wide");
     this.rowText(claude, t("\u5DE5\u4F5C\u76EE\u5F55"), t("\u7559\u7A7A\u4F7F\u7528\u5E93\u6839\u76EE\u5F55"), d.claude.cwd, t("\u7559\u7A7A = \u5E93\u6839\u76EE\u5F55"), (v) => {
       d.claude.cwd = v.trim();
-      p2.saveSettings();
+      p.saveSettings();
     }, "ad-input--wide");
     this.rowToggle(claudeMore, t("\u5B8C\u6210\u540E\u81EA\u52A8\u5728\u684C\u9762\u7248\u6253\u5F00"), "", d.claude.openDesktop === true, (v) => {
       d.claude.openDesktop = v;
-      p2.saveSettings();
+      p.saveSettings();
     });
     this.rowToggle(claudeMore, t("\u628A\u5F53\u524D\u5E93\u4E5F\u52A0\u8FDB\u53EF\u8BFB\u76EE\u5F55"), "", d.claude.addVault !== false, (v) => {
       d.claude.addVault = v;
-      p2.saveSettings();
+      p.saveSettings();
     });
     this.rowToggle(claudeMore, t("\u5E93\u6CA1\u88AB\u4FE1\u4EFB\u65F6\u81EA\u52A8\u6362\u4E2A\u76EE\u5F55"), t("\u4F7F\u7528\u5DF2\u4FE1\u4EFB\u76EE\u5F55\uFF0C\u5E76\u6DFB\u52A0\u5F53\u524D\u5E93\u7684\u8BBF\u95EE\u8DEF\u5F84"), d.claude.autoTrustedCwd !== false, (v) => {
       d.claude.autoTrustedCwd = v;
-      p2.saveSettings();
+      p.saveSettings();
     });
     this.rowToggle(claudeMore, t("\u4F7F\u7528 claude --bg \u540E\u53F0\u670D\u52A1"), t("\u7531 Claude \u540E\u53F0\u670D\u52A1\u7BA1\u7406\u4F1A\u8BDD"), d.claude.useBackground === true, (v) => {
       d.claude.useBackground = v;
-      p2.saveSettings();
+      p.saveSettings();
     });
     this.rowText(claudeMore, t("\u989D\u5916\u53C2\u6570"), t("\u4F20\u7ED9 Claude CLI \u7684\u53C2\u6570"), d.claude.extraArgs, t("\u53EF\u7559\u7A7A"), (v) => {
       d.claude.extraArgs = v;
-      p2.saveSettings();
+      p.saveSettings();
     }, "ad-input--wide");
     const test = claudeMore.createDiv({ cls: "ad-btnrow" });
     this.bigButton(test, t("\u68C0\u67E5 claude"), async () => {
-      const r = await p2.checkBinary("claude");
+      const r = await p.checkBinary("claude");
       new import_obsidian7.Notice(r, 6e3);
     });
-    this.bigButton(test, t("\u5728\u7EC8\u7AEF\u91CC\u7EED\u8FD9\u4E2A\u76EE\u5F55"), () => p2.openTerminalAt(d.claude.cwd || p2.vaultPath, "claude"));
+    this.bigButton(test, t("\u5728\u7EC8\u7AEF\u91CC\u7EED\u8FD9\u4E2A\u76EE\u5F55"), () => p.openTerminalAt(d.claude.cwd || p.vaultPath, "claude"));
     claude.appendChild(claudeMore.parentElement);
     const codex = this.agentCard(body, "codex", "Codex", "");
     this.rowSegmented(codex, t("\u6D3E\u53D1\u5230"), "", [{ id: "desktop", label: t("Codex \u684C\u9762\u7248") }, { id: "terminal", label: t("\u7EC8\u7AEF") }], d.codex.transport || "desktop", (v) => {
       d.codex.transport = v;
-      p2.saveSettings();
+      p.saveSettings();
       this.display();
     });
-    this.modelSelect(codex, "codex", p2.defaultModel("codex"), (v) => {
+    this.modelSelect(codex, "codex", p.defaultModel("codex"), (v) => {
       this.setDefaultModel("codex", v);
       this.display();
     });
@@ -25017,20 +25017,20 @@ var AgentDeckSettingsTab = class extends import_obsidian7.PluginSettingTab {
     });
     this.rowSegmented(codex, t("\u6C99\u7BB1\u6A21\u5F0F\uFF08\u9ED8\u8BA4\uFF09"), t("read-only\uFF1A\u53EA\u8BFB\uFF1Bworkspace-write\uFF1A\u53EA\u6539\u5DE5\u4F5C\u76EE\u5F55\uFF1Bdanger-full-access\uFF1A\u5B8C\u5168\u6743\u9650\u3002\u6D3E\u53D1\u65F6\u53EF\u4EE5\u5728\u786E\u8BA4\u6846\u91CC\u4E34\u65F6\u6539"), CODEX_SANDBOXES, d.codex.sandbox || "workspace-write", (v) => {
       d.codex.sandbox = v;
-      p2.saveSettings();
+      p.saveSettings();
       this.display();
     });
     const codexMore = this.subDetails(codex, "codex-more", t("\u66F4\u591A\u8BBE\u7F6E"));
     for (const [key, label, hint] of [["path", t("codex \u7A0B\u5E8F\u8DEF\u5F84"), t("\u684C\u9762\u6A21\u5F0F\u7559\u7A7A\u4F18\u5148\u4F7F\u7528 Desktop \u81EA\u5E26\u7A0B\u5E8F\uFF1B\u7EC8\u7AEF\u6A21\u5F0F\u4ECE PATH \u67E5\u627E")], ["cwd", t("\u5DE5\u4F5C\u76EE\u5F55"), t("\u7559\u7A7A = \u5E93\u6839\u76EE\u5F55")]]) {
       this.rowText(key === "cwd" ? codex : codexMore, label, hint, d.codex[key], hint, (v) => {
         d.codex[key] = v.trim();
-        p2.saveSettings();
+        p.saveSettings();
       }, "ad-input--wide");
     }
-    this.bigButton(codexMore.createDiv({ cls: "ad-btnrow" }), t("\u68C0\u67E5 codex"), async () => new import_obsidian7.Notice(await p2.checkBinary("codex"), 6e3));
+    this.bigButton(codexMore.createDiv({ cls: "ad-btnrow" }), t("\u68C0\u67E5 codex"), async () => new import_obsidian7.Notice(await p.checkBinary("codex"), 6e3));
     this.rowToggle(codexMore, t("\u628A\u4F1A\u8BDD\u5F52\u5230 Codex \u9879\u76EE"), t("\u540C\u76EE\u5F55\u5DF2\u6709\u9879\u76EE\u5C31\u590D\u7528\uFF0C\u6CA1\u6709\u5C31\u7528\u9879\u76EE\u540D\u5EFA\u4E00\u4E2A\uFF1B\u9879\u76EE\u63A5\u53E3\u662F\u5B9E\u9A8C\u6027\u7684\uFF0C\u5931\u8D25\u65F6\u6309\u539F\u6837\u6D3E\u53D1"), d.codex.project !== false, (v) => {
       d.codex.project = v;
-      p2.saveSettings();
+      p.saveSettings();
     });
     codex.appendChild(codexMore.parentElement);
     for (const spec of [
@@ -25073,7 +25073,7 @@ var AgentDeckSettingsTab = class extends import_obsidian7.PluginSettingTab {
       this.renderAcpCard(body, d[_a = spec.id] || (d[_a] = { ...DEFAULTS.delegate[spec.id] }), spec);
     }
     const qoder = this.agentCard(body, "qoder", "Qoder", t("\u5DF2\u767B\u5F55 qodercli \u65F6\u540E\u53F0\u76F4\u63A5\u6267\u884C\uFF1B\u672A\u767B\u5F55\u65F6\u81EA\u52A8\u590D\u5236\u4EFB\u52A1\u5E76\u6253\u5F00 Qoder \u684C\u9762\u7248\u4EA4\u63A5"));
-    this.modelSelect(qoder, "qoder", p2.defaultModel("qoder"), (v) => {
+    this.modelSelect(qoder, "qoder", p.defaultModel("qoder"), (v) => {
       this.setDefaultModel("qoder", v);
       this.display();
     });
@@ -25083,19 +25083,19 @@ var AgentDeckSettingsTab = class extends import_obsidian7.PluginSettingTab {
     });
     this.rowSegmented(qoder, t("\u6743\u9650\u6A21\u5F0F\uFF08\u9ED8\u8BA4\uFF09"), t("plan\uFF1A\u89C4\u5212\uFF1Bauto\uFF1A\u81EA\u52A8\u5224\u65AD\uFF1BacceptEdits\uFF1A\u5141\u8BB8\u4FEE\u6539\u6587\u4EF6\uFF1Bmanual\uFF1A\u6BCF\u6B65\u90FD\u95EE\u3002\u6D3E\u53D1\u65F6\u53EF\u4EE5\u5728\u786E\u8BA4\u6846\u91CC\u4E34\u65F6\u6539"), CLAUDE_PERMISSIONS, d.qoder.permission, (v) => {
       d.qoder.permission = v;
-      p2.saveSettings();
+      p.saveSettings();
       this.display();
     });
     const qoderMore = this.subDetails(qoder, "qoder-more", t("\u66F4\u591A\u8BBE\u7F6E"));
     for (const [key, label, hint] of [["path", t("\u547D\u4EE4\u884C\u8DEF\u5F84"), t("\u7559\u7A7A\u81EA\u52A8\u67E5\u627E\uFF08~/.qoder/bin/qodercli/qodercli\uFF09")], ["cwd", t("\u5DE5\u4F5C\u76EE\u5F55"), t("\u7559\u7A7A = \u5E93\u6839\u76EE\u5F55")], ["extraArgs", t("\u989D\u5916\u53C2\u6570"), t("\u53EF\u7559\u7A7A")]]) {
       this.rowText(key === "cwd" ? qoder : qoderMore, label, hint, d.qoder[key] || "", hint, (v) => {
         d.qoder[key] = v.trim();
-        p2.saveSettings();
+        p.saveSettings();
       }, "ad-input--wide");
     }
     const qtest = qoderMore.createDiv({ cls: "ad-btnrow" });
-    this.bigButton(qtest, t("\u68C0\u67E5 qoder"), async () => new import_obsidian7.Notice(await p2.checkBinary("qoder"), 6e3));
-    this.bigButton(qtest, t("\u767B\u5F55 qoder CLI"), () => p2.openTerminalAt(d.qoder.cwd || p2.vaultPath, "qoder login"));
+    this.bigButton(qtest, t("\u68C0\u67E5 qoder"), async () => new import_obsidian7.Notice(await p.checkBinary("qoder"), 6e3));
+    this.bigButton(qtest, t("\u767B\u5F55 qoder CLI"), () => p.openTerminalAt(d.qoder.cwd || p.vaultPath, "qoder login"));
     qoder.appendChild(qoderMore.parentElement);
     this.renderAcpCard(body, d.hermes || (d.hermes = { ...DEFAULTS.delegate.hermes }), {
       id: "hermes",
@@ -25110,13 +25110,13 @@ var AgentDeckSettingsTab = class extends import_obsidian7.PluginSettingTab {
     const sharedAgents = this.card(body, t("\u516C\u5171\u7EC8\u7AEF\u4E0E\u5176\u4F59 Agent"), "");
     this.rowSelect(sharedAgents, t("\u4E3B\u529B\u7EC8\u7AEF"), t("\u7528\u4E8E\u7EC8\u7AEF\u59D4\u6D3E\u548C\u6062\u590D\u4F1A\u8BDD"), [{ id: "auto", label: t("\u81EA\u52A8") }, { id: "terminal", label: t("\u7CFB\u7EDF\u7EC8\u7AEF") }, { id: "iterm", label: "iTerm2" }, { id: "warp", label: "Warp" }, { id: "tern", label: "Tern" }, { id: "herdr", label: "Herdr" }], s.cliTerminal || "auto", (v) => {
       s.cliTerminal = v;
-      p2.saveSettings();
+      p.saveSettings();
       this.display();
     });
     this.rowToggle(sharedAgents, t("\u9ED8\u8BA4\u5728\u7EC8\u7AEF\u59D4\u6D3E"), t("\u9002\u7528\u4E8E Claude Code\u3001Codex\u3001OpenCode\u3001Qoder \u548C Hermes"), !!s.delegateInTerminal, (v) => {
       s.delegateInTerminal = v;
-      p2.saveSettings();
-      p2.refreshUI();
+      p.saveSettings();
+      p.refreshUI();
     });
     for (const id of ["workbuddy", "qwenwork", "teleagent"]) {
       const r = this.row(sharedAgents, AGENTS[id].name, "", AGENTS[id].trackingOnly ? t("\u4F1A\u8BDD\u8FFD\u8E2A\u4E0E\u8BB0\u5F55\uFF08\u6682\u4E0D\u652F\u6301\u540E\u53F0\u59D4\u6D3E\uFF09") : t("\u5BA2\u6237\u7AEF\u4EA4\u63A5 \xB7 \u5728\u5BA2\u6237\u7AEF\u9009\u62E9\u6A21\u578B"));
@@ -25126,7 +25126,7 @@ var AgentDeckSettingsTab = class extends import_obsidian7.PluginSettingTab {
     const rules = this.card(body, t("\u53D1\u9001\u89C4\u5219"), t("\u4EFB\u52A1\u884C Agent \u8865\u5168\u3001\u63D0\u793A\u8BCD\u524D\u540E\u7F00\u548C\u59D4\u6D3E\u9644\u52A0\u8981\u6C42"));
     this.rowToggle(rules, t("\u8F93\u5165\u65F6\u663E\u793A\u5019\u9009\u83DC\u5355"), t("\u8F93\u5165\u89E6\u53D1\u7B26\u9009\u62E9 Agent\u3001\u6A21\u578B\u548C\u5F3A\u5EA6"), d.mentionSuggest !== false, (v) => {
       d.mentionSuggest = v;
-      p2.saveSettings();
+      p.saveSettings();
     });
     const rulesMore = this.subDetails(rules, "rules-more", t("\u66F4\u591A\u8BBE\u7F6E"));
     this.rowText(rulesMore, t("\u89E6\u53D1\u7B26\u53F7"), t("\u9ED8\u8BA4 @\uFF0C\u524D\u9762\u9700\u7A7A\u683C"), d.mentionTrigger || "@", "@", (v) => {
@@ -25136,7 +25136,7 @@ var AgentDeckSettingsTab = class extends import_obsidian7.PluginSettingTab {
         return;
       }
       d.mentionTrigger = trigger;
-      p2.saveSettings();
+      p.saveSettings();
     });
     const pre = rulesMore.createDiv({ cls: "ad-field" });
     pre.createDiv({ cls: "ad-field__label", text: t("\u524D\u7F00") });
@@ -25144,7 +25144,7 @@ var AgentDeckSettingsTab = class extends import_obsidian7.PluginSettingTab {
     preTa.value = d.promptPrefix || "";
     preTa.onchange = () => {
       d.promptPrefix = preTa.value;
-      p2.saveSettings();
+      p.saveSettings();
     };
     const suf = rulesMore.createDiv({ cls: "ad-field" });
     suf.createDiv({ cls: "ad-field__label", text: t("\u540E\u7F00") });
@@ -25152,11 +25152,11 @@ var AgentDeckSettingsTab = class extends import_obsidian7.PluginSettingTab {
     sufTa.value = d.promptSuffix || "";
     sufTa.onchange = () => {
       d.promptSuffix = sufTa.value;
-      p2.saveSettings();
+      p.saveSettings();
     };
     this.rowToggle(rules, t("\u59D4\u6D3E\u9644\u52A0\u8981\u6C42"), t("\u8FFD\u52A0\u5230\u6BCF\u6B21\u59D4\u6D3E\u6D88\u606F\u672B\u5C3E"), d.confirmFirst !== false, (v) => {
       d.confirmFirst = v;
-      p2.saveSettings();
+      p.saveSettings();
     });
     const confirm = rulesMore.createDiv({ cls: "ad-field" });
     confirm.createDiv({ cls: "ad-field__label", text: t("\u9644\u52A0\u8981\u6C42\u6B63\u6587\uFF08\u53EF\u81EA\u5B9A\u4E49\uFF09") });
@@ -25164,7 +25164,7 @@ var AgentDeckSettingsTab = class extends import_obsidian7.PluginSettingTab {
     confirmTa.value = d.confirmFirstPrompt ?? DEFAULTS.delegate.confirmFirstPrompt;
     confirmTa.onchange = () => {
       d.confirmFirstPrompt = confirmTa.value;
-      p2.saveSettings();
+      p.saveSettings();
     };
     const excluded = rulesMore.createDiv({ cls: "ad-field" });
     excluded.createDiv({ cls: "ad-field__label", text: t("\u4E0D\u6CE8\u5165\u76EE\u5F55\uFF08\u6BCF\u884C\u4E00\u4E2A\uFF09") });
@@ -25172,15 +25172,15 @@ var AgentDeckSettingsTab = class extends import_obsidian7.PluginSettingTab {
     excludedTa.value = Array.isArray(d.excludedDirs) ? d.excludedDirs.join("\n") : String(d.excludedDirs || "");
     excludedTa.onchange = () => {
       d.excludedDirs = excludedTa.value.split(/[\n,;]+/).map((s2) => s2.trim().replace(/\\/g, "/").replace(/^\/+|\/+$/g, "")).filter(Boolean);
-      p2.saveSettings();
+      p.saveSettings();
     };
     rules.appendChild(rulesMore.parentElement);
   }
   renderProjectFolders(card) {
     var _a;
-    const p2 = this.plugin;
-    const folders = (_a = p2.settings).projectFolders || (_a.projectFolders = {});
-    const entries = projectFolderEntries(p2.settings);
+    const p = this.plugin;
+    const folders = (_a = p.settings).projectFolders || (_a.projectFolders = {});
+    const entries = projectFolderEntries(p.settings);
     if (!entries.length) card.createDiv({ cls: "ad-hint", text: t("\u8FD8\u6CA1\u6709\u767B\u8BB0\u3002\u5728\u59D4\u6D3E\u5BF9\u8BDD\u6846\u91CC\u586B\u4E00\u6B21\u76EE\u5F55\uFF0C\u5C31\u4F1A\u6309\u9879\u76EE\u540D\u8BB0\u4F4F\uFF1B\u4E5F\u53EF\u4EE5\u5728\u8FD9\u91CC\u76F4\u63A5\u52A0\u3002") });
     for (const e of entries) {
       this.row(card, e.name, "", (rr) => {
@@ -25191,13 +25191,13 @@ var AgentDeckSettingsTab = class extends import_obsidian7.PluginSettingTab {
             return;
           }
           folders[e.name] = normalizeProjectFolder(input.value);
-          p2.saveSettings();
+          p.saveSettings();
           this.display();
         };
         const remove = rr.createEl("button", { cls: "ad-btn ad-btn--ghost", text: t("\u79FB\u9664"), attr: { type: "button" } });
         remove.onclick = () => {
           delete folders[e.name];
-          p2.saveSettings();
+          p.saveSettings();
           this.display();
         };
       });
@@ -25218,7 +25218,7 @@ var AgentDeckSettingsTab = class extends import_obsidian7.PluginSettingTab {
         return;
       }
       folders[label] = folder;
-      p2.saveSettings();
+      p.saveSettings();
       this.display();
     };
   }
@@ -25279,10 +25279,10 @@ var AgentDeckSettingsTab = class extends import_obsidian7.PluginSettingTab {
     this.display();
   }
   renderModels(body) {
-    const p2 = this.plugin;
-    if (syncModelGroups(p2.settings, (agent) => p2.agentEnabled(agent))) p2.saveSettings();
+    const p = this.plugin;
+    if (syncModelGroups(p.settings, (agent) => p.agentEnabled(agent))) p.saveSettings();
     const d = this.modelsDraft();
-    const models = p2.allModels(d.custom);
+    const models = p.allModels(d.custom);
     const enabled = new Set(d.enabled);
     const picker = body.createDiv({ cls: "ad-card ad-models-card" });
     const phead = picker.createDiv({ cls: "ad-card__head" });
@@ -25297,7 +25297,7 @@ var AgentDeckSettingsTab = class extends import_obsidian7.PluginSettingTab {
       this.display();
     };
     const add = tools.createEl("button", { cls: "ad-btn ad-btn--soft", text: "\uFF0B " + t("\u6DFB\u52A0\u6A21\u578B") });
-    add.onclick = () => new AddModelModal(this.app, p2, (m) => {
+    add.onclick = () => new AddModelModal(this.app, p, (m) => {
       d.custom.push(m);
       if (!d.enabled.includes(m.id)) d.enabled.push(m.id);
       if (!d.order.includes(m.id)) d.order.push(m.id);
@@ -25327,15 +25327,15 @@ var AgentDeckSettingsTab = class extends import_obsidian7.PluginSettingTab {
       const rows = [...pinned, ...rest].filter((m) => m.agent === agent);
       const clientModels = agent === "workbuddy" || agent === "teleagent" || AGENTS[agent].trackingOnly;
       if (!rows.length && (!clientModels || q || this.filter !== "all")) continue;
-      const state = p2.settings.ui.modelGroups[agent];
+      const state = p.settings.ui.modelGroups[agent];
       const g = list.createEl(clientModels ? "div" : "details", { cls: "ad-modelgroup" });
       g.dataset.agent = agent;
       if (!clientModels) {
         g.open = state.open;
         g.ontoggle = () => {
-          if (!g.isConnected || p2.settings.ui.modelGroups[agent] !== state || state.open === g.open) return;
+          if (!g.isConnected || p.settings.ui.modelGroups[agent] !== state || state.open === g.open) return;
           state.open = g.open;
-          p2.saveSettings();
+          p.saveSettings();
         };
       }
       const gh = g.createEl(clientModels ? "div" : "summary", { cls: "ad-modelgroup__head" });
@@ -25344,7 +25344,7 @@ var AgentDeckSettingsTab = class extends import_obsidian7.PluginSettingTab {
       gh.createSpan({ text: a.name });
       gh.createSpan({ cls: "ad-muted", text: clientModels ? t("\u5728\u5BA2\u6237\u7AEF\u9009\u62E9\u6A21\u578B") : t("\u5DF2\u542F\u7528 {n} / {total}", { n: rows.filter((m) => enabled.has(m.id)).length, total: rows.length }) });
       if (rows.length) this.groupAction(gh, rows, d, false);
-      const defaultId = p2.defaultModel(agent);
+      const defaultId = p.defaultModel(agent);
       for (const m of rows) this.modelRow(g, m, d, agent, defaultId, d.pinned.includes(m.id));
     }
     if (!pinned.length && !rest.length) {
@@ -25466,34 +25466,34 @@ var AgentDeckSettingsTab = class extends import_obsidian7.PluginSettingTab {
   }
   saveDraft() {
     if (!this.draft) return;
-    const p2 = this.plugin;
+    const p = this.plugin;
     const snap = catalogSnapshot(this.draft);
-    const prevCustomIds = new Set((p2.settings.models.custom || []).map((x) => x.id));
+    const prevCustomIds = new Set((p.settings.models.custom || []).map((x) => x.id));
     const nextCustomIds = new Set(snap.custom.map((x) => x.id));
-    p2.settings.models.enabled = snap.enabled;
-    p2.settings.models.pinned = snap.pinned;
-    p2.settings.models.order = snap.order;
-    p2.settings.models.custom = snap.custom;
+    p.settings.models.enabled = snap.enabled;
+    p.settings.models.pinned = snap.pinned;
+    p.settings.models.order = snap.order;
+    p.settings.models.custom = snap.custom;
     for (const agent of delegateAgents()) {
-      const cur = p2.defaultModel ? p2.defaultModel(agent) : p2.settings.delegate[agent]?.model;
+      const cur = p.defaultModel ? p.defaultModel(agent) : p.settings.delegate[agent]?.model;
       if (cur && prevCustomIds.has(cur) && !nextCustomIds.has(cur)) {
         const fallback = DEFAULTS.models.defaultByAgent[agent];
-        p2.settings.delegate[agent].model = fallback;
-        p2.settings.models.defaultByAgent[agent] = fallback;
+        p.settings.delegate[agent].model = fallback;
+        p.settings.models.defaultByAgent[agent] = fallback;
       }
-      const active2 = p2.defaultModel ? p2.defaultModel(agent) : p2.settings.delegate[agent]?.model;
-      if (active2 && !p2.settings.models.enabled.includes(active2)) {
-        p2.settings.models.enabled.push(active2);
+      const active2 = p.defaultModel ? p.defaultModel(agent) : p.settings.delegate[agent]?.model;
+      if (active2 && !p.settings.models.enabled.includes(active2)) {
+        p.settings.models.enabled.push(active2);
       }
     }
-    this.draft = catalogSnapshot(p2.settings.models);
-    p2.saveSettings();
+    this.draft = catalogSnapshot(p.settings.models);
+    p.saveSettings();
     new import_obsidian7.Notice(t("Models \u5DF2\u4FDD\u5B58"));
     this.display();
   }
-  renderGrokBotPicker(card, sessCountEl, s, p2) {
+  renderGrokBotPicker(card, sessCountEl, s, p) {
     const selected = new Set(Array.isArray(s.grokBotTrackedBotIds) ? s.grokBotTrackedBotIds : []);
-    const allBots = typeof p2.grokBotBots === "function" ? p2.grokBotBots() : discoverGrokBotStorage(s.grokBotPersistenceDir ? { persistenceDir: s.grokBotPersistenceDir } : {}).bots;
+    const allBots = typeof p.grokBotBots === "function" ? p.grokBotBots() : discoverGrokBotStorage(s.grokBotPersistenceDir ? { persistenceDir: s.grokBotPersistenceDir } : {}).bots;
     const bots = allBots.filter((bot) => bot.inRoster !== false || selected.has(bot.id));
     const details = card.createEl("details", { cls: "ad-subdetails ad-grokbot-picker" });
     details.open = typeof this._grokBotsOpen === "boolean" ? this._grokBotsOpen : selected.size === 0;
@@ -25535,10 +25535,10 @@ var AgentDeckSettingsTab = class extends import_obsidian7.PluginSettingTab {
           b.classList.toggle("is-on", nowOn);
           b.setAttribute("aria-pressed", String(nowOn));
           updateSummary();
-          await p2.saveSettings?.();
-          p2.watchGrokBotPersistence?.();
-          await p2.scanNow?.(false, { agent: "grokbot" });
-          const nextCount = [...p2.usage?.meta?.values?.() || []].filter((x) => x.agent === "grokbot").length;
+          await p.saveSettings?.();
+          p.watchGrokBotPersistence?.();
+          await p.scanNow?.(false, { agent: "grokbot" });
+          const nextCount = [...p.usage?.meta?.values?.() || []].filter((x) => x.agent === "grokbot").length;
           if (sessCountEl) sessCountEl.textContent = t("{n} \u4E2A\u4F1A\u8BDD", { n: nextCount });
         };
       }
@@ -25565,15 +25565,15 @@ var AgentDeckSettingsTab = class extends import_obsidian7.PluginSettingTab {
     return this.renderRecord(body);
   }
   renderRecord(body) {
-    const p2 = this.plugin;
-    const s = p2.settings;
+    const p = this.plugin;
+    const s = p.settings;
     const d = s.delegate;
     const sourceCard = this.card(body, t("\u6765\u6E90\u4E0E\u626B\u63CF"), t("\u6700\u591A\u4E09\u4F4D\u4E3B\u529B\u8BFB\u53D6\u5168\u90E8\u5386\u53F2\uFF1B\u9996\u6B21\u5B89\u88C5\u6309\u8FD1 30 \u5929\u4F1A\u8BDD\u6570\u63A8\u8350"));
     const grid = sourceCard.createDiv({ cls: "ad-set-agents" });
-    for (const id of settingsAgentOrder(s, "tracking", (id2) => p2.agentEnabled(id2))) {
+    for (const id of settingsAgentOrder(s, "tracking", (id2) => p.agentEnabled(id2))) {
       const a = AGENTS[id];
-      const enabled = p2.agentEnabled(id);
-      const primary = p2.isPrimary(id);
+      const enabled = p.agentEnabled(id);
+      const primary = p.isPrimary(id);
       const card = grid.createDiv({ cls: `ad-set-agent ${enabled ? "" : "is-off"} ${primary ? "is-primary" : ""}` });
       card.dataset.agent = id;
       card.style.setProperty("--ad-agent", a.color);
@@ -25586,56 +25586,56 @@ var AgentDeckSettingsTab = class extends import_obsidian7.PluginSettingTab {
       const star = controls.createEl("button", { cls: "ad-star" + (primary ? " is-on" : ""), attr: { "aria-label": primary ? t("\u53D6\u6D88\u4E3B\u529B") : t("\u8BBE\u4E3A\u4E3B\u529B\uFF08\u6700\u591A\u4E09\u4E2A\uFF09"), "aria-pressed": String(primary) } });
       setLucide(star, primary ? "star" : "star-off");
       star.title = primary ? t("\u53D6\u6D88\u4E3B\u529B") : t("\u8BBE\u4E3A\u4E3B\u529B\uFF08\u6700\u591A\u4E09\u4E2A\uFF09");
-      star.onclick = () => p2.togglePrimary(id);
-      this.toggle(controls, enabled, (v) => p2.setAgentEnabled(id, v), primary);
+      star.onclick = () => p.togglePrimary(id);
+      this.toggle(controls, enabled, (v) => p.setAgentEnabled(id, v), primary);
       this.sortHandle(controls, grid, "tracking", id);
-      const sessions = [...p2.usage.meta.values()].filter((x) => x.agent === id);
+      const sessions = [...p.usage.meta.values()].filter((x) => x.agent === id);
       const stats2 = card.createDiv({ cls: "ad-set-agent__meta" });
       const sessCountEl = stats2.createSpan({ text: t("{n} \u4E2A\u4F1A\u8BDD", { n: sessions.length }) });
       stats2.createSpan({ text: id === "grokbot" ? t("\u7528\u91CF\u672A\u63D0\u4F9B") : fmtTok(sessions.reduce((n, x) => n + (x.out || 0), 0)) + " tok" });
       stats2.createSpan({ cls: "ad-set-agent__state", text: primary ? t("\u4E3B\u529B\uFF08\u5168\u91CF\uFF09") : enabled ? t("\u8FFD\u8E2A\u4E2D") : t("\u5DF2\u5173\u95ED") });
-      if (id === "grokbot" && enabled) this.renderGrokBotPicker(card, sessCountEl, s, p2);
+      if (id === "grokbot" && enabled) this.renderGrokBotPicker(card, sessCountEl, s, p);
     }
     this.agentReorder(grid, "tracking", ".ad-set-agent");
     const sourceMore = this.subDetails(sourceCard, "source-more", t("\u66F4\u591A\u8BBE\u7F6E"));
     this.rowNumber(sourceMore, t("\u65E5\u8BB0\u65E5\u671F\u5206\u754C"), t("\u6B64\u65F6\u523B\u4E4B\u524D\u8BA1\u5165\u524D\u4E00\u5929"), s.dayCutoff, 0, 12, (v) => {
       s.dayCutoff = v;
-      p2.saveSettings();
-      p2.scheduleScan();
+      p.saveSettings();
+      p.scheduleScan();
     });
     this.rowNumber(sourceMore, t("\u626B\u63CF\u95F4\u9694\uFF08\u79D2\uFF09"), "", s.pollSeconds, 5, 300, (v) => {
       s.pollSeconds = v;
-      p2.saveSettings();
-      p2.scheduleScan();
+      p.saveSettings();
+      p.scheduleScan();
     });
     this.rowNumber(sourceMore, t("\u4E3B\u529B\u8BFB\u591A\u5C11\u5929\u5386\u53F2"), t("\u975E\u4E3B\u529B\u8BFB\u53D6\u5F53\u5929\u4F1A\u8BDD"), s.fullHistoryDays, 1, 365, (v) => {
       s.fullHistoryDays = v;
-      p2.saveSettings();
-      p2.scanNow(true);
+      p.saveSettings();
+      p.scanNow(true);
     });
     this.rowToggle(sourceMore, t("\u8BC6\u522B side chat \u548C\u6BCD\u5B50\u5173\u7CFB"), t("Claude \u684C\u9762\u7248\u5B50\u4F1A\u8BDD\u4E0E\u6BCD\u5B50\u5173\u8054"), s.claudeDesktop !== false, (v) => {
       s.claudeDesktop = v;
-      p2.saveSettings();
-      p2.scanNow(true);
+      p.saveSettings();
+      p.scanNow(true);
     });
-    if (typeof p2.cursorHooksStatus === "function") {
-      const ch = p2.cursorHooksStatus();
+    if (typeof p.cursorHooksStatus === "function") {
+      const ch = p.cursorHooksStatus();
       const statusText = ch.outdated ? t("Cursor Hooks \u9700\u8981\u66F4\u65B0\uFF08{matched}/{total}\uFF09", { matched: ch.matchedEvents, total: ch.totalEvents }) : ch.installed ? t("\u5DF2\u914D\u7F6E Cursor 3.30.14+ Hooks\uFF08{matched}/{total}\uFF09", { matched: ch.matchedEvents, total: ch.totalEvents }) : t("\u672A\u5B89\u88C5 Cursor Hooks\uFF1B\u4EC5\u8FFD\u8E2A\u5B89\u88C5\u540E\u7684 Cursor 3.30.14+ \u65B0\u4F1A\u8BDD\u6216\u65B0\u5BF9\u8BDD\u8F6E\u6B21");
       this.row(sourceMore, "Cursor Hooks", statusText, (curRight) => {
         this.bigButton(curRight, ch.installed && !ch.outdated ? t("\u66F4\u65B0 Hooks") : t("\u5B89\u88C5 Hooks"), () => {
           try {
-            p2.installCursorHooks();
+            p.installCursorHooks();
           } catch (e) {
-            p2.notice?.(e.message || String(e));
+            p.notice?.(e.message || String(e));
           }
           this.display();
         });
         if (ch.installed || ch.matchedEvents > 0 || ch.scriptExists) {
           this.bigButton(curRight, t("\u5378\u8F7D Hooks"), () => {
             try {
-              p2.uninstallCursorHooks();
+              p.uninstallCursorHooks();
             } catch (e) {
-              p2.notice?.(e.message || String(e));
+              p.notice?.(e.message || String(e));
             }
             this.display();
           });
@@ -25643,8 +25643,8 @@ var AgentDeckSettingsTab = class extends import_obsidian7.PluginSettingTab {
       });
     }
     const scanBar = sourceCard.createDiv({ cls: "ad-btnrow" });
-    this.bigButton(scanBar, t("\u7ACB\u5373\u626B\u63CF"), () => p2.scanNow(), "mod-cta");
-    this.bigButton(sourceMore.createDiv({ cls: "ad-btnrow" }), t("\u5BFC\u5165\u87BA\u65CB\u65E5\u7A0B\u7684\u5386\u53F2"), () => p2.importNautilus());
+    this.bigButton(scanBar, t("\u7ACB\u5373\u626B\u63CF"), () => p.scanNow(), "mod-cta");
+    this.bigButton(sourceMore.createDiv({ cls: "ad-btnrow" }), t("\u5BFC\u5165\u87BA\u65CB\u65E5\u7A0B\u7684\u5386\u53F2"), () => p.importNautilus());
     const logDetails = this.subDetails(sourceMore, "log-paths", t("\u672C\u673A\u65E5\u5FD7"));
     const paths = logDetails.createDiv({ cls: "ad-pathlist" });
     for (const [id, a] of Object.entries(AGENTS)) {
@@ -25652,9 +25652,9 @@ var AgentDeckSettingsTab = class extends import_obsidian7.PluginSettingTab {
       agentIcon(r.createSpan({ cls: "ad-glyph", attr: { style: `color:${a.color}` } }), id);
       r.createSpan({ cls: "ad-pathrow__name", text: a.name });
       r.createSpan({ cls: "ad-pathrow__path", text: a.where[0] });
-      r.createSpan({ cls: "ad-muted", text: p2.agentEnabled(id) ? t("\u8BFB") : t("\u4E0D\u8BFB") });
+      r.createSpan({ cls: "ad-muted", text: p.agentEnabled(id) ? t("\u8BFB") : t("\u4E0D\u8BFB") });
     }
-    const errs = p2.usage.errors || [];
+    const errs = p.usage.errors || [];
     if (errs.length) {
       for (const x of errs.slice(-6)) logDetails.createDiv({ cls: "ad-error-line", text: `${x.path}: ${x.message}` });
     }
@@ -25662,22 +25662,22 @@ var AgentDeckSettingsTab = class extends import_obsidian7.PluginSettingTab {
     const jr = this.card(body, t("\u65E5\u8BB0\u4E0E\u5F52\u6863"), t("\u5C06\u4F1A\u8BDD\u8BB0\u5F55\u5199\u5165\u4ECA\u5929\u7684\u65E5\u8BB0"));
     this.rowToggle(jr, t("\u542F\u7528\u65E5\u8BB0\u5199\u5165"), "", s.journalAutoWrite !== false, (v) => {
       s.journalAutoWrite = v;
-      p2.saveSettings();
+      p.saveSettings();
     });
     const det = detectJournalFormat(this.app, s);
     this.rowText(jr, t("\u65E5\u8BB0\u76EE\u5F55"), t("\u5F53\u524D\uFF1A{folder}\uFF1B\u4ECA\u5929\uFF1A{path}", { folder: det.folder || t("\u5E93\u6839\u76EE\u5F55"), source: det.folderSource, path: journalPath(this.app, s) }), s.journalFolder || "", t("\u81EA\u52A8\uFF1A{folder}", { folder: det.folder || t("\u5E93\u6839\u76EE\u5F55") }), (v) => {
       s.journalFolder = v.trim();
-      p2.saveSettings();
+      p.saveSettings();
       this.display();
     });
     this.rowText(jr, t("\u65E5\u8BB0\u6587\u4EF6\u540D\u683C\u5F0F"), t("\u4F8B\u5982 YYYY-MM-DD\uFF1B\u5F53\u524D\uFF1A{format}", { format: det.format, source: det.source }), s.journalFormat || "", t("\u81EA\u52A8\uFF1A{format}", { format: det.format }), (v) => {
       s.journalFormat = v.trim();
-      p2.saveSettings();
+      p.saveSettings();
       this.display();
     });
     this.rowToggle(jr, t("\u81EA\u52A8\u4F1A\u8BDD\u8BB0\u5F55"), t("\u81EA\u52A8\u5C06\u6D3B\u8DC3\u4F1A\u8BDD\u5EFA\u9879\u5E76\u8BB0\u5165\u4ECA\u65E5\u65E5\u8BB0"), s.autoLog === true, (v) => {
       s.autoLog = v;
-      p2.saveSettings();
+      p.saveSettings();
     });
     this.row(jr, t("\u8BB0\u54EA\u51E0\u4E2A Agent"), t("\u9009\u62E9\u81EA\u52A8\u5EFA\u9879\u7684 Agent"), (rr) => {
       const agBox = rr.createDiv({ cls: "ad-seg ad-seg--many" });
@@ -25688,21 +25688,21 @@ var AgentDeckSettingsTab = class extends import_obsidian7.PluginSettingTab {
           agOn[id] = agOn[id] === false;
           b.classList.toggle("is-on", agOn[id] !== false);
           b.setAttribute("aria-pressed", String(agOn[id] !== false));
-          p2.saveSettings();
+          p.saveSettings();
         };
       }
     });
     const grain = this.row(jr, t("\u81EA\u52A8\u8BB0\u5F55\u9897\u7C92\u5EA6"), t("\u9009\u62E9\u8BB0\u5F55\u7684\u65F6\u673A"), (rr) => {
       this.segmented(rr, [{ id: "latest", label: t("\u6700\u65B0\u8FDB\u5C55") }, { id: "round", label: t("\u6BCF\u8F6E\u8BB0\u5F55") }, { id: "paused", label: t("\u505C\u6B47\u6216\u5F52\u6863") }], s.autoLogGranularity || DEFAULTS.autoLogGranularity, (v) => {
         s.autoLogGranularity = v;
-        p2.saveSettings();
+        p.saveSettings();
         this.display();
       });
     });
     const jdetail = this.row(jr, t("\u81EA\u52A8\u65E5\u5FD7\u8BE6\u7EC6\u7A0B\u5EA6"), "", (rr) => {
       this.segmented(rr, [{ id: "brief", label: t("\u7B80\u7565\uFF08\u9ED8\u8BA4\uFF09") }, { id: "standard", label: t("\u6807\u51C6") }, { id: "detailed", label: t("\u8BE6\u7EC6") }], s.autoLogDetail || "brief", (v) => {
         changeLogDetail(s, v);
-        p2.saveSettings();
+        p.saveSettings();
         this.display();
       });
     });
@@ -25718,47 +25718,47 @@ var AgentDeckSettingsTab = class extends import_obsidian7.PluginSettingTab {
       { id: "latest1", label: t("\u6700\u65B0\u4E00\u6761") }
     ], s.aiRecordDisplay || DEFAULTS.aiRecordDisplay, (v) => {
       s.aiRecordDisplay = v;
-      p2.saveSettings();
-      p2.refreshUI();
+      p.saveSettings();
+      p.refreshUI();
       this.display();
     });
     this.rowToggle(jr, t("\u5173\u952E\u8BCD\u914D\u8272\u4E0E\u56FE\u6807"), t("Logseq \u98CE\u683C\u7684\u5173\u952E\u8BCD\u989C\u8272\u4E0E\u56FE\u6807\uFF1B\u540C\u65F6\u5F00\u7740 Logseq Style Tasks \u65F6\uFF0C\u8BF7\u5173\u6389\u5B83\u7684\u300C\u683C\u5F0F\u5316\u4EFB\u52A1\u5173\u952E\u8BCD\u300D"), s.keywordStyle !== false, (v) => {
       s.keywordStyle = v;
-      p2.saveSettings();
-      p2.refreshUI();
+      p.saveSettings();
+      p.refreshUI();
       this.display();
     });
     const jrMore = this.subDetails(jr, "recording-more", t("\u66F4\u591A\u8BBE\u7F6E"));
     jrMore.appendChild(grain);
     this.rowToggle(jrMore, t("\u7D2F\u79EF\u540E\u81EA\u52A8\u5408\u5E76\u603B\u7ED3"), "", !!s.autoLogMerge, (v) => {
       s.autoLogMerge = v;
-      p2.saveSettings();
+      p.saveSettings();
       this.display();
     });
     this.rowNumber(jrMore, t("\u7D2F\u79EF\u591A\u5C11\u6761\u7ED3\u8BBA\u540E\u5408\u5E76"), t("\u81F3\u5C11 2 \u6761"), s.autoLogMergeThreshold || 10, 2, 100, (v) => {
       s.autoLogMergeThreshold = Math.round(v);
-      p2.saveSettings();
+      p.saveSettings();
     });
     this.rowNumber(jrMore, t("\u9996\u6B21\u8BB0\u5F55\u6700\u8FD1\u591A\u5C11\u8F6E"), t("\u7B2C\u4E00\u6B21\u63A5\u5165\u67D0\u4E2A\u4F1A\u8BDD / Bot \u65F6\u53EA\u8865\u6700\u8FD1\u51E0\u8F6E\uFF1B\u4E4B\u540E\u53EA\u8BB0\u5F53\u5929\u4EA7\u751F\u7684\u65B0\u8F6E\u6B21"), s.autoLogFirstRounds || DEFAULTS.autoLogFirstRounds, 1, 100, (v) => {
       s.autoLogFirstRounds = Math.max(1, Math.round(v));
-      p2.saveSettings();
+      p.saveSettings();
     });
     const wb = jrMore;
     this.rowToggle(wb, t("\u628A\u72B6\u6001\u6539\u6210 DELEGATED"), "", d.markStatus !== false, (v) => {
       d.markStatus = v;
-      p2.saveSettings();
+      p.saveSettings();
     });
     this.rowToggle(wb, t("\u5199 \u{1F517} \u7ED1\u5B9A\u884C"), t("\u5220\u9664\u7ED1\u5B9A\u884C\u53EF\u89E3\u9664\u5173\u8054"), d.writeLink !== false, (v) => {
       d.writeLink = v;
-      p2.saveSettings();
+      p.saveSettings();
     });
     this.rowToggle(wb, t("\u59D4\u6D3E\u4EFB\u52A1\u56DE\u5199"), t("\u59D4\u6D3E\u5B8C\u6210\u540E\u5199 \u{1F4AC} \u7ED3\u8BBA"), s.autoWriteResult !== false, (v) => {
       s.autoWriteResult = v;
-      p2.saveSettings();
+      p.saveSettings();
     });
     this.rowToggle(wb, t("\u56DE\u5199\u65E5\u8BB0"), t("\u66F4\u65B0\u5DF2\u7ED1\u5B9A\u4EFB\u52A1\u7684\u72B6\u6001\u4E0E\u7ED3\u8BBA"), s.journalSync !== false, (v) => {
       s.journalSync = v;
-      p2.saveSettings();
+      p.saveSettings();
     });
     for (const [key, label, desc] of [
       ["resultBack", t("\u4F1A\u8BDD\u7ED3\u8BBA\u5199\u56DE\uFF08\u{1F4AC}\uFF09"), ""],
@@ -25768,55 +25768,55 @@ var AgentDeckSettingsTab = class extends import_obsidian7.PluginSettingTab {
     ]) {
       this.rowToggle(wb, label, desc, s[key] !== false, (v) => {
         s[key] = v;
-        p2.saveSettings();
+        p.saveSettings();
       });
     }
     this.rowNumber(jr, t("\u{1F4AC} \u6700\u591A\u591A\u5C11\u4E2A\u5B57"), t("\u666E\u901A\u4F1A\u8BDD\u7684\u7ED3\u8BBA\u957F\u5EA6\uFF1B\u540E\u53F0\u56DE\u7B54\u8D85\u8FC7 500 \u5B57\u65F6\u8FD4\u56DE\u5B8C\u6574\u95EE\u7B54\u6587\u4EF6"), s.resultMax || DEFAULTS.resultMax, 40, 2e3, (v) => {
       s.resultMax = v;
-      p2.saveSettings();
+      p.saveSettings();
     });
     this.rowNumber(jr, t("\u{1F4AC} \u7F16\u7801\u7C7B\u7ED3\u8BBA\u5B57\u6570"), t("\u5199\u505A\u4E86\u4EC0\u4E48\u3001\u73B0\u5728\u4EC0\u4E48\u72B6\u6001\uFF1B\u9ED8\u8BA4 65"), s.conclusionMaxCode || DEFAULTS.conclusionMaxCode, 20, 400, (v) => {
       s.conclusionMaxCode = Math.max(20, Math.round(v));
-      p2.saveSettings();
+      p.saveSettings();
     });
     this.rowNumber(jr, t("\u{1F4AC} \u77E5\u8BC6\u95EE\u7B54\u7ED3\u8BBA\u5B57\u6570"), t("\u89E3\u91CA\u6982\u5FF5\u3001\u56DE\u7B54\u95EE\u9898\u65F6\u53EF\u4EE5\u957F\u4E00\u70B9\uFF1B\u9ED8\u8BA4 160"), s.conclusionMaxQA || DEFAULTS.conclusionMaxQA, 40, 800, (v) => {
       s.conclusionMaxQA = Math.max(40, Math.round(v));
-      p2.saveSettings();
+      p.saveSettings();
     });
     this.rowToggle(wb, t("\u5F52\u6863\u7684\u4F1A\u8BDD\u8BB0\u6210 DONE"), "", s.autoLogArchiveDone !== false, (v) => {
       s.autoLogArchiveDone = v;
-      p2.saveSettings();
+      p.saveSettings();
     });
     this.rowToggle(wb, t("\u6574\u7406\u5B8C\u5F39\u901A\u77E5"), "", s.autoLogNotify !== false, (v) => {
       s.autoLogNotify = v;
-      p2.saveSettings();
+      p.saveSettings();
     });
     const rulesBox = this.subDetails(jrMore, "record-rules", t("\u8BB0\u5F55\u89C4\u5219\u7EC6\u5219"));
     const rules = s.recordRules = resolveRecordRules(s);
     this.rowToggle(rulesBox, t("\u6BCD\u5757\u6807\u9898\u81EA\u52A8\u52A0\u7C97"), t("\u751F\u6210 AI \u81EA\u52A8\u8BB0\u5F55\u65F6\u7528 **\u6807\u9898** \u7A81\u51FA\u663E\u793A"), rules.boldTitle !== false, (v) => {
       rules.boldTitle = v;
-      p2.saveSettings();
+      p.saveSettings();
     });
     this.rowToggle(rulesBox, t("\u6807\u9898\u81EA\u52A8\u5E26\u9879\u76EE / Bot \u524D\u7F00"), t("\u5DE5\u4F5C\u533A\u9879\u76EE\u6216 Grok Bot \u81EA\u52A8\u52A0\u4E0A\u300C\u540D\u79F0 -> \u300D"), rules.projectPrefix !== false, (v) => {
       rules.projectPrefix = v;
-      p2.saveSettings();
+      p.saveSettings();
     });
     this.rowToggle(rulesBox, t("\u6BCD\u5757\u663E\u793A\u8D77\u6B62\u65F6\u95F4\u6BB5"), t("\u5728 \u{1F916} \u540E\u5199\u5165 HH:MM-HH:MM"), rules.showTimeRange !== false, (v) => {
       rules.showTimeRange = v;
-      p2.saveSettings();
+      p.saveSettings();
     });
     this.rowNumber(rulesBox, t("\u751F\u6210\u6807\u9898\u6700\u5927\u5B57\u6570"), t("10\u201360 \u5B57\uFF0C\u9ED8\u8BA4 22"), rules.titleMax || DEFAULT_RECORD_RULES.titleMax, 10, 60, (v) => {
       rules.titleMax = Math.max(10, Math.min(60, Math.round(v)));
-      p2.saveSettings();
+      p.saveSettings();
     });
     this.rowNumber(rulesBox, t("Grok Bot \u65E0\u65B0\u5BF9\u8BDD\u81EA\u52A8 DONE\uFF08\u5206\u949F\uFF09"), t("0 \u8868\u793A\u4E0D\u81EA\u52A8\u6807\u4E3A DONE\uFF1B\u9ED8\u8BA4 120 \u5206\u949F"), s.autoLogGrokBotDoneMinutes ?? DEFAULTS.autoLogGrokBotDoneMinutes, 0, 1440, (v) => {
       s.autoLogGrokBotDoneMinutes = Math.max(0, Math.round(v));
-      p2.saveSettings();
+      p.saveSettings();
     });
     const tpl = this.subDetails(jrMore, "template-archive", t("\u6574\u7406\u65E5\u5FD7\u6A21\u677F\u4E0E\u5F52\u6863"));
     this.rowToggle(tpl, t("\u65E5\u5FD7\u6742\u4E71\u65F6\u63D0\u9192\u6574\u7406"), t("\u6BCF\u65B0\u589E 4 \u6761\u8BB0\u5F55\u63D0\u9192\uFF0C\u6BCF\u5929\u6700\u591A 2 \u6B21"), s.organizeJournalSuggest !== false, (v) => {
       s.organizeJournalSuggest = v;
-      p2.saveSettings();
+      p.saveSettings();
     });
     this.rowSelect(
       tpl,
@@ -25830,7 +25830,7 @@ var AgentDeckSettingsTab = class extends import_obsidian7.PluginSettingTab {
           s.journalLayout = null;
           s.journalLayoutLanguage = val;
         }
-        p2.saveSettings();
+        p.saveSettings();
         this.display();
       }
     );
@@ -25845,14 +25845,14 @@ var AgentDeckSettingsTab = class extends import_obsidian7.PluginSettingTab {
         s.journalLayout.order.join(","),
         (val) => {
           s.journalLayout = journalLayout({ ...s.journalLayout, order: val.split(",") });
-          p2.saveSettings();
+          p.saveSettings();
         }
       );
       for (const key of JOURNAL_LAYOUT_DEFAULT.order) {
         const input = this.rowText(tpl, t("{section}\u6807\u9898", { section: names[key] }), "", s.journalLayout.titles[key], names[key], (value) => {
           try {
             s.journalLayout = journalLayout({ ...s.journalLayout, titles: { ...s.journalLayout.titles, [key]: value } });
-            p2.saveSettings();
+            p.saveSettings();
           } catch (error) {
             input.value = s.journalLayout.titles[key];
             new import_obsidian7.Notice(error.message);
@@ -25863,21 +25863,21 @@ var AgentDeckSettingsTab = class extends import_obsidian7.PluginSettingTab {
     this.rowText(tpl, t("\u9ED8\u8BA4\u5F52\u6863\u4F4D\u7F6E"), t("\u5E93\u5185 Markdown \u8DEF\u5F84"), s.doneArchivePath, DEFAULTS.doneArchivePath, (v) => {
       try {
         s.doneArchivePath = archivePath(v);
-        p2.saveSettings();
+        p.saveSettings();
       } catch (e) {
         new import_obsidian7.Notice(e.message);
       }
     }, "ad-input--wide");
     this.rowSegmented(tpl, t("\u5F52\u6863\u987A\u5E8F"), "", [{ id: "prepend", label: t("\u63D2\u5230\u5F00\u5934") }, { id: "append", label: t("\u8FFD\u52A0\u5230\u672B\u5C3E") }], s.archiveOrder || "prepend", (v) => {
       s.archiveOrder = v;
-      p2.saveSettings();
+      p.saveSettings();
     });
     const jrBtns = jr.createDiv({ cls: "ad-btnrow" });
-    this.bigButton(jrBtns, t("\u73B0\u5728\u6574\u7406\u4E00\u6B21"), () => p2.autoLog.logNow());
+    this.bigButton(jrBtns, t("\u73B0\u5728\u6574\u7406\u4E00\u6B21"), () => p.autoLog.logNow());
     this.bigButton(tpl.createDiv({ cls: "ad-btnrow" }), t("\u6062\u590D\u9ED8\u8BA4\u6574\u7406\u6A21\u677F"), () => {
       s.journalLayout = null;
       s.journalLayoutLanguage = "auto";
-      p2.saveSettings();
+      p.saveSettings();
       this.display();
     });
     jr.appendChild(jrMore.parentElement);
@@ -25897,7 +25897,7 @@ var AgentDeckSettingsTab = class extends import_obsidian7.PluginSettingTab {
       s.autoLogModel = v === "auto" ? "" : JOURNAL_PROVIDERS[v]?.defaultModel || "";
       s.roundPolishModel = "";
       s.autoLogPath = "";
-      p2.saveSettings();
+      p.saveSettings();
       this.display();
     });
     if (resolved === "api") {
@@ -25913,7 +25913,7 @@ var AgentDeckSettingsTab = class extends import_obsidian7.PluginSettingTab {
           if (!hit) return;
           s.autoLogApiUrl = hit.url;
           s.autoLogModel = hit.model;
-          p2.saveSettings();
+          p.saveSettings();
           this.display();
         }
       );
@@ -25925,19 +25925,19 @@ var AgentDeckSettingsTab = class extends import_obsidian7.PluginSettingTab {
       urlValue: s.autoLogApiUrl || "",
       onUrlChange: (v) => {
         s.autoLogApiUrl = v.trim();
-        p2.saveSettings();
+        p.saveSettings();
       },
       keyLabel: "API Key",
       keyValue: s.autoLogApiKey || "",
       onKeyChange: (v) => {
         s.autoLogApiKey = v.trim();
-        p2.saveSettings();
+        p.saveSettings();
       },
       effortLabel: t("\u6574\u7406\u4E0E\u6DA6\u8272\u7684\u63A8\u7406\u5F3A\u5EA6"),
       effortValue: s.autoLogEffort || "low",
       onEffortChange: (v) => {
         s.autoLogEffort = v;
-        p2.saveSettings();
+        p.saveSettings();
         this.display();
       }
     });
@@ -25951,7 +25951,7 @@ var AgentDeckSettingsTab = class extends import_obsidian7.PluginSettingTab {
       onChange: (m) => {
         if (m) {
           s.autoLogModel = m;
-          p2.saveSettings();
+          p.saveSettings();
           this.display();
         }
       },
@@ -25967,7 +25967,7 @@ var AgentDeckSettingsTab = class extends import_obsidian7.PluginSettingTab {
       wide: resolved === "api",
       onChange: (v) => {
         s.autoLogModel = v.trim();
-        p2.saveSettings();
+        p.saveSettings();
       },
       pendingText: t("\u6B63\u5728\u6D4B\u8BD5\u6574\u7406\u6A21\u578B\u8FDE\u63A5\u2026"),
       testFn: () => testJournalModel(s)
@@ -25975,19 +25975,19 @@ var AgentDeckSettingsTab = class extends import_obsidian7.PluginSettingTab {
     const modelMore = this.subDetails(modelCard, "model-more", t("\u66F4\u591A\u8BBE\u7F6E"));
     this.rowNumber(modelMore, t("\u6574\u7406\u8D85\u65F6\uFF08\u79D2\uFF09"), "", s.autoLogTimeout || 120, 10, 600, (v) => {
       s.autoLogTimeout = v;
-      p2.saveSettings();
+      p.saveSettings();
     });
     this.rowToggle(modelMore, t("\u6574\u7406\u5931\u8D25\u65F6\u4F7F\u7528\u4F1A\u8BDD\u6807\u9898"), "", s.autoLogFallback !== false, (v) => {
       s.autoLogFallback = v;
-      p2.saveSettings();
+      p.saveSettings();
     });
     this.rowToggle(modelMore, t("\u7528 API \u524D\u5148\u95EE\u6211"), t("API \u8C03\u7528\u4F1A\u4EA7\u751F\u8D39\u7528\uFF1B\u540C\u610F\u540E 30 \u5206\u949F\u5185\u4E0D\u518D\u95EE"), s.autoLogApiConfirm !== false, (v) => {
       s.autoLogApiConfirm = v;
-      p2.saveSettings();
+      p.saveSettings();
     });
     this.rowToggle(modelMore, t("\u4E3B\u6765\u6E90\u4E0D\u53EF\u7528\u65F6\u6362\u5907\u7528"), t("\u649E\u9650\u989D\u3001\u8D85\u65F6\u6216\u8D77\u4E0D\u6765\u65F6\u6362\u4E0B\u4E00\u4E2A\u6765\u6E90\uFF0C\u6362\u4E0D\u4E0A\u518D\u7528\u4F1A\u8BDD\u6807\u9898\u8BB0"), !!s.autoLogFailover, (v) => {
       s.autoLogFailover = v;
-      p2.saveSettings();
+      p.saveSettings();
       this.display();
     });
     if (s.autoLogFailover) {
@@ -25998,62 +25998,62 @@ var AgentDeckSettingsTab = class extends import_obsidian7.PluginSettingTab {
       ];
       this.rowSelect(modelMore, t("\u5907\u7528\u6765\u6E90"), "", backupOptions, s.autoLogBackupProvider || "auto", (v) => {
         s.autoLogBackupProvider = v;
-        p2.saveSettings();
+        p.saveSettings();
       });
       this.rowNumber(modelMore, t("\u649E\u9650\u989D\u540E\u51B7\u5374\uFF08\u5206\u949F\uFF09"), t("\u51B7\u5374\u671F\u5185\u76F4\u63A5\u7528\u5907\u7528\u6765\u6E90"), s.autoLogCooldownMin || 30, 1, 240, (v) => {
         s.autoLogCooldownMin = Math.max(1, Math.round(v));
-        p2.saveSettings();
+        p.saveSettings();
       });
     }
     if (resolved !== "api") {
       this.rowText(modelMore, t("\u6574\u7406 CLI \u8DEF\u5F84"), t("\u7559\u7A7A\u81EA\u52A8\u67E5\u627E\u6216\u6CBF\u7528\u59D4\u6D3E\u8DEF\u5F84"), s.autoLogPath || "", t("\u81EA\u52A8\u627E"), (v) => {
         s.autoLogPath = v.trim();
-        p2.saveSettings();
+        p.saveSettings();
       }, "ad-input--wide");
     }
     this.rowToggle(modelMore, t("\u6BCF\u8F6E\u7ED3\u8BBA\u8BA9\u6A21\u578B\u6DA6\u8272"), t("\u9002\u7528\u4E8E\u7B80\u7565\u548C\u6807\u51C6\u8BB0\u5F55"), s.roundPolish !== false, (v) => {
       s.roundPolish = v;
-      p2.saveSettings();
+      p.saveSettings();
     });
     this.rowText(modelMore, t("\u6DA6\u8272\u7528\u7684\u6A21\u578B"), t("\u7559\u7A7A\u6CBF\u7528\u6574\u7406\u6A21\u578B"), s.roundPolishModel || "", t("\u540C\u6574\u7406\u7528\u7684\u6A21\u578B"), (v) => {
       s.roundPolishModel = v.trim();
-      p2.saveSettings();
+      p.saveSettings();
     });
     this.rowNumber(modelMore, t("\u6DA6\u8272\u8D85\u65F6\uFF08\u79D2\uFF09"), "", s.roundPolishTimeout || 30, 5, 300, (v) => {
       s.roundPolishTimeout = v;
-      p2.saveSettings();
+      p.saveSettings();
     });
     const sched = modelMore;
     this.rowNumber(sched, t("\u6574\u7406\u95F4\u9694\uFF08\u5206\u949F\uFF09"), t("\u81F3\u5C11 5 \u5206\u949F"), s.autoLogEvery || 20, 5, 240, (v) => {
       s.autoLogEvery = v;
-      p2.saveSettings();
+      p.saveSettings();
     });
     this.rowNumber(sched, t("\u9996\u6B21\u6574\u7406\u5EF6\u8FDF\uFF08\u5206\u949F\uFF09"), "", s.autoLogStartDelay ?? 1, 1, 240, (v) => {
       s.autoLogStartDelay = v;
-      p2.saveSettings();
+      p.saveSettings();
     });
     this.rowNumber(sched, t("\u6700\u77ED\u8BB0\u5F55\u65F6\u957F\uFF08\u5206\u949F\uFF09"), t("0 \u8868\u793A\u7ACB\u5373\u8BB0\u5F55"), s.autoLogMinMinutes ?? 3, 0, 120, (v) => {
       s.autoLogMinMinutes = v;
-      p2.saveSettings();
+      p.saveSettings();
     });
     this.rowNumber(sched, t("\u6682\u505C\u5224\u5B9A\uFF08\u5206\u949F\uFF09"), t("\u81F3\u5C11 5 \u5206\u949F"), s.autoLogIdle || 10, 5, 480, (v) => {
       s.autoLogIdle = v;
-      p2.saveSettings();
+      p.saveSettings();
     });
     this.rowNumber(sched, t("\u6BCF\u6279\u4F1A\u8BDD\u6570"), "", s.autoLogBatch || 8, 1, 20, (v) => {
       s.autoLogBatch = v;
-      p2.saveSettings();
+      p.saveSettings();
     });
     const ui = this.card(body, t("\u5C55\u793A\u4E0E\u7EF4\u62A4"), t("\u4F1A\u8BDD\u6253\u5F00\u65B9\u5F0F\u3001\u9762\u677F\u3001\u7F16\u8F91\u5668\u4E0E\u83DC\u5355\u680F\u663E\u793A\u3001\u7F13\u5B58\u7EF4\u62A4"));
     this.rowSegmented(ui, t("\u7EC8\u7AEF\u4F1A\u8BDD\u6253\u5F00\u65B9\u5F0F"), "", [{ id: "terminal", label: t("\u7EC8\u7AEF") }, { id: "desktop", label: t("\u684C\u9762\u7248") }], s.cliOpen === "desktop" ? "desktop" : "terminal", (v) => {
       s.cliOpen = v;
-      p2.saveSettings();
+      p.saveSettings();
       this.display();
     });
     this.rowToggle(ui, t("\u5F52\u6863\u7684\u4F1A\u8BDD\u4E0D\u518D\u5217\u51FA"), "", s.hideArchived !== false, (v) => {
       s.hideArchived = v;
-      p2.saveSettings();
-      p2.refreshUI();
+      p.saveSettings();
+      p.refreshUI();
     });
     for (const [key, label, desc, fallback] of [
       ["showEditorPills", t("\u4EFB\u52A1\u884C\u4E0A\u7684\u4F1A\u8BDD\u72B6\u6001\u6309\u94AE"), "", true],
@@ -26064,30 +26064,30 @@ var AgentDeckSettingsTab = class extends import_obsidian7.PluginSettingTab {
     ]) {
       this.rowToggle(ui, label, desc, s[key] === void 0 ? fallback : s[key] !== false, (v) => {
         s[key] = v;
-        p2.saveSettings();
-        p2.applyUiSettings();
+        p.saveSettings();
+        p.applyUiSettings();
       });
     }
     const uiMore = this.subDetails(ui, "display-more", t("\u66F4\u591A\u8BBE\u7F6E"));
     this.rowToggle(uiMore, t("\u6700\u8FD1 14 \u5929\u7684\u6761\u5F62\u56FE"), "", s.ui.showUsageBars !== false, (v) => {
       s.ui.showUsageBars = v;
-      p2.saveSettings();
-      p2.refreshUI();
+      p.saveSettings();
+      p.refreshUI();
     });
     this.rowToggle(uiMore, t("\u6BCF\u4E2A Agent \u7684\u5C0F\u706B\u82B1\u7EBF"), "", s.ui.showSparkline !== false, (v) => {
       s.ui.showSparkline = v;
-      p2.saveSettings();
-      p2.refreshUI();
+      p.saveSettings();
+      p.refreshUI();
     });
     this.mbSwitch = this.rowToggle(ui, t("macOS \u83DC\u5355\u680F"), "", s.showMenuBar !== false, (v) => {
       s.showMenuBar = v;
-      p2.saveSettings();
-      p2.applyUiSettings();
+      p.saveSettings();
+      p.applyUiSettings();
     });
     this.rowSegmented(uiMore, t("\u83DC\u5355\u680F\u663E\u793A\u54EA\u4E9B Agent"), "", [{ id: "primary-running", label: t("\u4E3B\u529B\u4E0E\u5728\u8DD1\u7684") }, { id: "all", label: t("\u5168\u90E8\u5DF2\u542F\u7528") }], s.menuBarAgentScope || "primary-running", (v) => {
       s.menuBarAgentScope = v;
-      p2.saveSettings();
-      p2.menubar?.update(true);
+      p.saveSettings();
+      p.menubar?.update(true);
       this.display();
     });
     for (const [key, label, desc, min, max] of [
@@ -26096,8 +26096,8 @@ var AgentDeckSettingsTab = class extends import_obsidian7.PluginSettingTab {
     ]) {
       this.rowNumber(uiMore, label, desc, s[key] || (key === "menuBarPrimaryLimit" ? 6 : 3), min, max, (v) => {
         s[key] = v;
-        p2.saveSettings();
-        p2.refreshUI();
+        p.saveSettings();
+        p.refreshUI();
       });
     }
     this.row(ui, t("\u83DC\u5355\u680F\u5FEB\u6377\u952E"), t("\u70B9\u8F93\u5165\u6846\u540E\u6309\u7EC4\u5408\u952E\uFF0C\u9700\u5305\u542B \u2303\u3001\u2325 \u6216 \u2318"), (hkRight) => {
@@ -26132,8 +26132,8 @@ var AgentDeckSettingsTab = class extends import_obsidian7.PluginSettingTab {
           return;
         }
         s.menuBarHotkey = hotkeySpecFromEvent(event, key);
-        p2.saveSettings();
-        p2.menubar?.update(true);
+        p.saveSettings();
+        p.menubar?.update(true);
         new import_obsidian7.Notice(t("\u83DC\u5355\u680F\u5FEB\u6377\u952E\u5DF2\u4FDD\u5B58\uFF0C\u7EA6 2 \u79D2\u5185\u751F\u6548"));
         hkInput.value = hotkeyDisplay(s.menuBarHotkey);
         hkInput.classList.remove("is-capturing");
@@ -26142,48 +26142,48 @@ var AgentDeckSettingsTab = class extends import_obsidian7.PluginSettingTab {
       const hkReset = hkRight.createEl("button", { cls: "ad-btn", text: t("\u9ED8\u8BA4") });
       hkReset.onclick = () => {
         s.menuBarHotkey = DEFAULTS.menuBarHotkey;
-        p2.saveSettings();
-        p2.menubar?.update(true);
+        p.saveSettings();
+        p.menubar?.update(true);
         hkInput.value = hotkeyDisplay(s.menuBarHotkey);
       };
     });
     this.rowToggle(uiMore, t("\u4F7F\u7528\u87BA\u65CB\u65E5\u7A0B\u7684\u8FDB\u5EA6\u663E\u793A"), "", s.yieldToNautilus !== false, (v) => {
       s.yieldToNautilus = v;
-      p2.saveSettings();
-      p2.refreshUI();
+      p.saveSettings();
+      p.refreshUI();
     });
     this.rowToggle(uiMore, t("\u5173\u95ED\u87BA\u65CB\u65E5\u7A0B\u53F3\u4E0B\u89D2\u7684 Agent \u6C47\u603B"), "", s.menuBarHideNautilus !== false, (v) => {
       s.menuBarHideNautilus = v;
-      p2.saveSettings();
-      if (v) p2.hideNautilusAgentBar().catch(() => {
+      p.saveSettings();
+      if (v) p.hideNautilusAgentBar().catch(() => {
       });
-      else p2.restoreNautilusAgentBar().catch(() => {
+      else p.restoreNautilusAgentBar().catch(() => {
       });
     });
     const btn = uiMore.createDiv({ cls: "ad-btnrow" });
-    this.bigButton(btn, t("\u91CD\u542F\u83DC\u5355\u680F"), () => p2.menubar?.restart());
-    this.bigButton(btn, t("\u91CD\u65B0\u8BA1\u7B97\u5168\u90E8\u5386\u53F2"), () => p2.rebuildUsage(), "mod-warning");
-    this.bigButton(btn, t("\u6253\u5F00\u63D2\u4EF6\u76EE\u5F55"), () => p2.openPluginDir());
+    this.bigButton(btn, t("\u91CD\u542F\u83DC\u5355\u680F"), () => p.menubar?.restart());
+    this.bigButton(btn, t("\u91CD\u65B0\u8BA1\u7B97\u5168\u90E8\u5386\u53F2"), () => p.rebuildUsage(), "mod-warning");
+    this.bigButton(btn, t("\u6253\u5F00\u63D2\u4EF6\u76EE\u5F55"), () => p.openPluginDir());
     const stats = uiMore.createDiv({ cls: "ad-statline" });
-    const days = Object.keys(p2.store.days).length;
+    const days = Object.keys(p.store.days).length;
     stats.createSpan({ text: t("{n} \u5929\u8BB0\u5F55", { n: days }) });
     stats.createSpan({ cls: "ad-dot", text: "\xB7" });
-    stats.createSpan({ text: t("{n} \u4E2A\u4F1A\u8BDD\u7D22\u5F15", { n: p2.usage.meta.size }) });
+    stats.createSpan({ text: t("{n} \u4E2A\u4F1A\u8BDD\u7D22\u5F15", { n: p.usage.meta.size }) });
     stats.createSpan({ cls: "ad-dot", text: "\xB7" });
-    stats.createSpan({ text: t("{n} \u4E2A\u65E5\u5FD7\u6587\u4EF6", { n: p2.usage.files.size }) });
+    stats.createSpan({ text: t("{n} \u4E2A\u65E5\u5FD7\u6587\u4EF6", { n: p.usage.files.size }) });
     ui.appendChild(uiMore.parentElement);
   }
   // ---------- Dreaming ----------
   renderDream(body) {
-    const p2 = this.plugin, s = p2.settings.dream;
+    const p = this.plugin, s = p.settings.dream;
     const card = this.card(body, t("Dreaming \xB7 \u957F\u671F\u8BB0\u5FC6"), t("\u4ECE\u8FD1 14 \u5929\u65E5\u5FD7\u63D0\u70BC\u8BB0\u5FC6\uFF0C\u4FDD\u5B58\u5230\u7B14\u8BB0"));
     this.rowToggle(card, t("\u6BCF\u5929\u81EA\u52A8\u6574\u7406"), "", s.enabled, (v) => {
       s.enabled = v;
-      p2.saveSettings();
+      p.saveSettings();
     });
     this.rowToggle(card, t("\u6D3E\u53D1\u65F6\u6CE8\u5165\u76F8\u5173\u8BB0\u5FC6"), t("\u6309\u5F53\u524D\u4EFB\u52A1\u4ECE\u957F\u671F\u8BB0\u5FC6\u91CC\u6311\u51FA\u6700\u591A 5 \u6761\u76F8\u5173\u6761\u76EE\u4E00\u8D77\u53D1\u7ED9 Agent\uFF1B\u8BCD\u9762\u4E0D\u76F8\u5173\u65F6\u4E0D\u6CE8\u5165"), s.inject !== false, (v) => {
       s.inject = v;
-      p2.saveSettings();
+      p.saveSettings();
     });
     this.rowSegmented(
       card,
@@ -26196,12 +26196,12 @@ var AgentDeckSettingsTab = class extends import_obsidian7.PluginSettingTab {
       s.scope === "ai-records" ? "ai-records" : "all",
       (v) => {
         s.scope = v;
-        p2.saveSettings();
+        p.saveSettings();
         this.display();
       }
     );
-    const detected = detectJournalProviders({ cfg: p2.settings });
-    const baseCfg = p2.settings;
+    const detected = detectJournalProviders({ cfg: p.settings });
+    const baseCfg = p.settings;
     const baseProvider = resolveJournalProvider(baseCfg);
     const baseModel = baseCfg.autoLogModel || JOURNAL_PROVIDERS[baseProvider]?.defaultModel || "";
     const curDreamProvider = String(s.provider || "").trim();
@@ -26223,7 +26223,7 @@ var AgentDeckSettingsTab = class extends import_obsidian7.PluginSettingTab {
       (v) => {
         s.provider = v;
         s.model = v ? JOURNAL_PROVIDERS[v]?.defaultModel || "" : "";
-        p2.saveSettings();
+        p.saveSettings();
         this.display();
       }
     );
@@ -26235,7 +26235,7 @@ var AgentDeckSettingsTab = class extends import_obsidian7.PluginSettingTab {
       value: s.model || "",
       onChange: (m) => {
         s.model = m;
-        p2.saveSettings();
+        p.saveSettings();
         this.display();
       }
     });
@@ -26248,10 +26248,10 @@ var AgentDeckSettingsTab = class extends import_obsidian7.PluginSettingTab {
       wide: effectiveProvider === "api",
       onChange: (v) => {
         s.model = v.trim();
-        p2.saveSettings();
+        p.saveSettings();
       },
       pendingText: t("\u6B63\u5728\u6D4B\u8BD5 Dreaming \u6A21\u578B\u8FDE\u63A5\u2026"),
-      testFn: () => testJournalModel(dreamModelConfig(p2.settings))
+      testFn: () => testJournalModel(dreamModelConfig(p.settings))
     });
     const dreamMore = this.subDetails(card, "dream-more", t("\u66F4\u591A\u8BBE\u7F6E"));
     this.renderApiCredentialsAndEffort(dreamMore, {
@@ -26261,39 +26261,39 @@ var AgentDeckSettingsTab = class extends import_obsidian7.PluginSettingTab {
       urlValue: s.apiUrl || "",
       onUrlChange: (v) => {
         s.apiUrl = v.trim();
-        p2.saveSettings();
+        p.saveSettings();
       },
       keyLabel: "Dreaming API Key",
       keyValue: s.apiKey || "",
       onKeyChange: (v) => {
         s.apiKey = v.trim();
-        p2.saveSettings();
+        p.saveSettings();
       },
       effortLabel: t("Dreaming \u63A8\u7406\u5F3A\u5EA6"),
-      effortValue: s.effort || p2.settings.autoLogEffort || "low",
+      effortValue: s.effort || p.settings.autoLogEffort || "low",
       onEffortChange: (v) => {
         s.effort = v;
-        p2.saveSettings();
+        p.saveSettings();
         this.display();
       }
     });
     this.rowText(dreamMore, t("\u957F\u671F\u8BB0\u5FC6\u7B14\u8BB0"), t("\u5E93\u5185 Markdown \u8DEF\u5F84"), s.path, "Agent Deck/\u957F\u671F\u8BB0\u5FC6.md", (v) => {
       try {
         s.path = notePath(v);
-        p2.saveSettings();
+        p.saveSettings();
       } catch (e) {
         new import_obsidian7.Notice(e.message);
       }
     }, "ad-input--wide");
-    if (companionInstalled(p2.app)) {
+    if (companionInstalled(p.app)) {
       this.rowToggle(dreamMore, t("\u540C\u6B65\u5230 Telegram Companion \u966A\u4F34\u6863\u6848"), t("\u540C\u6B65\u6709\u6548\u8BB0\u5FC6\uFF0C\u6700\u591A 6000 \u5B57"), s.syncProfile, (v) => {
         s.syncProfile = v;
-        p2.saveSettings();
+        p.saveSettings();
       });
     }
     const actions = card.createDiv({ cls: "ad-btnrow" });
     const run2 = this.bigButton(actions, t("\u73B0\u5728 Dream \u4E00\u6B21"), async () => {
-      const task = p2.dreaming.run(true, { drain: true });
+      const task = p.dreaming.run(true, { drain: true });
       update();
       try {
         await task;
@@ -26305,20 +26305,20 @@ var AgentDeckSettingsTab = class extends import_obsidian7.PluginSettingTab {
     const phase = progress.createDiv();
     const elapsed = progress.createDiv({ cls: "ad-muted" });
     const meter = progress.createEl("progress", { attr: { "aria-label": t("Dream \u6574\u7406\u8FDB\u5EA6") } });
-    this.bigButton(dreamMore.createDiv({ cls: "ad-btnrow" }), t("\u5BFC\u51FA\u957F\u671F\u8BB0\u5FC6 Markdown \u526F\u672C"), () => p2.dreaming.exportMemory());
+    this.bigButton(dreamMore.createDiv({ cls: "ad-btnrow" }), t("\u5BFC\u51FA\u957F\u671F\u8BB0\u5FC6 Markdown \u526F\u672C"), () => p.dreaming.exportMemory());
     card.createDiv({ cls: "ad-muted", text: t("\u53EF\u76F4\u63A5\u7F16\u8F91\u957F\u671F\u8BB0\u5FC6\u7B14\u8BB0") });
     const summary = card.createDiv({ cls: "ad-muted" });
     card.appendChild(dreamMore.parentElement);
-    const c = s.share, sharing = p2.dreaming.sharing;
+    const c = s.share, sharing = p.dreaming.sharing;
     const shared = this.card(body, t("\u4E0E\u5176\u4ED6 Agent \u5171\u4EAB\u8BB0\u5FC6"), t("\u5C06\u8BB0\u5FC6\u5BFC\u51FA\u5230\u56FA\u5B9A\u6587\u4EF6\uFF0C\u4F9B\u5176\u4ED6 Agent \u8BFB\u53D6"));
     this.rowToggle(shared, t("\u81EA\u52A8\u540C\u6B65\u5171\u4EAB\u8BB0\u5FC6"), t("Dream \u5B8C\u6210\u540E\u540C\u6B65\uFF0C\u5E76\u6309\u4E0B\u65B9\u95F4\u9694\u5B9A\u671F\u540C\u6B65"), c.enabled, (v) => {
       c.enabled = v;
-      p2.saveSettings();
+      p.saveSettings();
     });
     this.rowText(shared, t("\u5171\u4EAB\u6587\u4EF6\u8DEF\u5F84"), t("\u7EDD\u5BF9\u8DEF\u5F84\uFF0C\u652F\u6301 ~/"), c.path, "/Users/me/shared-agent-memory/memory.md", (v) => {
       try {
         c.path = v.trim() ? externalMemoryPath(v) : "";
-        p2.saveSettings();
+        p.saveSettings();
       } catch (e) {
         new import_obsidian7.Notice(e.message);
       }
@@ -26326,11 +26326,11 @@ var AgentDeckSettingsTab = class extends import_obsidian7.PluginSettingTab {
     const shareMore = this.subDetails(shared, "share-more", t("\u66F4\u591A\u8BBE\u7F6E"));
     this.rowNumber(shareMore, t("\u5B9A\u671F\u540C\u6B65\u95F4\u9694\uFF08\u5C0F\u65F6\uFF09"), t("1\u2013168 \u5C0F\u65F6"), c.intervalHours, 1, 168, (v) => {
       c.intervalHours = v;
-      p2.saveSettings();
+      p.saveSettings();
     });
     this.rowToggle(shareMore, t("\u540C\u6B65\u540E\u63D0\u4EA4\u5E76\u63A8\u9001 Git"), t("\u5171\u4EAB\u6587\u4EF6\u9700\u4F4D\u4E8E Git \u4ED3\u5E93\u4E2D\uFF1B\u63A8\u9001\u5230 origin \u5F53\u524D\u5206\u652F"), c.gitPush, (v) => {
       c.gitPush = v;
-      p2.saveSettings();
+      p.saveSettings();
     });
     const syncNow = this.bigButton(shared.createDiv({ cls: "ad-btnrow" }), t("\u7ACB\u5373\u540C\u6B65\u5171\u4EAB\u8BB0\u5FC6"), async () => {
       const task = sharing.sync();
@@ -26344,7 +26344,7 @@ var AgentDeckSettingsTab = class extends import_obsidian7.PluginSettingTab {
     const sharedStatus = shared.createDiv({ cls: "ad-muted", attr: { role: "status", "aria-live": "polite" } });
     shared.appendChild(shareMore.parentElement);
     const update = () => {
-      const d = p2.dreaming, state = d.progress;
+      const d = p.dreaming, state = d.progress;
       run2.disabled = d.busy;
       run2.textContent = d.busy ? t("Dream \u6574\u7406\u4E2D\u2026") : t("\u73B0\u5728 Dream \u4E00\u6B21");
       progress.hidden = state.phase === "idle";
@@ -26363,11 +26363,11 @@ var AgentDeckSettingsTab = class extends import_obsidian7.PluginSettingTab {
   }
   // ---------- About ----------
   renderExperimental(body) {
-    const p2 = this.plugin;
+    const p = this.plugin;
     const card = this.card(body, t("\u5B9E\u9A8C\u529F\u80FD"));
-    this.rowToggle(card, t("AI \u534F\u4F5C\u56DE\u987E"), t("\u9ED8\u8BA4\u5F00\u542F\u3002\u67E5\u770B token \u70ED\u529B\u56FE\u3001\u9879\u76EE\u6295\u5165\u548C\u5386\u53F2\u8BB0\u5F55\uFF1B\u5173\u95ED\u540E\u9690\u85CF\u5165\u53E3\u5E76\u5173\u95ED\u56DE\u987E\u9875\uFF0C\u4FDD\u7559\u7EDF\u8BA1\u6570\u636E\u3002"), p2.settings.experimentalDashboard !== false, async (enabled) => {
+    this.rowToggle(card, t("AI \u534F\u4F5C\u56DE\u987E"), t("\u9ED8\u8BA4\u5F00\u542F\u3002\u67E5\u770B token \u70ED\u529B\u56FE\u3001\u9879\u76EE\u6295\u5165\u548C\u5386\u53F2\u8BB0\u5F55\uFF1B\u5173\u95ED\u540E\u9690\u85CF\u5165\u53E3\u5E76\u5173\u95ED\u56DE\u987E\u9875\uFF0C\u4FDD\u7559\u7EDF\u8BA1\u6570\u636E\u3002"), p.settings.experimentalDashboard !== false, async (enabled) => {
       try {
-        await p2.setExperimentalDashboard(enabled);
+        await p.setExperimentalDashboard(enabled);
       } catch (error) {
         new import_obsidian7.Notice(t("\u8BBE\u7F6E\u4FDD\u5B58\u5931\u8D25\uFF1A{error}", { error: error.message }));
       }
@@ -26375,7 +26375,7 @@ var AgentDeckSettingsTab = class extends import_obsidian7.PluginSettingTab {
     });
   }
   renderAbout(body) {
-    const p2 = this.plugin;
+    const p = this.plugin;
     const intro = this.card(body, "Agent Deck", t("\u5728 Obsidian \u91CC\u8FFD\u8E2A\u4F1A\u8BDD\u3001\u59D4\u6D3E\u4EFB\u52A1\u3001\u4FDD\u5B58 AI \u5DE5\u4F5C\u8BB0\u5F55\u3002"));
     intro.addClass("ad-about-intro");
     const agents = intro.createDiv({ cls: "ad-about-agents" });
@@ -26407,14 +26407,14 @@ var AgentDeckSettingsTab = class extends import_obsidian7.PluginSettingTab {
     }
     const c = this.card(body, t("\u7248\u672C\u4E0E\u652F\u6301"));
     const meta = c.createDiv({ cls: "ad-about-meta" });
-    meta.createDiv({ text: t("\u7248\u672C {version} \xB7 Apache-2.0 License", { version: p2.manifest.version }) });
+    meta.createDiv({ text: t("\u7248\u672C {version} \xB7 Apache-2.0 License", { version: p.manifest.version }) });
     meta.createDiv({ text: t("\u6B22\u8FCE\u5728 GitHub Issues \u53CD\u9988 bug\uFF0C\u6216\u5728 Roadmap \u63D0\u4EA4\u5EFA\u8BAE\u5E76\u4E3A\u4F60\u671F\u5F85\u7684\u65B9\u5411\u6295\u7968\u3002") });
     const btns = c.createDiv({ cls: "ad-btnrow" });
-    this.bigButton(btns, t("\u6253\u5F00 GitHub \u4ED3\u5E93"), () => p2.openExternal("https://github.com/MatsuriMW/obsidian-agent-deck"));
-    this.bigButton(btns, t("\u53CD\u9988 Issue"), () => p2.openExternal("https://github.com/MatsuriMW/obsidian-agent-deck/issues"));
-    this.bigButton(btns, t("\u67E5\u770B Roadmap"), () => p2.openExternal("https://matsuri.site/portfolio/journal-workflow/#whistlist"));
+    this.bigButton(btns, t("\u6253\u5F00 GitHub \u4ED3\u5E93"), () => p.openExternal("https://github.com/MatsuriMW/obsidian-agent-deck"));
+    this.bigButton(btns, t("\u53CD\u9988 Issue"), () => p.openExternal("https://github.com/MatsuriMW/obsidian-agent-deck/issues"));
+    this.bigButton(btns, t("\u67E5\u770B Roadmap"), () => p.openExternal("https://matsuri.site/portfolio/journal-workflow/#whistlist"));
     this.bigButton(btns, t("\u590D\u5236\u8C03\u8BD5\u4FE1\u606F"), async () => {
-      const text = JSON.stringify({ version: p2.manifest.version, settings: p2.settings, files: p2.usage.files.size, sessions: p2.usage.meta.size, errors: p2.usage.errors }, null, 2);
+      const text = JSON.stringify({ version: p.manifest.version, settings: p.settings, files: p.usage.files.size, sessions: p.usage.meta.size, errors: p.usage.errors }, null, 2);
       await navigator.clipboard.writeText(text);
       new import_obsidian7.Notice(t("\u8C03\u8BD5\u4FE1\u606F\u5DF2\u590D\u5236"));
     });
@@ -26815,11 +26815,11 @@ var DelegateOptionsModal = class extends import_obsidian8.Modal {
   render() {
     var _a, _b, _c;
     const { contentEl } = this;
-    const p2 = this.plugin;
+    const p = this.plugin;
     contentEl.empty();
     const head = contentEl.createDiv({ cls: "ad-modalhead" });
     const title = head.createDiv({ cls: "ad-modalhead__title", text: "Delegate this block" });
-    const sub = head.createDiv({ cls: "ad-modalhead__sub", text: `${blockTitle(this.block, mentionTrigger(p2)).slice(0, 80)} \xB7 ${this.path}` });
+    const sub = head.createDiv({ cls: "ad-modalhead__sub", text: `${blockTitle(this.block, mentionTrigger(p)).slice(0, 80)} \xB7 ${this.path}` });
     const preview = contentEl.createDiv({ cls: "ad-preview" });
     const pre = preview.createEl("pre", { cls: "ad-preview__text" });
     const full = delegationText(this.lines || [], this.block);
@@ -26836,14 +26836,14 @@ var DelegateOptionsModal = class extends import_obsidian8.Modal {
       agentIcon(b.createSpan({ cls: "ad-glyph" }), id);
       b.createSpan({ text: a.short });
       const cap = getAgentCapability(id);
-      const hintText = id === "claude" ? t("\u684C\u9762\u7248") : id === "codex" ? p2.settings.delegate.codex.transport === "terminal" ? t("CLI / \u7EC8\u7AEF") : t("\u9996\u8F6E\u540E\u6253\u5F00\u684C\u9762\u7248") : id === "qoder" ? t("\u684C\u9762\u7248 / CLI") : cap.acp && cap.terminalHandoff ? "ACP / CLI" : "ACP";
+      const hintText = id === "claude" ? t("\u684C\u9762\u7248") : id === "codex" ? p.settings.delegate.codex.transport === "terminal" ? t("CLI / \u7EC8\u7AEF") : t("\u9996\u8F6E\u540E\u6253\u5F00\u684C\u9762\u7248") : id === "qoder" ? t("\u684C\u9762\u7248 / CLI") : cap.acp && cap.terminalHandoff ? "ACP / CLI" : "ACP";
       b.createSpan({ cls: "ad-target__hint", text: hintText });
       b.onclick = () => {
         this.agent = id;
-        this.model = p2.defaultModel(id);
-        this.effort = p2.settings.delegate[id]?.effort || "high";
-        this.permission = p2.settings.delegate[id]?.permission || p2.settings.delegate.claude.permission || "auto";
-        this.destination = defaultDestination(p2, id);
+        this.model = p.defaultModel(id);
+        this.effort = p.settings.delegate[id]?.effort || "high";
+        this.permission = p.settings.delegate[id]?.permission || p.settings.delegate.claude.permission || "auto";
+        this.destination = defaultDestination(p, id);
         this.render();
       };
     }
@@ -26852,7 +26852,7 @@ var DelegateOptionsModal = class extends import_obsidian8.Modal {
     });
     const mf = contentEl.createDiv({ cls: "ad-field" });
     mf.createDiv({ cls: "ad-field__label", text: "Model" });
-    const models = p2.modelsFor(this.agent).filter((m) => p2.modelEnabled(m.id) || m.id === this.model);
+    const models = p.modelsFor(this.agent).filter((m) => p.modelEnabled(m.id) || m.id === this.model);
     const grid = mf.createDiv({ cls: "ad-modelpick" });
     for (const m of models) {
       const b = grid.createEl("button", { cls: "ad-modelpick__item" + (this.model === m.id ? " is-on" : "") });
@@ -26872,7 +26872,7 @@ var DelegateOptionsModal = class extends import_obsidian8.Modal {
       refresh.onclick = async () => {
         refresh.disabled = true;
         try {
-          await p2.refreshAcpModels(this.agent);
+          await p.refreshAcpModels(this.agent);
           this.render();
         } catch (e) {
           new import_obsidian8.Notice(e.message);
@@ -26899,7 +26899,7 @@ var DelegateOptionsModal = class extends import_obsidian8.Modal {
     });
     const modes = workModeOptions(this.agent);
     if (modes.length) {
-      if (!modes.some((o) => o.id === this.permission)) this.permission = defaultWorkMode(this.agent, p2.settings);
+      if (!modes.some((o) => o.id === this.permission)) this.permission = defaultWorkMode(this.agent, p.settings);
       const pf = contentEl.createDiv({ cls: "ad-field" });
       pf.createDiv({ cls: "ad-field__label", text: "Mode" });
       const seg = pf.createDiv({ cls: "ad-seg" });
@@ -26913,7 +26913,7 @@ var DelegateOptionsModal = class extends import_obsidian8.Modal {
       }
       pf.createDiv({ cls: "ad-hint", text: modes.find((x) => x.id === this.permission)?.hint || "" });
     } else if (hasAgentCapability(this.agent, "acpAutoApprove")) {
-      const cfg = (_b = (_a = p2.settings).delegate || (_a.delegate = {}))[_c = this.agent] || (_b[_c] = {});
+      const cfg = (_b = (_a = p.settings).delegate || (_a.delegate = {}))[_c = this.agent] || (_b[_c] = {});
       const af = contentEl.createDiv({ cls: "ad-field" });
       const row = af.createDiv({ cls: "ad-minirow" });
       row.createSpan({ text: "Auto-approve tool calls" });
@@ -26921,14 +26921,14 @@ var DelegateOptionsModal = class extends import_obsidian8.Modal {
       b.createSpan({ cls: "ad-switch__knob" });
       b.onclick = () => {
         cfg.autoApprove = !cfg.autoApprove;
-        p2.saveSettings();
+        p.saveSettings();
         this.render();
       };
       af.createDiv({ cls: "ad-hint", text: t("ACP \u6A21\u5F0F\u6CA1\u6709 plan/auto \u8FD9\u4E2A\u5207\u6362\uFF1B\u5173\u6389\u81EA\u52A8\u5141\u8BB8\u65F6\uFF0C\u6743\u9650\u8BF7\u6C42\u4F1A\u5728 Obsidian \u4E2D\u9010\u6B21\u786E\u8BA4\u3002") });
     }
     if (this.agent === "antigravity") contentEl.createDiv({ cls: "ad-hint", text: t("\u901A\u8FC7 agy acp \u540E\u53F0\u59D4\u6D3E\uFF1B\u5B8C\u6210\u540E\u53EF\u67E5\u770B\u6216\u5F52\u6863\u6B63\u6587\u3002") });
     this.projectState.cwd = this.cwd;
-    renderProjectFolderPicker(contentEl, p2, this.projectState, {
+    renderProjectFolderPicker(contentEl, p, this.projectState, {
       onRender: () => {
         this.cwd = this.projectState.cwd;
         this.render();
@@ -26937,7 +26937,7 @@ var DelegateOptionsModal = class extends import_obsidian8.Modal {
     this.cwd = this.projectState.cwd;
     const cf = contentEl.createDiv({ cls: "ad-field" });
     cf.createDiv({ cls: "ad-field__label", text: "Working directory" });
-    const cwd = cf.createEl("input", { cls: "ad-input", attr: { placeholder: p2.vaultPath, value: this.cwd } });
+    const cwd = cf.createEl("input", { cls: "ad-input", attr: { placeholder: p.vaultPath, value: this.cwd } });
     cwd.oninput = () => {
       this.cwd = cwd.value;
       this.projectState.cwd = cwd.value;
@@ -26966,7 +26966,7 @@ var DelegateOptionsModal = class extends import_obsidian8.Modal {
       goIcon.textContent = "";
       lattice(goIcon, "orbit");
       try {
-        const job = await p2.delegator.delegate({
+        const job = await p.delegator.delegate({
           ignoreMention: true,
           destination: this.destination,
           file: this.file,
@@ -26977,10 +26977,10 @@ var DelegateOptionsModal = class extends import_obsidian8.Modal {
           effort: this.effort,
           permission: workModeOptions(this.agent).length ? this.permission : "",
           cwd: this.cwd.trim(),
-          projectName: projectNameForSelection(p2, this.projectState, this.cwd),
+          projectName: projectNameForSelection(p, this.projectState, this.cwd),
           fromDialog: true,
           promptSuffix: this.suffix,
-          name: blockTitle(this.block, mentionTrigger(p2))
+          name: blockTitle(this.block, mentionTrigger(p))
         });
         this.close();
       } catch (e) {
@@ -27182,13 +27182,13 @@ var ArchiveTargetModal = class extends import_obsidian8.Modal {
     const render = () => {
       sugg.empty();
       const q = input.value.trim().toLowerCase();
-      const hits = files.filter((p2) => !q || p2.toLowerCase().includes(q)).slice(0, 6);
-      for (const p2 of hits) {
-        if (p2 === input.value.trim()) continue;
-        const b = sugg.createEl("button", { cls: "ad-btn ad-btn--ghost", text: p2 });
+      const hits = files.filter((p) => !q || p.toLowerCase().includes(q)).slice(0, 6);
+      for (const p of hits) {
+        if (p === input.value.trim()) continue;
+        const b = sugg.createEl("button", { cls: "ad-btn ad-btn--ghost", text: p });
         b.onclick = (e) => {
           e.preventDefault();
-          input.value = p2;
+          input.value = p;
           render();
         };
       }
@@ -30013,12 +30013,12 @@ var MenuBarBridge = class {
       try {
         const buf = agentImageBuffer(id);
         if (!buf) continue;
-        const p2 = import_path16.default.join(dir, `${id}.png`);
+        const p = import_path16.default.join(dir, `${id}.png`);
         try {
-          if (import_fs16.default.statSync(p2).size === buf.length) continue;
+          if (import_fs16.default.statSync(p).size === buf.length) continue;
         } catch {
         }
-        import_fs16.default.writeFileSync(p2, buf);
+        import_fs16.default.writeFileSync(p, buf);
       } catch {
       }
     }
@@ -30652,22 +30652,22 @@ var AutoLog = class {
     }
     const lines = text.split("\n");
     const raw = lines[found.line];
-    const p2 = splitTask(raw);
-    if (!p2) return { text };
-    const isAuto = Boolean(p2.auto);
+    const p = splitTask(raw);
+    if (!p) return { text };
+    const isAuto = Boolean(p.auto);
     if (isAuto) {
       const rules = this.rules();
       const clockSpan = clockSpanFromLines(lines, found.line);
-      const start = startClock || p2.since || clockSpan?.start || "";
-      const end = endClock || (p2.until && p2.until !== p2.since ? p2.until : clockSpan?.end) || p2.until || p2.since || start;
+      const start = startClock || p.since || clockSpan?.start || "";
+      const end = endClock || (p.until && p.until !== p.since ? p.until : clockSpan?.end) || p.until || p.since || start;
       const eb2 = ensureBlockId(formatAutoTaskLine({
-        prefix: p2.prefix,
+        prefix: p.prefix,
         kw,
         start,
         end,
-        title: p2.title,
+        title: p.title,
         preserveTitle: true,
-        showTimeRange: rules.showTimeRange || Boolean(p2.since || p2.until),
+        showTimeRange: rules.showTimeRange || Boolean(p.since || p.until),
         blockId: preferId
       }), preferId);
       rec.blockId = eb2.blockId;
@@ -30677,10 +30677,10 @@ var AutoLog = class {
       lines[found.line] = eb2.line;
       return { text: lines.join("\n") };
     }
-    const cleanRest = stripBlockId(p2.rest).replace(/^\d{1,2}[:：]\d{2}\s*[-–~～到至]\s*\d{1,2}[:：]\d{2}\s*/, "");
+    const cleanRest = stripBlockId(p.rest).replace(/^\d{1,2}[:：]\d{2}\s*[-–~～到至]\s*\d{1,2}[:：]\d{2}\s*/, "");
     const body = cleanRest;
-    const since = segs.length ? clock(first) : p2.since || clock(0);
-    const nextRaw = status === "doing" ? `${p2.prefix}DOING ${since} ${body}`.trimEnd() : status === "done" ? `${p2.prefix}DONE ${endClock ? endClock + " " : ""}${body}`.trimEnd() : `${p2.prefix}${kw} ${body}`.trimEnd();
+    const since = segs.length ? clock(first) : p.since || clock(0);
+    const nextRaw = status === "doing" ? `${p.prefix}DOING ${since} ${body}`.trimEnd() : status === "done" ? `${p.prefix}DONE ${endClock ? endClock + " " : ""}${body}`.trimEnd() : `${p.prefix}${kw} ${body}`.trimEnd();
     const eb = ensureBlockId(nextRaw, preferId);
     rec.blockId = eb.blockId;
     rec.key = workKey(body);
@@ -31285,7 +31285,7 @@ var JournalSync = class {
     const x = this.dayList().find((s) => s.sid === sid);
     return x ? { segs: x.segs || [], out: x.out || 0, fresh: x.fresh || 0, agent: x.agent } : null;
   }
-  sessionTimeSpan(sid, p2, lines = [], ownerLine = -1) {
+  sessionTimeSpan(sid, p, lines = [], ownerLine = -1) {
     const info = sid ? this.segmentsFor(sid) : null;
     const segs = info && info.segs ? info.segs : [];
     const segStart = segs.length ? clock(segs[0][0]) : "";
@@ -31296,8 +31296,8 @@ var JournalSync = class {
     const firstAt = m.startedAt || m.firstAt || 0;
     const metaStart = firstAt && dayKey(firstAt, this.cfg) === today ? clock(dayMinute(firstAt, this.cfg)) : "";
     const metaEnd = m.lastAt && dayKey(m.lastAt, this.cfg) === today ? clock(dayMinute(m.lastAt, this.cfg)) : "";
-    const start = segStart || clockSpan?.start || p2?.since || metaStart || metaEnd || "";
-    const end = segEnd || metaEnd || (p2?.until && p2?.until !== p2?.since ? p2.until : clockSpan?.end) || p2?.until || p2?.since || start || "";
+    const start = segStart || clockSpan?.start || p?.since || metaStart || metaEnd || "";
+    const end = segEnd || metaEnd || (p?.until && p?.until !== p?.since ? p.until : clockSpan?.end) || p?.until || p?.since || start || "";
     return { start, end };
   }
   // 开着的笔记里所有带 🔗 或 ^ad- 块 ID 的编辑器
@@ -31573,27 +31573,27 @@ var JournalSync = class {
       if (!(cur.kw === "DOING" || cur.kw === "DELEGATED" || AGENT_KW_RE.test(cur.kw) || !cur.kw)) continue;
       const m = this.usage.meta.get(k.sid);
       const want = m ? m.state === "run" ? cur.kw === "DELEGATED" ? "DELEGATED" : "DOING" : STATE_KW2[m.state] : null;
-      const p2 = splitTask(ls[n]);
-      if (!p2) continue;
-      if (p2.auto && !p2.cb) {
-        const { start, end } = this.sessionTimeSpan(k.sid, p2, ls, n);
+      const p = splitTask(ls[n]);
+      if (!p) continue;
+      if (p.auto && !p.cb) {
+        const { start, end } = this.sessionTimeSpan(k.sid, p, ls, n);
         const nextKw = want || cur.kw || "DOING";
         const rules = resolveRecordRules(this.cfg);
         const nextLine2 = formatAutoTaskLine({
-          prefix: p2.prefix,
+          prefix: p.prefix,
           kw: nextKw,
           start,
           end,
-          title: p2.title,
+          title: p.title,
           preserveTitle: true,
-          showTimeRange: rules.showTimeRange || Boolean(p2.since || p2.until),
-          blockId: p2.blockId
+          showTimeRange: rules.showTimeRange || Boolean(p.since || p.until),
+          blockId: p.blockId
         });
         if (nextLine2 !== ls[n]) ls[n] = nextLine2;
         continue;
       }
       if (!want || want === cur.kw) continue;
-      const nextLine = `${p2.prefix}${want} ${p2.since ? p2.since + " " : ""}${p2.rest}`.trimEnd();
+      const nextLine = `${p.prefix}${want} ${p.since ? p.since + " " : ""}${p.rest}`.trimEnd();
       if (nextLine !== ls[n]) ls[n] = nextLine;
     }
     let out = ls.join("\n");
@@ -31622,20 +31622,20 @@ var JournalSync = class {
     const ls = text.split("\n");
     let changed = false;
     for (const [n, { kw, sid }] of want) {
-      const p2 = splitTask(ls[n]);
-      if (!p2 || p2.cb || !p2.kw) continue;
-      if (p2.auto) {
-        const { start, end } = this.sessionTimeSpan(sid, p2, ls, n);
+      const p = splitTask(ls[n]);
+      if (!p || p.cb || !p.kw) continue;
+      if (p.auto) {
+        const { start, end } = this.sessionTimeSpan(sid, p, ls, n);
         const rules = resolveRecordRules(this.cfg);
         const nextLine = formatAutoTaskLine({
-          prefix: p2.prefix,
+          prefix: p.prefix,
           kw,
           start,
           end,
-          title: p2.title,
+          title: p.title,
           preserveTitle: true,
-          showTimeRange: rules.showTimeRange || Boolean(p2.since || p2.until),
-          blockId: p2.blockId
+          showTimeRange: rules.showTimeRange || Boolean(p.since || p.until),
+          blockId: p.blockId
         });
         if (nextLine !== ls[n]) {
           ls[n] = nextLine;
@@ -31643,8 +31643,8 @@ var JournalSync = class {
         }
         continue;
       }
-      if (p2.kw === kw) continue;
-      ls[n] = `${p2.prefix}${kw} ${p2.since ? p2.since + " " : ""}${p2.rest}`.trimEnd();
+      if (p.kw === kw) continue;
+      ls[n] = `${p.prefix}${kw} ${p.since ? p.since + " " : ""}${p.rest}`.trimEnd();
       changed = true;
     }
     return changed ? ls.join("\n") : text;
@@ -31659,29 +31659,29 @@ var JournalSync = class {
     if (at < 0) return text;
     const n = markOwner(lines, at);
     if (n < 0) return text;
-    const p2 = splitTask(lines[n]);
-    if (!p2 || isManualTask(this.cfg, lines[n])) return text;
+    const p = splitTask(lines[n]);
+    if (!p || isManualTask(this.cfg, lines[n])) return text;
     const meta = this.usage.meta.get(sid) || {};
     const roundDoneAt = Array.isArray(meta.rounds) ? meta.rounds.reduce((best, r) => Math.max(best, r?.doneAt || 0), 0) : 0;
     const endMs = meta.lastAt || roundDoneAt || 0;
     const last = endMs ? dayMinute(endMs, this.cfg) : null;
-    const { start, end } = this.sessionTimeSpan(sid, p2, lines, n);
+    const { start, end } = this.sessionTimeSpan(sid, p, lines, n);
     const lastClock = last != null ? clock(last) : end;
-    if (p2.auto && !p2.cb) {
+    if (p.auto && !p.cb) {
       const rules = resolveRecordRules(this.cfg);
       lines[n] = formatAutoTaskLine({
-        prefix: p2.prefix,
+        prefix: p.prefix,
         kw: "DONE",
         start: start || lastClock,
         end: lastClock || end || start,
-        title: p2.title,
+        title: p.title,
         preserveTitle: true,
-        showTimeRange: rules.showTimeRange || Boolean(p2.since || p2.until),
-        blockId: p2.blockId
+        showTimeRange: rules.showTimeRange || Boolean(p.since || p.until),
+        blockId: p.blockId
       });
     } else {
-      const body = p2.rest.replace(/^\d{1,2}[:：]\d{2}\s*[-–~～到至]\s*\d{1,2}[:：]\d{2}\s*/, "");
-      lines[n] = `${p2.prefix}DONE ${lastClock ? lastClock + " " : ""}${body}`.trimEnd();
+      const body = p.rest.replace(/^\d{1,2}[:：]\d{2}\s*[-–~～到至]\s*\d{1,2}[:：]\d{2}\s*/, "");
+      lines[n] = `${p.prefix}DONE ${lastClock ? lastClock + " " : ""}${body}`.trimEnd();
     }
     const info = this.segmentsFor(sid);
     if (info && info.segs.length) {
@@ -32063,7 +32063,7 @@ function buildWorkbenchNote({ boardFiles = [], memory = {}, tasks = [], at = "" 
     "## \u770B\u677F\u6587\u4EF6",
     "| \u6587\u4EF6 | \u7C7B\u578B |",
     "|---|---|",
-    ...boardFiles.length ? boardFiles.map((p2) => `| ${link(p2)} | ${byKind(p2)} |`) : [`| ${t("\u8FD8\u6CA1\u6709\u770B\u677F\u6587\u4EF6\u3002\u7528\u300C\u770B\u677F\uFF1A\u628A\u5F53\u524D\u7B14\u8BB0\u8BBE\u4E3A\u770B\u677F\u6587\u4EF6\u300D\u9009\u4E00\u7BC7\u3002")} | |`],
+    ...boardFiles.length ? boardFiles.map((p) => `| ${link(p)} | ${byKind(p)} |`) : [`| ${t("\u8FD8\u6CA1\u6709\u770B\u677F\u6587\u4EF6\u3002\u7528\u300C\u770B\u677F\uFF1A\u628A\u5F53\u524D\u7B14\u8BB0\u8BBE\u4E3A\u770B\u677F\u6587\u4EF6\u300D\u9009\u4E00\u7BC7\u3002")} | |`],
     "",
     "## \u8BB0\u5FC6",
     "| \u9879 | \u6570\u91CF |",
@@ -32078,7 +32078,7 @@ function buildWorkbenchNote({ boardFiles = [], memory = {}, tasks = [], at = "" 
     `- ${t("\u4F53\u68C0")}\uFF1A${t("\u547D\u4EE4\u9762\u677F \u2192 \u8BB0\u5FC6\uFF1A\u4F53\u68C0")}`,
     "",
     "## \u6700\u8FD1\u4EFB\u52A1\u89C4\u5212",
-    ...tasks.length ? tasks.map((p2) => `- ${link(p2)}`) : [`- ${t("\u8FD8\u6CA1\u6709\u751F\u6210\u8FC7\u4EFB\u52A1\u89C4\u5212\u3002")}`],
+    ...tasks.length ? tasks.map((p) => `- ${link(p)}`) : [`- ${t("\u8FD8\u6CA1\u6709\u751F\u6210\u8FC7\u4EFB\u52A1\u89C4\u5212\u3002")}`],
     "",
     "## \u751F\u6210\u5165\u53E3",
     `- ${t("\u89C4\u5212")}\uFF1A${t("\u628A\u5149\u6807\u653E\u5728\u76EE\u6807\u90A3\u4E00\u884C \u2192 \u547D\u4EE4\u9762\u677F \u2192 \u89C4\u5212\uFF1A\u628A\u5F53\u524D\u8FD9\u4E00\u6761\u62C6\u6210 task.md")}`,
@@ -33619,7 +33619,7 @@ ${model.extraMarkdown}`);
 `;
 }
 function stripInlineMarkdown(raw) {
-  return String(raw || "").replace(/\[([^\]\n]+)\]\(([^)\s]+(?:\([^)]*\))?[^)\s]*)\)/g, "$1 ($2)").replace(/\[\[([^\]|\n]+?)(?:\|([^\]\n]+))?\]\]/g, (_, p2, alias) => alias || p2).replace(/`([^`\n]+)`/g, "$1").replace(/\*\*([^*\n]+)\*\*/g, "$1").replace(/\*([^*\n]+)\*/g, "$1");
+  return String(raw || "").replace(/\[([^\]\n]+)\]\(([^)\s]+(?:\([^)]*\))?[^)\s]*)\)/g, "$1 ($2)").replace(/\[\[([^\]|\n]+?)(?:\|([^\]\n]+))?\]\]/g, (_, p, alias) => alias || p).replace(/`([^`\n]+)`/g, "$1").replace(/\*\*([^*\n]+)\*\*/g, "$1").replace(/\*([^*\n]+)\*/g, "$1");
 }
 function buildTaskPlainText(extracted, sourcePath = "") {
   const lines = [extracted.title];
@@ -33808,7 +33808,7 @@ async function exportTaskToHtml(plugin, path17, line, options = {}) {
     dialogTitle: t("\u5BFC\u51FA\u4EFB\u52A1\u4E0E\u5BF9\u8BDD\u4E3A HTML"),
     viewMode: options.viewMode || "",
     buildContent: (extracted, src, opts) => renderTaskHtmlForExport(plugin, extracted, src, opts.viewMode),
-    onSuccess: (p2) => t("\u5DF2\u5BFC\u51FA HTML\uFF1A{path}", { path: p2 })
+    onSuccess: (p) => t("\u5DF2\u5BFC\u51FA HTML\uFF1A{path}", { path: p })
   });
 }
 async function exportTaskToMarkdown(plugin, path17, line) {
@@ -33817,7 +33817,7 @@ async function exportTaskToMarkdown(plugin, path17, line) {
     filterName: "Markdown",
     dialogTitle: t("\u5BFC\u51FA\u4EFB\u52A1\u4E0E\u5BF9\u8BDD\u4E3A Markdown"),
     buildContent: (extracted, src) => buildTaskExportDocument(extracted, src),
-    onSuccess: (p2) => t("\u5DF2\u5BFC\u51FA Markdown\uFF1A{path}", { path: p2 })
+    onSuccess: (p) => t("\u5DF2\u5BFC\u51FA Markdown\uFF1A{path}", { path: p })
   });
 }
 async function exportTaskToJson(plugin, path17, line, options = {}) {
@@ -33827,7 +33827,7 @@ async function exportTaskToJson(plugin, path17, line, options = {}) {
     dialogTitle: t("\u5BFC\u51FA\u4EFB\u52A1\u4E0E\u5BF9\u8BDD\u4E3A JSON"),
     viewMode: options.viewMode || "",
     buildContent: (extracted, src, opts) => buildTaskExportJson(extracted, src, opts),
-    onSuccess: (p2) => t("\u5DF2\u5BFC\u51FA JSON\uFF1A{path}", { path: p2 })
+    onSuccess: (p) => t("\u5DF2\u5BFC\u51FA JSON\uFF1A{path}", { path: p })
   });
 }
 async function exportTaskToCsv(plugin, path17, line) {
@@ -33836,7 +33836,7 @@ async function exportTaskToCsv(plugin, path17, line) {
     filterName: "CSV",
     dialogTitle: t("\u5BFC\u51FA\u4EFB\u52A1\u4E0E\u5BF9\u8BDD\u4E3A CSV"),
     buildContent: (extracted, src) => buildTaskExportCsv(extracted, src),
-    onSuccess: (p2) => t("\u5DF2\u5BFC\u51FA CSV\uFF1A{path}", { path: p2 })
+    onSuccess: (p) => t("\u5DF2\u5BFC\u51FA CSV\uFF1A{path}", { path: p })
   });
 }
 async function saveTaskAsFile(plugin, path17, line) {
@@ -34091,16 +34091,16 @@ var ProjectWorkbenchModal = class extends import_obsidian20.Modal {
     const { contentEl, modalEl } = this;
     modalEl.addClass("ad-workbench-dialog");
     contentEl.addClass("ad-modal", "ad-workbench");
-    const p2 = this.plugin;
-    this.availableAgents = delegableAgents(p2);
-    this.limitAgents = limitAgentsFromSessions(p2.liveSessions?.({ hours: 6 }) || []);
+    const p = this.plugin;
+    this.availableAgents = delegableAgents(p);
+    this.limitAgents = limitAgentsFromSessions(p.liveSessions?.({ hours: 6 }) || []);
     if (this.targetPath && this.targetLine >= 0) {
       try {
-        const text = await p2.readNote(this.targetPath);
+        const text = await p.readNote(this.targetPath);
         const lines = text.split("\n");
         const block = blockAt(lines, this.targetLine);
         if (block) {
-          this.goal = this.goal || blockTitle(block, mentionTrigger(p2));
+          this.goal = this.goal || blockTitle(block, mentionTrigger(p));
           this.contextLines = ancestorLines(lines, block.start);
         }
       } catch {
@@ -34108,18 +34108,18 @@ var ProjectWorkbenchModal = class extends import_obsidian20.Modal {
     } else if (!this.targetPath) {
       const active2 = this.app.workspace.getActiveFile?.();
       if (active2?.extension === "md") this.targetPath = active2.path;
-      else if (p2.journalSync?.todayJournal) {
-        const today = p2.journalSync.todayJournal();
+      else if (p.journalSync?.todayJournal) {
+        const today = p.journalSync.todayJournal();
         this.targetPath = today?.path || "";
       }
     }
     if (!this.projectName && this.cwd) {
       this.projectName = resolveSessionProject({ cwd: this.cwd });
     }
-    if (!this.cwd) this.cwd = p2.vaultPath || "";
-    const registered = this.projectName ? projectFolderForName(p2.settings, this.projectName) : "";
-    if (registered && (!this.cwd || sameFolder(this.cwd, p2.vaultPath))) this.cwd = registered;
-    const savedByProj = p2.settings?.projectTeams?.byProject || {};
+    if (!this.cwd) this.cwd = p.vaultPath || "";
+    const registered = this.projectName ? projectFolderForName(p.settings, this.projectName) : "";
+    if (registered && (!this.cwd || sameFolder(this.cwd, p.vaultPath))) this.cwd = registered;
+    const savedByProj = p.settings?.projectTeams?.byProject || {};
     if (this.projectName && savedByProj[this.projectName]) {
       this.presetId = savedByProj[this.projectName];
     }
@@ -34148,8 +34148,8 @@ var ProjectWorkbenchModal = class extends import_obsidian20.Modal {
   }
   saveTeamPreference() {
     var _a, _b, _c;
-    const p2 = this.plugin;
-    const teams = (_a = p2.settings).projectTeams || (_a.projectTeams = { presets: {}, byProject: {}, stewards: {} });
+    const p = this.plugin;
+    const teams = (_a = p.settings).projectTeams || (_a.projectTeams = { presets: {}, byProject: {}, stewards: {} });
     teams.presets || (teams.presets = {});
     teams.byProject || (teams.byProject = {});
     teams.stewards || (teams.stewards = {});
@@ -34171,7 +34171,7 @@ var ProjectWorkbenchModal = class extends import_obsidian20.Modal {
       teams.stewards.byPreset[this.presetId] = entry;
       if (this.projectName) teams.stewards.byProject[this.projectName] = entry;
     }
-    p2.saveSettings?.();
+    p.saveSettings?.();
   }
   applyFallbackPlan() {
     const roles = this.resolvedRoles();
@@ -34269,6 +34269,7 @@ var ProjectWorkbenchModal = class extends import_obsidian20.Modal {
     }
   }
   render() {
+    const p = this.plugin;
     const { contentEl } = this;
     contentEl.empty();
     const presets = resolveTeamPresets(this.plugin.settings);
@@ -35411,7 +35412,7 @@ var AgentDeckPlugin = class extends import_obsidian21.Plugin {
   }
   // 工作台总览：把散落的生成物聚到一页，只做索引，不复制内容。
   async refreshWorkbenchNote() {
-    const boardFiles = Object.keys(this.settings.taskBoardFiles || {}).filter((p2) => this.app.vault.getAbstractFileByPath(p2));
+    const boardFiles = Object.keys(this.settings.taskBoardFiles || {}).filter((p) => this.app.vault.getAbstractFileByPath(p));
     const audit = this.dreaming.storeMode ? await this.dreaming.audit() : { entries: [], unverified: [], noSource: [] };
     const tasks = [];
     const folder = this.app.vault.getAbstractFileByPath("Agent Deck/\u4EFB\u52A1");
@@ -35475,7 +35476,7 @@ var AgentDeckPlugin = class extends import_obsidian21.Plugin {
       if (hash4 !== job.payloadHash) edited.push(job.payloadPath);
     }
     if (!edited.length) return this.notice(t("\u8FD8\u6CA1\u6709\u88AB\u6539\u8FC7\u7684\u8F7D\u8377"));
-    const text = ["# \u88AB\u6539\u8FC7\u7684\u6D3E\u53D1\u8F7D\u8377", "", ...edited.map((p2) => `- [[${p2.replace(/\.md$/, "")}]]`)].join("\n");
+    const text = ["# \u88AB\u6539\u8FC7\u7684\u6D3E\u53D1\u8F7D\u8377", "", ...edited.map((p) => `- [[${p.replace(/\.md$/, "")}]]`)].join("\n");
     const target = "Agent Deck/\u6D3E\u53D1-\u5DF2\u6539\u52A8.md";
     await this.writeVaultFile(target, text);
     await this.app.workspace.openLinkText(target, "", false);
@@ -36132,9 +36133,9 @@ var AgentDeckPlugin = class extends import_obsidian21.Plugin {
   }
   // ---------- external state & sessions ----------
   extStateSig(perm, queue) {
-    const p2 = [...(perm || /* @__PURE__ */ new Map()).entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([sid, d]) => `${sid}:${d.at || 0}:${d.released ? 1 : 0}:${d.tool || ""}`).join(";");
+    const p = [...(perm || /* @__PURE__ */ new Map()).entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([sid, d]) => `${sid}:${d.at || 0}:${d.released ? 1 : 0}:${d.tool || ""}`).join(";");
     const q = [...(queue || /* @__PURE__ */ new Map()).entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([sid, d]) => `${sid}:${d.reset_at || 0}`).join(";");
-    return `${p2}|${q}`;
+    return `${p}|${q}`;
   }
   async refreshExternalState() {
     if (this._extScanning) return false;
@@ -37535,7 +37536,7 @@ ${t("\u8BF7\u6309\u8FD9\u4E2A\u7EE7\u7EED\uFF0C\u4E0D\u7528\u518D\u95EE\u540C\u4
       return false;
     }
     if (top) {
-      for (let p2 = parentItem(lines, target); p2 >= 0; p2 = parentItem(lines, p2)) target = p2;
+      for (let p = parentItem(lines, target); p >= 0; p = parentItem(lines, p)) target = p;
     }
     const line = doc.line(target + 1);
     const span = contentSpan(line.text);
@@ -38472,12 +38473,12 @@ ${t("\u8BF7\u6309\u8FD9\u4E2A\u7EE7\u7EED\uFF0C\u4E0D\u7528\u518D\u95EE\u540C\u4
     };
   }
   async restoreNautilusAgentBar() {
-    const p2 = import_path18.default.join(this.vaultPath, ".obsidian/plugins/nautilus-spiral/data.json");
+    const p = import_path18.default.join(this.vaultPath, ".obsidian/plugins/nautilus-spiral/data.json");
     try {
-      const data = JSON.parse(await fsp9.readFile(p2, "utf8"));
+      const data = JSON.parse(await fsp9.readFile(p, "utf8"));
       if (data.agentStatus !== true) {
         data.agentStatus = true;
-        await fsp9.writeFile(p2, JSON.stringify(data, null, 1), "utf8");
+        await fsp9.writeFile(p, JSON.stringify(data, null, 1), "utf8");
       }
     } catch {
     }
@@ -38497,21 +38498,21 @@ ${t("\u8BF7\u6309\u8FD9\u4E2A\u7EE7\u7EED\uFF0C\u4E0D\u7528\u518D\u95EE\u540C\u4
   }
   async hideNautilusAgentBar() {
     if (this.settings.menuBarHideNautilus === false) return;
-    const p2 = import_path18.default.join(this.vaultPath, ".obsidian/plugins/nautilus-spiral/data.json");
+    const p = import_path18.default.join(this.vaultPath, ".obsidian/plugins/nautilus-spiral/data.json");
     let data = null;
     try {
-      data = JSON.parse(await fsp9.readFile(p2, "utf8"));
+      data = JSON.parse(await fsp9.readFile(p, "utf8"));
     } catch {
     }
     let changed = false;
     if (data && data.agentStatus !== false) {
       try {
-        await fsp9.copyFile(p2, p2 + `.agent-deck-backup-${Date.now()}`);
+        await fsp9.copyFile(p, p + `.agent-deck-backup-${Date.now()}`);
       } catch {
       }
       data.agentStatus = false;
       try {
-        await fsp9.writeFile(p2, JSON.stringify(data, null, 1), "utf8");
+        await fsp9.writeFile(p, JSON.stringify(data, null, 1), "utf8");
         changed = true;
       } catch {
       }

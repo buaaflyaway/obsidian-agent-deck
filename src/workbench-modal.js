@@ -257,6 +257,7 @@ export class ProjectWorkbenchModal extends Modal {
   }
 
   render() {
+    const p = this.plugin;
     const { contentEl } = this;
     contentEl.empty();
     const presets = resolveTeamPresets(this.plugin.settings);
