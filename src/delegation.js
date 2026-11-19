@@ -1012,7 +1012,8 @@ export class Delegator {
     });
     if (dispatched.skipped === "no-project") this.plugin.notice(t("没有识别到项目名，已退回复制交接"), 8000);
     else if (dispatched.skipped === "platform") this.plugin.notice(t("UI Automation 派发只在 Windows 可用"), 8000);
-    else if (dispatched.ok) this.plugin.notice(t("已派发到 TeleAgent · {project}", { project: dispatched.project }), 6000);
+    else if (dispatched.ok && dispatched.verified) this.plugin.notice(t("已派发并确认落库 · {project}", { project: dispatched.project }), 6000);
+    else if (dispatched.ok) this.plugin.notice(t("已发送，但本地库里还没查到 · {project}", { project: dispatched.project }), 9000);
     else if (!dispatched.skipped) this.plugin.notice(t("派发失败（{stage}）：{error}", { stage: dispatched.stage, error: String(dispatched.error || "").slice(0, 120) }), 12000);
     this.plugin.refreshUI();
     return job;

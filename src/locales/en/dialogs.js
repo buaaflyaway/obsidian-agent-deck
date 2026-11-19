@@ -84,6 +84,8 @@ export default {
   "没有识别到项目名，已退回复制交接":
     "No project name was recognized; fell back to the copy-and-paste handoff.",
   "已派发到 TeleAgent · {project}": "Dispatched to TeleAgent · {project}",
+  "已派发并确认落库 · {project}": "Dispatched and confirmed in the local database · {project}",
+  "已发送，但本地库里还没查到 · {project}": "Sent, but not found in the local database yet · {project}",
   "派发失败（{stage}）：{error}": "Dispatch failed ({stage}): {error}",
   "缺少项目名（project）": "Missing project name (project)",
   "缺少要派发的文本（text）": "Missing text to dispatch (text)",

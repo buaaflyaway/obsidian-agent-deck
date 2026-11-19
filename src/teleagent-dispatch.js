@@ -8,11 +8,13 @@
 // 3. 派发会抢占前台焦点并占用键盘，因此只做“人在场的一次一条”，不做后台批量。
 //
 // 本模块只负责“把一次派发跑完并回报结构化结果”，不碰入库、不改设置、不抬版本号。
-import { spawn } from "node:child_process";
+import { spawn, execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { t } from "./i18n.js";
+import { teleAgentDatabases } from "./teleagent.js";
+import { resolveSqliteBinary } from "./sqlite.js";
 
 // 失败时回报的阶段名，前端/日志按它定位卡点，不要只说“失败了”。
 export const DISPATCH_STAGES = [
@@ -333,6 +335,56 @@ Send-Result @{ ok = $true; stage = 'sent'; project = $project; chars = $text.Len
 exit 0
 `;
 
+// 派发后的回读校验：界面上点了“运行”不等于任务真的落库，所以再用只读 SQL 查一次
+// 客户端的会话库，确认「同一项目目录 + 新出现的会话 + 正文包含这次文本」三者同时成立。
+// 只读 SELECT，不写库、不发网络请求；查不到就如实回报 found=false，让上层提示“还没查到”。
+const sqlQuote = (value) => "'" + String(value).replaceAll("'", "''") + "'";
+
+function defaultRunSql(db, sql) {
+  return execFileSync(resolveSqliteBinary(), [db, sql], { encoding: "utf8", timeout: 5000 });
+}
+
+function parseJsonLines(output) {
+  return String(output || "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      try { return JSON.parse(line); } catch { return null; }
+    })
+    .filter(Boolean);
+}
+
+export function verifyDispatchedSession({ project, text, sinceMs, dbs, runSql } = {}) {
+  const run = runSql || defaultRunSql;
+  const proj = String(project || "").trim();
+  if (!proj) return { found: false, reason: "no-project" };
+  const since = Number.isFinite(Number(sinceMs)) ? Math.max(0, Number(sinceMs)) : Date.now() - 120000;
+  const prefix = String(text || "").replace(/\s+/g, " ").trim().slice(0, 40);
+  const bases = Array.isArray(dbs) ? dbs : teleAgentDatabases();
+
+  for (const db of bases) {
+    let rows = [];
+    try {
+      rows = parseJsonLines(run(db, `SELECT json_object('id',id,'title',title,'created',time_created) FROM session WHERE time_created >= ${Math.floor(since)} AND directory LIKE ${sqlQuote("%" + proj + "%")} ORDER BY time_created DESC LIMIT 5;`));
+    } catch {
+      continue; // 这个库读不了就换下一个（可能被占用或还没建）
+    }
+    for (const row of rows) {
+      if (!row || !row.id) continue;
+      if (!prefix) return { found: true, db, ...row };
+      let body = "";
+      try {
+        body = run(db, `SELECT replace(coalesce(json_extract(data,'$.text'),''),char(10),' ') FROM part WHERE session_id=${sqlQuote(row.id)} AND json_extract(data,'$.type')='text' ORDER BY time_created LIMIT 2;`);
+      } catch {
+        continue;
+      }
+      if (String(body || "").replace(/\s+/g, " ").includes(prefix)) return { found: true, db, ...row };
+    }
+  }
+  return { found: false, reason: "not-found" };
+}
+
 // handoff 接线层的可测入口：判断“这次交接要不要顺手自动派发”，并把结果原样带回。
 // 只有三个条件同时成立才会真的派发：用户点了自动发送、目标就是 TeleAgent、当前是 Windows；
 // 另外必须有项目名——没有就退回复制交接，绝不猜一个目录把任务发错地方。
@@ -369,6 +421,23 @@ function resolveShell(deps) {
   return process.platform === "win32" ? "pwsh.exe" : "pwsh";
 }
 
+// 提交成功后再回读数据库确认落地；刚写完可能还没落盘，所以带三次短重试。
+async function attachVerification(result, payload, startedAt, deps) {
+  const verify = deps.verify || verifyDispatchedSession;
+  let check = { found: false, reason: "not-checked" };
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      check = verify({ project: payload.project, text: payload.text, sinceMs: startedAt - 5000, dbs: deps.dbs });
+    } catch (error) {
+      check = { found: false, reason: String((error && error.message) || error) };
+      break;
+    }
+    if (check && check.found) break;
+    await new Promise((resolve) => setTimeout(resolve, 700));
+  }
+  return { verified: Boolean(check && check.found), verify: check };
+}
+
 // 执行一次派发。deps 只为测试注入（spawn/fs/os/path/platform/tmpdir），生产不传。
 export async function dispatchTeleagentTask(payload, deps = {}) {
   const platform = deps.platform || process.platform;
@@ -385,6 +454,7 @@ export async function dispatchTeleagentTask(payload, deps = {}) {
   const timeoutMs = normalized.payload.stepTimeoutMs * 3;
 
   let dir = "";
+  const startedAt = Date.now();
   try {
     dir = fsMod.mkdtempSync(pathMod.join(tmpBase, "ad-teleagent-dispatch-"));
     const scriptPath = pathMod.join(dir, "dispatch.ps1");
@@ -420,6 +490,9 @@ export async function dispatchTeleagentTask(payload, deps = {}) {
         done({ ok: false, stage: "protocol", error: (stderr || stdout || "").slice(-400) || `退出码 ${code}` });
       });
     });
+    if (result && result.ok && deps.verify !== false) {
+      return { ...result, ...(await attachVerification(result, normalized.payload, startedAt, deps)) };
+    }
     return result;
   } catch (error) {
     return { ok: false, stage: "spawn", error: String(error && error.message || error) };

@@ -12,6 +12,7 @@ import {
   normalizePayload,
   parseDispatchOutput,
   runHandoffDispatch,
+  verifyDispatchedSession,
 } from '../src/teleagent-dispatch.js';
 
 test('normalizePayload 校验必填项并给节奏/超时默认值', () => {
@@ -138,4 +139,32 @@ test("runHandoffDispatch 只在“用户点了自动发送 + TeleAgent + Windows
   assert.equal(failed.ok, false);
   assert.equal(failed.stage, "project");
   assert.match(failed.error, /运行环境/);
+});
+
+test("verifyDispatchedSession 只在“新会话 + 同项目目录 + 正文匹配”三者同时成立时才认账", () => {
+  const sessionLine = JSON.stringify({ id: "ses_new", title: "自检", created: 2000 });
+  const runSql = (db, sql) => {
+    if (db === "db-a") {
+      if (sql.includes("FROM session")) return sessionLine + "\n";
+      if (sql.includes("FROM part")) return "Agent Deck 派发链路自检 请只回复收到\n";
+      return "";
+    }
+    throw new Error("db locked");
+  };
+
+  const hit = verifyDispatchedSession({ project: "jifang_data_analysis", text: "Agent Deck 派发链路自检 请只回复收到", sinceMs: 1000, dbs: ["db-a"], runSql });
+  assert.equal(hit.found, true);
+  assert.equal(hit.id, "ses_new");
+
+  // 正文对不上：不能因为同目录有新会话就当成成功
+  const mismatch = verifyDispatchedSession({ project: "jifang_data_analysis", text: "完全不同的内容", sinceMs: 1000, dbs: ["db-a"], runSql });
+  assert.equal(mismatch.found, false);
+  assert.equal(mismatch.reason, "not-found");
+
+  // 读不了的库要跳过，继续看下一个
+  const skip = verifyDispatchedSession({ project: "p", text: "Agent Deck", sinceMs: 1000, dbs: ["db-locked", "db-a"], runSql });
+  assert.equal(skip.found, true);
+
+  // 没有项目名：直接拒绝，不查库
+  assert.deepEqual(verifyDispatchedSession({ project: "  ", text: "x", runSql }), { found: false, reason: "no-project" });
 });

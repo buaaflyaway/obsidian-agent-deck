@@ -1439,6 +1439,8 @@ var dialogs_default = {
   "\u8FD9\u4E2A\u4EFB\u52A1\u6CA1\u6709\u767B\u8BB0\u8FC7\u9879\u76EE\u76EE\u5F55\uFF0C\u5148\u5728\u8BBE\u7F6E\u91CC\u767B\u8BB0\u9879\u76EE\u6587\u4EF6\u5939": "This task has no registered project folder; register one in settings first.",
   "\u6CA1\u6709\u8BC6\u522B\u5230\u9879\u76EE\u540D\uFF0C\u5DF2\u9000\u56DE\u590D\u5236\u4EA4\u63A5": "No project name was recognized; fell back to the copy-and-paste handoff.",
   "\u5DF2\u6D3E\u53D1\u5230 TeleAgent \xB7 {project}": "Dispatched to TeleAgent \xB7 {project}",
+  "\u5DF2\u6D3E\u53D1\u5E76\u786E\u8BA4\u843D\u5E93 \xB7 {project}": "Dispatched and confirmed in the local database \xB7 {project}",
+  "\u5DF2\u53D1\u9001\uFF0C\u4F46\u672C\u5730\u5E93\u91CC\u8FD8\u6CA1\u67E5\u5230 \xB7 {project}": "Sent, but not found in the local database yet \xB7 {project}",
   "\u6D3E\u53D1\u5931\u8D25\uFF08{stage}\uFF09\uFF1A{error}": "Dispatch failed ({stage}): {error}",
   "\u7F3A\u5C11\u9879\u76EE\u540D\uFF08project\uFF09": "Missing project name (project)",
   "\u7F3A\u5C11\u8981\u6D3E\u53D1\u7684\u6587\u672C\uFF08text\uFF09": "Missing text to dispatch (text)",
@@ -12157,6 +12159,47 @@ Start-Sleep -Milliseconds 1200
 Send-Result @{ ok = $true; stage = 'sent'; project = $project; chars = $text.Length }
 exit 0
 `;
+var sqlQuote2 = (value) => "'" + String(value).replaceAll("'", "''") + "'";
+function defaultRunSql(db, sql) {
+  return (0, import_node_child_process.execFileSync)(resolveSqliteBinary(), [db, sql], { encoding: "utf8", timeout: 5e3 });
+}
+function parseJsonLines(output) {
+  return String(output || "").split(/\r?\n/).map((line) => line.trim()).filter(Boolean).map((line) => {
+    try {
+      return JSON.parse(line);
+    } catch {
+      return null;
+    }
+  }).filter(Boolean);
+}
+function verifyDispatchedSession({ project, text, sinceMs, dbs, runSql } = {}) {
+  const run2 = runSql || defaultRunSql;
+  const proj = String(project || "").trim();
+  if (!proj) return { found: false, reason: "no-project" };
+  const since = Number.isFinite(Number(sinceMs)) ? Math.max(0, Number(sinceMs)) : Date.now() - 12e4;
+  const prefix = String(text || "").replace(/\s+/g, " ").trim().slice(0, 40);
+  const bases = Array.isArray(dbs) ? dbs : teleAgentDatabases();
+  for (const db of bases) {
+    let rows = [];
+    try {
+      rows = parseJsonLines(run2(db, `SELECT json_object('id',id,'title',title,'created',time_created) FROM session WHERE time_created >= ${Math.floor(since)} AND directory LIKE ${sqlQuote2("%" + proj + "%")} ORDER BY time_created DESC LIMIT 5;`));
+    } catch {
+      continue;
+    }
+    for (const row of rows) {
+      if (!row || !row.id) continue;
+      if (!prefix) return { found: true, db, ...row };
+      let body = "";
+      try {
+        body = run2(db, `SELECT replace(coalesce(json_extract(data,'$.text'),''),char(10),' ') FROM part WHERE session_id=${sqlQuote2(row.id)} AND json_extract(data,'$.type')='text' ORDER BY time_created LIMIT 2;`);
+      } catch {
+        continue;
+      }
+      if (String(body || "").replace(/\s+/g, " ").includes(prefix)) return { found: true, db, ...row };
+    }
+  }
+  return { found: false, reason: "not-found" };
+}
 async function runHandoffDispatch({
   agent,
   autoSend,
@@ -12187,6 +12230,21 @@ function resolveShell(deps) {
   if (deps.exe) return deps.exe;
   return process.platform === "win32" ? "pwsh.exe" : "pwsh";
 }
+async function attachVerification(result, payload, startedAt, deps) {
+  const verify = deps.verify || verifyDispatchedSession;
+  let check = { found: false, reason: "not-checked" };
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      check = verify({ project: payload.project, text: payload.text, sinceMs: startedAt - 5e3, dbs: deps.dbs });
+    } catch (error) {
+      check = { found: false, reason: String(error && error.message || error) };
+      break;
+    }
+    if (check && check.found) break;
+    await new Promise((resolve) => setTimeout(resolve, 700));
+  }
+  return { verified: Boolean(check && check.found), verify: check };
+}
 async function dispatchTeleagentTask(payload, deps = {}) {
   const platform = deps.platform || process.platform;
   if (platform !== "win32") {
@@ -12200,6 +12258,7 @@ async function dispatchTeleagentTask(payload, deps = {}) {
   const spawnFn = deps.spawn || import_node_child_process.spawn;
   const timeoutMs = normalized2.payload.stepTimeoutMs * 3;
   let dir = "";
+  const startedAt = Date.now();
   try {
     dir = fsMod.mkdtempSync(pathMod3.join(tmpBase, "ad-teleagent-dispatch-"));
     const scriptPath = pathMod3.join(dir, "dispatch.ps1");
@@ -12246,6 +12305,9 @@ async function dispatchTeleagentTask(payload, deps = {}) {
         done({ ok: false, stage: "protocol", error: (stderr || stdout || "").slice(-400) || `\u9000\u51FA\u7801 ${code}` });
       });
     });
+    if (result && result.ok && deps.verify !== false) {
+      return { ...result, ...await attachVerification(result, normalized2.payload, startedAt, deps) };
+    }
     return result;
   } catch (error) {
     return { ok: false, stage: "spawn", error: String(error && error.message || error) };
@@ -15085,7 +15147,8 @@ ${source}`;
     });
     if (dispatched.skipped === "no-project") this.plugin.notice(t("\u6CA1\u6709\u8BC6\u522B\u5230\u9879\u76EE\u540D\uFF0C\u5DF2\u9000\u56DE\u590D\u5236\u4EA4\u63A5"), 8e3);
     else if (dispatched.skipped === "platform") this.plugin.notice(t("UI Automation \u6D3E\u53D1\u53EA\u5728 Windows \u53EF\u7528"), 8e3);
-    else if (dispatched.ok) this.plugin.notice(t("\u5DF2\u6D3E\u53D1\u5230 TeleAgent \xB7 {project}", { project: dispatched.project }), 6e3);
+    else if (dispatched.ok && dispatched.verified) this.plugin.notice(t("\u5DF2\u6D3E\u53D1\u5E76\u786E\u8BA4\u843D\u5E93 \xB7 {project}", { project: dispatched.project }), 6e3);
+    else if (dispatched.ok) this.plugin.notice(t("\u5DF2\u53D1\u9001\uFF0C\u4F46\u672C\u5730\u5E93\u91CC\u8FD8\u6CA1\u67E5\u5230 \xB7 {project}", { project: dispatched.project }), 9e3);
     else if (!dispatched.skipped) this.plugin.notice(t("\u6D3E\u53D1\u5931\u8D25\uFF08{stage}\uFF09\uFF1A{error}", { stage: dispatched.stage, error: String(dispatched.error || "").slice(0, 120) }), 12e3);
     this.plugin.refreshUI();
     return job;
