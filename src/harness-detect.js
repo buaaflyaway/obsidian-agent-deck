@@ -6,8 +6,6 @@ import { AGENT_ORDER } from "./constants.js";
 import { delegateAgents } from "./agent-registry.js";
 import { expandedPathEntries } from "./delegation-runners.js";
 import {
-  cursorEventsDir,
-  cursorHooksJsonPath,
   cursorStateDbPath,
   cursorTrackingDbPath,
 } from "./cursor-sessions.js";
@@ -194,12 +192,13 @@ function buildSpecs({ homeDir, platform, env, appDirs }) {
       binNames: ["cursor"],
       binPaths: [],
       apps: win ? ["cursor/Cursor.exe", "Cursor/Cursor.exe"] : ["Cursor.app"],
+      // 只留 Cursor 自己产出的路径。~/.agent-deck/cursor-events 与 ~/.cursor/hooks.json
+      // 都是插件自己的 installCursorHooks 写出来的（见 cursor-sessions.js），把它们当安装证据
+      // 会自证：卸载 Cursor 并删掉它的数据后，插件昨天留下的目录仍然让检测判定“装了”。
       dataPaths: [
         path.join(homeDir, ".cursor"),
-        cursorHooksJsonPath(homeDir),
         cursorTrackingDbPath(homeDir),
         cursorStateDbPath(homeDir, platform, env),
-        cursorEventsDir(homeDir),
       ],
     },
     grokbot: {

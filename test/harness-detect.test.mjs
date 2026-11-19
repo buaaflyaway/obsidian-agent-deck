@@ -428,3 +428,30 @@ test("TeleAgent is detected from its data root on Windows (client lives outside 
   applyHarnessDetection(settings, { mode: "redetect", detection: hit });
   assert.equal(settings.agents.teleagent, true);
 });
+
+test("插件自建目录不能当成‘Agent 已安装’的证据（Cursor 回归）", () => {
+  const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), "ad-self-created-"));
+  const appDir = fs.mkdtempSync(path.join(os.tmpdir(), "ad-self-created-app-"));
+  const binDir = fs.mkdtempSync(path.join(os.tmpdir(), "ad-self-created-bin-"));
+  const env = {
+    PATH: binDir,
+    APPDATA: path.join(homeDir, "AppData", "Roaming"),
+    LOCALAPPDATA: path.join(homeDir, "AppData", "Local"),
+    ProgramFiles: path.join(homeDir, "PF"),
+  };
+  const scan = () => detectInstalledHarnesses({ homeDir, appDirs: [appDir], pathEntries: [binDir], env, platform: "win32" });
+
+  // 只剩插件自己装 hook 时建的目录：Cursor 已卸载，不能算装了
+  mkTree(homeDir, ["11111111-2222-3333-4444-555555555555.jsonl"], [".agent-deck/cursor-events", ".agent-deck/hooks"]);
+  const afterUninstall = scan();
+  assert.equal(afterUninstall.detected.cursor, false, "插件自建的事件目录不能让 Cursor 判为已安装");
+  for (const [id, d] of Object.entries(afterUninstall.details)) {
+    if (d.data) assert.ok(!d.data.includes(".agent-deck"), `${id} 的安装证据不该落在插件自己的目录里`);
+  }
+
+  // 反向：Cursor 自己的状态库还在时仍要识别
+  mkTree(homeDir, ["AppData/Roaming/Cursor/User/globalStorage/state.vscdb"]);
+  const withCursor = scan();
+  assert.equal(withCursor.detected.cursor, true);
+  assert.deepEqual(withCursor.details.cursor.via, ["data"]);
+});
