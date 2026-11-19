@@ -293,10 +293,26 @@ Group '任务列表'  (372,392) 205×1529
 - 测试：`test/teleagent-dispatch-linux.test.mjs`（平台分流 / 依赖缺失 / 窗口选择 / 焦点失败 / 粘贴失败 / 填入后不自动提交 / 提交原语必须 confirm / PPM 16-bit 采样）。
 - 成功判据：提交后统一用 `verifyDispatchedSession` 的**只读** SQL 回读；填入阶段返回 `verified:false, reason:"not-submitted"`，不把“已填入”说成“已发送”。
 
-### 11.6 未验证项（Linux）
+### 11.6 Obsidian 实机验收（2026-11-19，Obsidian 1.15.1 + 测试 vault）
+
+环境：Obsidian **1.15.1** 用 `dpkg-deb -x` 解到 `temp/obsidian-app`（无 root、未写 `/usr`），专用测试 vault `temp/vault-e2e`，插件 1.13.4；TeleAgent 3.1.1-rc.1。详细命令/通知/截图见 [`research/obsidian-teleagent-linux-acceptance.zh-CN.md`](../research/obsidian-teleagent-linux-acceptance.zh-CN.md)。
+
+| 验收点 | 结果 | 证据 |
+| --- | --- | --- |
+| a. 右键任务行出现 Linux 菜单项 | ✅ **通过** | 任务行 `- DOING 验证 Linux 派发 50%` 渲染 `.ad-prog`；DPR=1.25 换算后物理右键，菜单含「派发到 TeleAgent（自动填写，需手动点运行）」；截图 `obsidian-menu-linux.png`（同上记录） |
+| b. 点击后聚焦/填入/提示 | ❌ **失败（已复现）** | 通知依次为「任务已复制…」+「派发失败（focus）：无法把焦点切到 TeleAgent 主窗口…」；输入框无文本（`obs-after-dispatch.png`，同上记录） |
+| c. 不点「运行」 | ✅ 遵守 | 全程未点发送；SQLite `session` 计数保持 117，无新会话 |
+| d. 缺 xdotool 降级 | ✅ **通过** | renderer `PATH` 置空后调用，通知「派发失败（dependency）：缺少 Linux 派发依赖：xdotool」，无异常 |
+
+**b 的根因（本机实测）**：treeland 在 Obsidian 前台时不会把焦点交给 TeleAgent；`windowfocus` 设置的 X 焦点在两次独立 xdotool 进程之间被重置为 PointerRoot，`getwindowfocus` 直接报错。`xdg-open teleai-cowork://` 与二次运行 `/usr/bin/teleagent` 都没能把主窗抬到前台。对照实验：用 treeland 原生协议把 TeleAgent 激活后，**单进程** `xdotool windowfocus <id> getwindowfocus mousemove … click 1 key --clearmodifiers ctrl+v` 可以成功粘贴（`chain-test.png`，随后清空；同上记录）。→ 修复方向：合成器级窗口激活（treeland helper，或明确要求用户先手动切到 TeleAgent）+ 把 focus/click/paste 合并为一次 xdotool 调用（或去掉跨进程焦点校验竞态）。
+
+**右击的前置条件**：普通 TODO 行没有 `.ad-prog`/`.ad-pill`，右键只会出现 Obsidian 默认编辑器菜单；测试用 `DOING` + 手动进度（`50%`）让进度控件出现，才能命中插件的 `contextmenu` 监听。DPR≠1 时必须把 CDP viewport 坐标乘以 DPR 再交给 xdotool。
+
+### 11.7 仍未验证项（Linux）
 
 - **AT-SPI**：需要 root 安装 `at-spi2-core` + 客户端带 `--force-renderer-accessibility` 重启；本机 `/usr` 只读，**未实测，不外推**。
+- **b 的成功路径**：需要修复合成的窗口激活/焦点竞态后，在真实 Obsidian 里重测「菜单点击 → 填入 → 提示」；当前只验证到“失败可复现 + 手动前置条件下单进程粘贴可行”。
 - `xclip` 回退的生产可用性（Electron clipboard 优先，未做真实 Obsidian 内测试）。
 - 窗口最大化/缩放/多屏/DPI 变化下的相对坐标稳定性（实现有几何 sanity 与焦点/像素校验，但未逐一实测）。
-- 深链 `teleai-cowork://` 的唤起与带参行为（注册已确认，未实测）。
+- 深链 `teleai-cowork://` 的唤起与带参行为（注册已确认，未实测；本机实测唤起未抬起窗口）。
 - macOS / Windows 不外推。
