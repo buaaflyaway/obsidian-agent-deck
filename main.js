@@ -24994,7 +24994,7 @@ function syncModelGroups(settings, agentEnabled) {
 var import_fs16 = __toESM(require("fs"), 1);
 var import_os16 = __toESM(require("os"), 1);
 var import_path16 = __toESM(require("path"), 1);
-var HARNESS_DETECTION_VERSION = 1;
+var HARNESS_DETECTION_VERSION = 2;
 var norm4 = (p, homeDir) => String(p || "").replace(/^~(?=\/)/, homeDir);
 function defaultAppDirs(homeDir, platform, env) {
   if (platform === "darwin") return ["/Applications", import_path16.default.join(homeDir, "Applications")];
@@ -35868,6 +35868,10 @@ var AgentDeckPlugin = class extends import_obsidian21.Plugin {
         mode: data?.agents ? "migrate" : "initial",
         detection: this.detectedHarnesses()
       });
+      this.saveSettings().catch(() => {
+      });
+    } else if (!(Number(data.harnessesDetected.version) >= HARNESS_DETECTION_VERSION)) {
+      applyHarnessDetection(this.settings, { mode: "redetect", detection: this.detectedHarnesses() });
       this.saveSettings().catch(() => {
       });
     } else if (data && !data.dshDefaultSeeded) {

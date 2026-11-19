@@ -11,7 +11,10 @@ import {
 } from "./cursor-sessions.js";
 import { grokBotDataDir, grokBotPersistenceDir } from "./grok-bot-sessions.js";
 
-export const HARNESS_DETECTION_VERSION = 1;
+// 版本号跟着“探测规则本身”变：v2 补了 TeleAgent 的探测、并剔除了 cursor 里插件自建的目录。
+// 启动时只要 data.harnessesDetected.version 落后，就自动按新规则重跑一次，
+// 否则老用户会一直停在旧判定上（1.13.4 合并后 TeleAgent 被误关就是这么来的）。
+export const HARNESS_DETECTION_VERSION = 2;
 
 const norm = (p, homeDir) => String(p || "").replace(/^~(?=\/)/, homeDir);
 

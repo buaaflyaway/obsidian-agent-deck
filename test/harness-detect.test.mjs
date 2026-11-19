@@ -12,6 +12,7 @@ import {
   detectInstalledHarnesses,
   applyHarnessDetection,
   pickDefaultDelegateTarget,
+  HARNESS_DETECTION_VERSION,
 } from "../src/harness-detect.js";
 
 function mkTree(root, files = [], dirs = []) {
@@ -170,7 +171,7 @@ test("applyHarnessDetection handles initial install, legacy migration, and re-de
   assert.equal(fresh.autoLogAgents.claude, false);
   assert.equal(fresh.autoLogAgents.dsh, true);
   assert.equal(fresh.delegate.target, "dsh");
-  assert.equal(fresh.harnessesDetected.version, 1);
+  assert.equal(fresh.harnessesDetected.version, HARNESS_DETECTION_VERSION);
   assert.deepEqual(fresh.harnessesDetected.installed, ["workbuddy", "dsh"]);
 
   // 2. Legacy upgrade: preserves manual off on an installed agent (e.g. cursor), turns off uninstalled CC/Codex
@@ -389,7 +390,7 @@ test("AgentDeckPlugin.onload auto-detects harnesses off the startup barrier and 
     p.scanNow = async () => {};
     await p.onload();
 
-    assert.equal(p.settings.harnessesDetected?.version, 1);
+    assert.equal(p.settings.harnessesDetected?.version, HARNESS_DETECTION_VERSION);
     for (const id of AGENT_ORDER) {
       assert.equal(typeof p.settings.agents[id], "boolean");
     }
@@ -454,4 +455,15 @@ test("插件自建目录不能当成‘Agent 已安装’的证据（Cursor 回�
   const withCursor = scan();
   assert.equal(withCursor.detected.cursor, true);
   assert.deepEqual(withCursor.details.cursor.via, ["data"]);
+});
+
+test("探测规则升级后用 version 触发一次自动重跑（不是只在首次安装时检测）", async () => {
+  const settings = deepMerge(DEFAULTS, { agents: { teleagent: false } });
+  // 旧版本记录：装过但没跑过新规则
+  settings.harnessesDetected = { version: 1, at: 1, installed: [] };
+  const detection = { detected: Object.fromEntries(AGENT_ORDER.map((id) => [id, id === "teleagent"])), details: {}, installed: ["teleagent"], missing: [] };
+  applyHarnessDetection(settings, { mode: "redetect", detection });
+  assert.equal(settings.harnessesDetected.version, HARNESS_DETECTION_VERSION);
+  assert.equal(settings.agents.teleagent, true);
+  assert.ok(HARNESS_DETECTION_VERSION >= 2, "v2 才补上 TeleAgent 与自建目录剔除");
 });

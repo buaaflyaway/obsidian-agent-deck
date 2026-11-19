@@ -68,7 +68,7 @@ import { MEMORY_BOARD_TYPE, MemoryBoardView } from "./memory-board.js";
 import { MemoryReviewModal } from "./memory-review.js";
 import { MemoryCreateModal, MemoryImportModal } from "./memory-import.js";
 import { registerContextResolver } from "./harness.js";
-import { detectInstalledHarnesses, applyHarnessDetection, pickDefaultDelegateTarget } from "./harness-detect.js";
+import { detectInstalledHarnesses, applyHarnessDetection, pickDefaultDelegateTarget, HARNESS_DETECTION_VERSION } from "./harness-detect.js";
 import { ConversationModal, AcpPermissionModal } from "./conversation-modal.js";
 import { registerTaskAgentSuggest } from "./mention-suggest.js";
 import { t, currentLanguage } from "./i18n.js";
@@ -145,6 +145,11 @@ export default class AgentDeckPlugin extends Plugin {
         mode: data?.agents ? "migrate" : "initial",
         detection: this.detectedHarnesses(),
       });
+      this.saveSettings().catch(() => {});
+    } else if (!(Number(data.harnessesDetected.version) >= HARNESS_DETECTION_VERSION)) {
+      // 探测规则升级过（比如补了某个 Agent 的探测）：按新规则重跑一次，
+      // 否则用户会一直停在旧判定上，出现“明明装了却没出现/卸载了还在”的错觉。
+      applyHarnessDetection(this.settings, { mode: "redetect", detection: this.detectedHarnesses() });
       this.saveSettings().catch(() => {});
     } else if (data && !data.dshDefaultSeeded) {
       this.saveSettings().catch(() => {});
