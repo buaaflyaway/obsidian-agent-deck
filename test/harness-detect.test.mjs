@@ -401,3 +401,30 @@ test("AgentDeckPlugin.onload auto-detects harnesses off the startup barrier and 
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("TeleAgent is detected from its data root on Windows (client lives outside Program Files)", () => {
+  const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), "ad-teleagent-detect-"));
+  const appDir = fs.mkdtempSync(path.join(os.tmpdir(), "ad-teleagent-detect-app-"));
+  const binDir = fs.mkdtempSync(path.join(os.tmpdir(), "ad-teleagent-detect-bin-"));
+  const env = {
+    PATH: binDir,
+    APPDATA: path.join(homeDir, "AppData", "Roaming"),
+    LOCALAPPDATA: path.join(homeDir, "AppData", "Local"),
+    ProgramFiles: path.join(homeDir, "PF"),
+  };
+  const scan = () => detectInstalledHarnesses({ homeDir, appDirs: [appDir], pathEntries: [binDir], env, platform: "win32" });
+
+  assert.equal(scan().detected.teleagent, false, "empty machine must not report TeleAgent");
+
+  // 客户端装在 D:\Program Files\TeleClaw\... ，appDirs 探测不到；数据根在 ~/.local/share/TeleAgent。
+  mkTree(homeDir, [], [".local/share/TeleAgent/users/owner"]);
+  const hit = scan();
+  assert.equal(hit.detected.teleagent, true);
+  assert.deepEqual(hit.details.teleagent.via, ["data"]);
+  assert.ok(hit.installed.includes("teleagent"), "detection must include teleagent for settings sync");
+
+  // 回归点：detection 缺 teleagent 时 applyHarnessDetection 会把它写成 false（1.13.4 合并后曾发生）。
+  const settings = deepMerge(DEFAULTS, { agents: { teleagent: true } });
+  applyHarnessDetection(settings, { mode: "redetect", detection: hit });
+  assert.equal(settings.agents.teleagent, true);
+});

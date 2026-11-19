@@ -211,6 +211,20 @@ function buildSpecs({ homeDir, platform, env, appDirs }) {
         grokBotDataDir(homeDir, platform, env),
       ],
     },
+    // TeleAgent 只有桌面客户端，没有 CLI。安装位置不在系统应用目录里（默认 D:\Program Files\TeleClaw\TeleAgent），
+    // 靠 appDirs 探测不到，所以以数据根为准：内核与客户端都会在 ~/.local/share/TeleAgent 下建 users/ 与 runtimes/。
+    teleagent: {
+      binNames: ["teleagent"],
+      binPaths: [
+        ...appSub(path.join("TeleClaw", "TeleAgent", "TeleAgent.exe")),
+        path.join(homeDir, ".local", "share", "TeleAgent", "runtimes", "super-agent-code", "bin", "TeleAgent.exe"),
+      ],
+      apps: win ? ["TeleClaw/TeleAgent/TeleAgent.exe", "TeleAgent/TeleAgent.exe"] : [],
+      dataPaths: [
+        path.join(homeDir, ".local", "share", "TeleAgent"),
+        ...(win ? [path.join(env.LOCALAPPDATA || path.join(homeDir, "AppData", "Local"), "TeleAgent")] : []),
+      ],
+    },
   };
 }
 
