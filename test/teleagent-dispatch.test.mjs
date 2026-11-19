@@ -1,0 +1,111 @@
+// TeleAgent 一键派发模块的静态契约测试。
+// 这里刻意不驱动真实界面：脚本能否跑通是端到端验证的事，而“脚本里不该出现什么、
+// 关键判据有没有写进去”是纯字符串契约，适合用单元测试长期锁住。
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import {
+  DISPATCH_STAGES,
+  POWERSHELL_SCRIPT,
+  buildDispatchArgs,
+  dispatchTeleagentTask,
+  encodePayload,
+  normalizePayload,
+  parseDispatchOutput,
+} from '../src/teleagent-dispatch.js';
+
+test('normalizePayload 校验必填项并给节奏/超时默认值', () => {
+  assert.equal(normalizePayload({}).ok, false);
+  assert.equal(normalizePayload({ project: 'p', text: '   ' }).ok, false);
+  assert.equal(normalizePayload({ project: '  ', text: 'x' }).ok, false);
+
+  const ok = normalizePayload({ project: ' jifang_data_analysis ', text: '请发送你好' });
+  assert.equal(ok.ok, true);
+  assert.equal(ok.payload.project, 'jifang_data_analysis');
+  assert.equal(ok.payload.text, '请发送你好');
+  assert.equal(ok.payload.mode, 'default');
+  assert.equal(ok.payload.model, 'flagship');
+  assert.equal(ok.payload.paceMs, 25);
+  assert.equal(ok.payload.stepTimeoutMs, 15000);
+
+  // 超长文本要挡下来，避免一次注入几千字符把客户端卡住
+  assert.equal(normalizePayload({ project: 'p', text: 'x'.repeat(4001) }).ok, false);
+  // 换行必须原样保留（脚本用 Shift+Enter 注入），不能被规范化成空格
+  assert.equal(normalizePayload({ project: 'p', text: '第一行\n第二行' }).payload.text, '第一行\n第二行');
+  // 节奏上限兜底：过慢的注入会让用户等太久
+  assert.equal(normalizePayload({ project: 'p', text: 'x', paceMs: 9999 }).payload.paceMs, 200);
+});
+
+test('encodePayload 走 Base64，能原样还原含引号/换行/美元的文本', () => {
+  const payload = { project: 'p', text: '含\'引号\' 与 "双引号" 以及 $var 和 \n 换行', paceMs: 20, stepTimeoutMs: 1000 };
+  const back = JSON.parse(Buffer.from(encodePayload(payload), 'base64').toString('utf8'));
+  assert.equal(back.text, payload.text);
+  assert.equal(back.project, 'p');
+});
+
+test('buildDispatchArgs 把脚本与载荷分别作为参数传入', () => {
+  const args = buildDispatchArgs('C:/tmp/dispatch.ps1', { project: 'p', text: 'x' });
+  assert.deepEqual(args.slice(0, 6), ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', 'C:/tmp/dispatch.ps1']);
+  assert.equal(args[6], '-PayloadB64');
+  const decoded = JSON.parse(Buffer.from(args[7], 'base64').toString('utf8'));
+  assert.equal(decoded.project, 'p');
+});
+
+test('脚本不得回退到 ValuePattern.SetValue（实测只改 DOM，不会让“运行”变可用）', () => {
+  assert.equal(POWERSHELL_SCRIPT.includes('SetValue'), false);
+  // 反证：正确路径是 SetFocus + SendInput 的 Unicode 注入
+  assert.ok(POWERSHELL_SCRIPT.includes('TypeChar'));
+  assert.ok(POWERSHELL_SCRIPT.includes('0x0004'));
+});
+
+test('脚本保留三条关键判据：模式/模型只校验不修改、提交前看 IsEnabled', () => {
+  for (const marker of ['默认权限', '旗舰', 'SelectionItemPattern', 'TogglePattern', 'IsEnabled', 'InvokePattern', 'ExpandCollapsePattern']) {
+    assert.ok(POWERSHELL_SCRIPT.includes(marker), `脚本缺少判据：${marker}`);
+  }
+  // 校验失败要中止，而不是替用户改设置（设置属于用户偏好）
+  assert.ok(POWERSHELL_SCRIPT.includes("Fail 'mode'"));
+  assert.ok(POWERSHELL_SCRIPT.includes("Fail 'model'"));
+});
+
+test('脚本不含 JS 插值标记，避免模板字符串把 PowerShell 变量吃掉', () => {
+  const marker = String.fromCharCode(36, 123); // ${
+  assert.equal(POWERSHELL_SCRIPT.includes(marker), false);
+  // 同时不能出现反引号（PowerShell 的转义符，也是 JS 模板字符串的定界符）
+  assert.equal(POWERSHELL_SCRIPT.includes('`'), false);
+});
+
+test('每个失败阶段名都在 DISPATCH_STAGES 里，前端可以按 stage 定位卡点', () => {
+  const emitted = [...POWERSHELL_SCRIPT.matchAll(/Fail '([a-z]+)'/g)].map((m) => m[1]);
+  assert.ok(emitted.length >= 6);
+  for (const stage of new Set(emitted)) assert.ok(DISPATCH_STAGES.includes(stage), `未登记的阶段：${stage}`);
+});
+
+test('parseDispatchOutput 只认最后一条可解析结果，前面有噪声也不影响', () => {
+  const noisy = ['警告：某依赖缺失', '{"ok":false,"stage":"attach"}', '{"ok":true,"stage":"sent","project":"p"}'].join('\r\n');
+  assert.deepEqual(parseDispatchOutput(noisy), { ok: true, stage: 'sent', project: 'p' });
+  assert.equal(parseDispatchOutput('完全不是 JSON'), null);
+  assert.equal(parseDispatchOutput(''), null);
+});
+
+test('非 Windows 直接返回 platform，不启动任何子进程', async () => {
+  let spawned = 0;
+  const result = await dispatchTeleagentTask(
+    { project: 'p', text: 'x' },
+    { platform: 'darwin', spawn: () => { spawned += 1; throw new Error('不该被调用'); } },
+  );
+  assert.equal(result.ok, false);
+  assert.equal(result.stage, 'platform');
+  assert.equal(spawned, 0);
+});
+
+test('载荷不合法时返回 input，不写临时脚本', async () => {
+  let wrote = 0;
+  const fakeFs = {
+    mkdtempSync: () => { throw new Error('不该创建临时目录'); },
+    writeFileSync: () => { wrote += 1; },
+    rmSync: () => {},
+  };
+  const result = await dispatchTeleagentTask({ project: 'p', text: '' }, { platform: 'win32', fs: fakeFs });
+  assert.equal(result.ok, false);
+  assert.equal(result.stage, 'input');
+  assert.equal(wrote, 0);
+});

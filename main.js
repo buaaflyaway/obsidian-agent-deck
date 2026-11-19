@@ -1414,6 +1414,16 @@ var dialogs_default = {
   "\u53D1\u9001\u540E\u6253\u5F00\u5BF9\u8BDD\uFF0C\u5728\u539F\u4F1A\u8BDD\u4E2D\u7EE7\u7EED\u8FFD\u95EE\u3002": "Opens the conversation after sending; keep asking in the same session.",
   "\u5728\u684C\u9762\u5BA2\u6237\u7AEF\u4E2D\u804A": "Chat in the desktop app",
   "\u590D\u5236\u4EFB\u52A1\u5E76\u6253\u5F00\u5BA2\u6237\u7AEF\uFF0C\u7B49\u5F85\u4F60\u7C98\u8D34\u53D1\u9001\u3002": "Copies the task and opens the client; paste it and send from there.",
+  "\u6D3E\u53D1\u5230 TeleAgent\uFF08\u81EA\u52A8\u586B\u5199\u5E76\u53D1\u9001\uFF09": "Dispatch to TeleAgent (type and send for me)",
+  "\u8FD9\u4E2A\u4EFB\u52A1\u6CA1\u6709\u767B\u8BB0\u8FC7\u9879\u76EE\u76EE\u5F55\uFF0C\u5148\u5728\u8BBE\u7F6E\u91CC\u767B\u8BB0\u9879\u76EE\u6587\u4EF6\u5939": "This task has no registered project folder; register one in settings first.",
+  "\u6CA1\u6709\u8BC6\u522B\u5230\u9879\u76EE\u540D\uFF0C\u5DF2\u9000\u56DE\u590D\u5236\u4EA4\u63A5": "No project name was recognized; fell back to the copy-and-paste handoff.",
+  "\u5DF2\u6D3E\u53D1\u5230 TeleAgent \xB7 {project}": "Dispatched to TeleAgent \xB7 {project}",
+  "\u6D3E\u53D1\u5931\u8D25\uFF08{stage}\uFF09\uFF1A{error}": "Dispatch failed ({stage}): {error}",
+  "\u7F3A\u5C11\u9879\u76EE\u540D\uFF08project\uFF09": "Missing project name (project)",
+  "\u7F3A\u5C11\u8981\u6D3E\u53D1\u7684\u6587\u672C\uFF08text\uFF09": "Missing text to dispatch (text)",
+  "\u6587\u672C\u8D85\u8FC7 {n} \u5B57\u4E0A\u9650": "Text exceeds the {n}-character limit",
+  "UI Automation \u6D3E\u53D1\u53EA\u5728 Windows \u53EF\u7528": "UI Automation dispatch is only available on Windows",
+  "\u6D3E\u53D1\u8D85\u65F6\uFF08{ms}ms\uFF09": "Dispatch timed out ({ms} ms)",
   "\u5EFA\u7ACB\u4F1A\u8BDD\u540E\u6253\u5F00 Harness\uFF1B\u5F53\u524D\u8F6E\u7ED3\u675F\u540E\u5728\u4FA7\u680F\u9009\u62E9\u540C\u4E00\u4F1A\u8BDD\u7EE7\u7EED\u3002": "Starts the session, then opens Harness; when this turn ends, pick the same session in the sidebar to continue.",
   "\u5148\u6267\u884C\u9996\u8F6E\uFF0C\u7ED3\u675F\u540E\u6253\u5F00\u684C\u9762\u4E2D\u7684\u540C\u4E00\u4F1A\u8BDD\uFF1B\u9996\u8F6E\u671F\u95F4\u907F\u514D\u4E24\u8FB9\u540C\u65F6\u53D1\u9001\u3002": "Runs the first turn, then opens the same session on the desktop; avoid sending from both sides during that turn.",
   "\u540E\u53F0\u6267\u884C": "Run in background",
@@ -2988,8 +2998,8 @@ function formatSummaryLinks(raw, format = (text) => text) {
   const encode = (c) => c === "(" ? "%28" : c === ")" ? "%29" : encodeURIComponent(c);
   const target = (address2) => {
     if (/^(?:https?|file):/i.test(address2)) return address2.replace(/[()\s]/g, encode);
-    const path17 = address2.replace(/^~(?=\/)/, import_os.default.homedir()).replace(/\\/g, "/");
-    return (path17.startsWith("/") ? "file://" : "file:///") + path17.replace(/[()\s?#]/g, encode);
+    const path18 = address2.replace(/^~(?=\/)/, import_os.default.homedir()).replace(/\\/g, "/");
+    return (path18.startsWith("/") ? "file://" : "file:///") + path18.replace(/[()\s?#]/g, encode);
   };
   const address = (value) => /^(?:https?:\/\/|file:\/\/|[a-z]:[\\/]|~?\/)/i.test(value);
   const longPath = (value) => value.length >= 40 || /^(?:[a-z]:[\\/]|~\/|\/(?:Users|home|tmp|var|workspace|mnt|Volumes)\/)/i.test(value);
@@ -4906,9 +4916,9 @@ function squeezeBlank(text) {
 // src/journal-archive.js
 var ARCHIVE_TITLE = "# \u5DF2\u5B8C\u6210\u7684 AI \u4EFB\u52A1";
 function archivePath(value) {
-  const path17 = String(value || "").trim().replace(/\\/g, "/");
-  if (!path17 || path17.startsWith("/") || /^[a-z]:/i.test(path17) || path17.split("/").some((x) => !x || x === "." || x === "..") || !path17.endsWith(".md")) throw new Error(t("\u5F52\u6863\u4F4D\u7F6E\u5FC5\u987B\u662F\u5E93\u5185\u7684 .md \u6587\u4EF6\u8DEF\u5F84"));
-  return path17;
+  const path18 = String(value || "").trim().replace(/\\/g, "/");
+  if (!path18 || path18.startsWith("/") || /^[a-z]:/i.test(path18) || path18.split("/").some((x) => !x || x === "." || x === "..") || !path18.endsWith(".md")) throw new Error(t("\u5F52\u6863\u4F4D\u7F6E\u5FC5\u987B\u662F\u5E93\u5185\u7684 .md \u6587\u4EF6\u8DEF\u5F84"));
+  return path18;
 }
 function archiveDate(file) {
   const name = String(file?.basename || file?.path || "");
@@ -5002,8 +5012,8 @@ function mergeArchive(text, { date, blocks = [], turns = /* @__PURE__ */ new Map
   const out = renderArchive(archive);
   return crlf ? out.replace(/\n/g, "\r\n") : out;
 }
-async function ensureFolders(vault, path17) {
-  const parts = path17.split("/");
+async function ensureFolders(vault, path18) {
+  const parts = path18.split("/");
   parts.pop();
   let folder = "";
   for (const part of parts) {
@@ -5011,8 +5021,8 @@ async function ensureFolders(vault, path17) {
     if (!vault.getAbstractFileByPath(folder)) await vault.createFolder(folder);
   }
 }
-async function archiveCompletedTo(plugin, file, base, plan, { path: path17, order = "prepend" } = {}) {
-  const targetPath = archivePath(path17);
+async function archiveCompletedTo(plugin, file, base, plan, { path: path18, order = "prepend" } = {}) {
+  const targetPath = archivePath(path18);
   if (targetPath === file.path) throw new Error(t("\u5F52\u6863\u6587\u4EF6\u4E0D\u80FD\u4E0E\u5F53\u524D\u65E5\u8BB0\u76F8\u540C"));
   const blocks = (plan.done || []).filter((entry) => entry.ai);
   if (!blocks.length) throw new Error(t("\u6CA1\u6709\u53EF\u5F52\u6863\u7684 AI \u4EFB\u52A1"));
@@ -7190,8 +7200,8 @@ function ingestCodexLine(ctx, line, fc, touched) {
     fc.sid = p.id || fc.sid;
     fc.cwd = p.cwd || fc.cwd;
     fc.app = p.originator || fc.app || "codex";
-    const spawn6 = p.source && typeof p.source === "object" && p.source.subagent && p.source.subagent.thread_spawn;
-    const parent = p.parent_thread_id || spawn6 && spawn6.parent_thread_id || "";
+    const spawn7 = p.source && typeof p.source === "object" && p.source.subagent && p.source.subagent.thread_spawn;
+    const parent = p.parent_thread_id || spawn7 && spawn7.parent_thread_id || "";
     if (parent && parent !== fc.sid) {
       fc.parentSid = String(parent);
       usage.noteMeta(fc, fc.sid, { parentSid: fc.parentSid });
@@ -10459,25 +10469,25 @@ function buildDiagnosticReport({
 
 // src/note-updates.js
 var queues = /* @__PURE__ */ new WeakMap();
-function serializeNote(plugin, path17, task) {
+function serializeNote(plugin, path18, task) {
   let pending = queues.get(plugin);
   if (!pending) queues.set(plugin, pending = /* @__PURE__ */ new Map());
-  const next = (pending.get(path17) || Promise.resolve()).catch(() => {
+  const next = (pending.get(path18) || Promise.resolve()).catch(() => {
   }).then(task);
-  pending.set(path17, next);
+  pending.set(path18, next);
   return next.finally(() => {
-    if (pending.get(path17) === next) pending.delete(path17);
+    if (pending.get(path18) === next) pending.delete(path18);
   });
 }
-function updateNote(plugin, path17, transform) {
-  return serializeNote(plugin, path17, async () => {
-    while (!plugin._unloaded && plugin.viewForPath?.(path17)?.editor.cm?.composing) {
+function updateNote(plugin, path18, transform) {
+  return serializeNote(plugin, path18, async () => {
+    while (!plugin._unloaded && plugin.viewForPath?.(path18)?.editor.cm?.composing) {
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
     if (plugin._unloaded) return;
-    const known = typeof plugin.app?.vault?.getAbstractFileByPath === "function" ? plugin.app.vault.getAbstractFileByPath(path17) : void 0;
+    const known = typeof plugin.app?.vault?.getAbstractFileByPath === "function" ? plugin.app.vault.getAbstractFileByPath(path18) : void 0;
     if (known === null) return;
-    const view2 = plugin.viewForPath?.(path17);
+    const view2 = plugin.viewForPath?.(path18);
     if (view2 && (!view2.getMode || view2.getMode() === "source")) {
       const before2 = view2.editor.getValue();
       const next2 = transform(before2);
@@ -10485,15 +10495,15 @@ function updateNote(plugin, path17, transform) {
       if (change) view2.editor.transaction({ changes: [change] });
       return;
     }
-    const file = plugin.app?.vault?.getAbstractFileByPath(path17);
+    const file = plugin.app?.vault?.getAbstractFileByPath(path18);
     if (file && plugin.app.vault.process) {
       await plugin.app.vault.process(file, transform);
       return;
     }
-    const before = plugin.readNote ? await plugin.readNote(path17) : await plugin.app.vault.read(file);
+    const before = plugin.readNote ? await plugin.readNote(path18) : await plugin.app.vault.read(file);
     const next = transform(before);
     if (next !== before) {
-      if (plugin.writeNote) await plugin.writeNote(path17, next);
+      if (plugin.writeNote) await plugin.writeNote(path18, next);
       else await plugin.app.vault.modify(file, next);
     }
   });
@@ -11245,7 +11255,7 @@ async function saveBackgroundAnswer(plugin, job, round) {
   const n = round.n || 1, files = job.backgroundFiles || (job.backgroundFiles = {}), prior = files[n];
   const hash4 = (text) => (0, import_crypto7.createHash)("sha256").update(text).digest("hex");
   const suffix = hash4(job.sessionId || job.id).slice(0, 10);
-  const path17 = prior?.path || `Agent Deck/Answers/${name}-${suffix}-${n}.md`;
+  const path18 = prior?.path || `Agent Deck/Answers/${name}-${suffix}-${n}.md`;
   const body = `# ${title}
 
 ## \u95EE\u9898
@@ -11260,14 +11270,14 @@ ${reply}
   for (const folder of ["Agent Deck", "Agent Deck/Answers"]) await serializeNote(plugin, folder, async () => {
     if (!vault.getAbstractFileByPath(folder)) await vault.createFolder(folder);
   });
-  await serializeNote(plugin, path17, async () => vault.getAbstractFileByPath(path17) || await vault.create(path17, body));
-  await updateNote(plugin, path17, (current) => {
+  await serializeNote(plugin, path18, async () => vault.getAbstractFileByPath(path18) || await vault.create(path18, body));
+  await updateNote(plugin, path18, (current) => {
     if (current === body) return current;
     if (!prior || hash4(current) !== prior.hash) throw new Error(t("\u95EE\u7B54\u6587\u4EF6\u5DF2\u88AB\u624B\u52A8\u4FEE\u6539\uFF0C\u5DF2\u4FDD\u7559\u539F\u6587\uFF0C\u8BF7\u53E6\u5B58\u540E\u91CD\u8BD5"));
     return body;
   });
-  files[n] = { path: path17, hash: hash4(body) };
-  return `\u{1F4C4} [[${path17}|\u5B8C\u6574\u95EE\u7B54]]`;
+  files[n] = { path: path18, hash: hash4(body) };
+  return `\u{1F4C4} [[${path18}|\u5B8C\u6574\u95EE\u7B54]]`;
 }
 function clearBackgroundPending(text, job, round) {
   const markers = [sessionMarker("summary-pending", job.sessionId, round), `<!-- ad-summary-pending:${job.sessionId}:${round} -->`];
@@ -11748,6 +11758,388 @@ function mentionSuggestions(plugin, query) {
   }
   if (parts.length === 3 && plugin.modelsFor(agent).some((m) => m.id === parts[1])) return (EFFORTS[agent] || []).filter((e) => e.id.startsWith(parts[2])).map((e) => ({ value: `${agent}/${parts[1]}/${e.id}`, label: e.label, hint: e.hint }));
   return [];
+}
+
+// src/teleagent-dispatch.js
+var import_node_child_process = require("node:child_process");
+var import_node_fs = __toESM(require("node:fs"), 1);
+var import_node_os = __toESM(require("node:os"), 1);
+var import_node_path = __toESM(require("node:path"), 1);
+var MAX_TEXT = 4e3;
+function normalizePayload(payload, options = {}) {
+  const raw = payload || {};
+  const project = String(raw.project || "").trim();
+  const text = String(raw.text || "");
+  if (!project) return { ok: false, error: t("\u7F3A\u5C11\u9879\u76EE\u540D\uFF08project\uFF09") };
+  if (!text.trim()) return { ok: false, error: t("\u7F3A\u5C11\u8981\u6D3E\u53D1\u7684\u6587\u672C\uFF08text\uFF09") };
+  if (text.length > MAX_TEXT) return { ok: false, error: t("\u6587\u672C\u8D85\u8FC7 {n} \u5B57\u4E0A\u9650", { n: MAX_TEXT }) };
+  const paceMs = Number(raw.paceMs || options.paceMs || 25);
+  const stepTimeoutMs = Number(raw.stepTimeoutMs || options.stepTimeoutMs || 15e3);
+  return {
+    ok: true,
+    payload: {
+      project,
+      text,
+      mode: String(raw.mode || "default"),
+      model: String(raw.model || "flagship"),
+      paceMs: Number.isFinite(paceMs) && paceMs > 0 ? Math.min(paceMs, 200) : 25,
+      stepTimeoutMs: Number.isFinite(stepTimeoutMs) && stepTimeoutMs > 0 ? stepTimeoutMs : 15e3
+    }
+  };
+}
+function encodePayload(payload) {
+  return Buffer.from(JSON.stringify(payload), "utf8").toString("base64");
+}
+function buildDispatchArgs(scriptPath, payload) {
+  return [
+    "-NoProfile",
+    "-NonInteractive",
+    "-ExecutionPolicy",
+    "Bypass",
+    "-File",
+    scriptPath,
+    "-PayloadB64",
+    typeof payload === "string" ? payload : encodePayload(payload)
+  ];
+}
+var POWERSHELL_SCRIPT = `param([Parameter(Mandatory=$true)][string]$PayloadB64)
+$ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
+
+function Send-Result($o) { ($o | ConvertTo-Json -Compress -Depth 6) }
+
+function Fail($stage, $error) {
+  Send-Result @{ ok = $false; stage = $stage; error = $error }
+  exit 2
+}
+
+$json = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($PayloadB64))
+$payload = $json | ConvertFrom-Json
+$project = [string]$payload.project
+$text = [string]$payload.text
+$paceMs = [int]$payload.paceMs
+$stepMs = [int]$payload.stepTimeoutMs
+if ($paceMs -le 0) { $paceMs = 25 }
+if ($stepMs -le 0) { $stepMs = 15000 }
+
+Add-Type -AssemblyName UIAutomationClient
+Add-Type -AssemblyName UIAutomationTypes
+$AE = [System.Windows.Automation.AutomationElement]
+$TS = [System.Windows.Automation.TreeScope]
+$CT = [System.Windows.Automation.ControlType]
+$COND = [System.Windows.Automation.Condition]
+
+Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+public class AdInput {
+  [StructLayout(LayoutKind.Sequential)] struct INPUT { public int type; public Union u; }
+  [StructLayout(LayoutKind.Explicit)] struct Union { [FieldOffset(0)] public MOUSEINPUT mi; [FieldOffset(0)] public KEYBDINPUT ki; }
+  [StructLayout(LayoutKind.Sequential)] struct MOUSEINPUT { public int dx; public int dy; public uint mouseData; public uint flags; public uint time; public IntPtr extra; }
+  [StructLayout(LayoutKind.Sequential)] struct KEYBDINPUT { public ushort vk; public ushort scan; public uint flags; public uint time; public IntPtr extra; }
+  [DllImport("user32.dll", SetLastError = true)] static extern uint SendInput(uint n, INPUT[] p, int cb);
+  [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
+  [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+  [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h, int c);
+  static void Key(ushort vk, ushort scan, uint flags) {
+    INPUT[] a = new INPUT[1];
+    a[0].type = 1;
+    a[0].u.ki.vk = vk;
+    a[0].u.ki.scan = scan;
+    a[0].u.ki.flags = flags;
+    SendInput(1, a, Marshal.SizeOf(typeof(INPUT)));
+  }
+  public static void TypeChar(char c) { Key(0, (ushort)c, 0x0004); Key(0, (ushort)c, 0x0006); }
+  public static void ShiftEnter() { Key(0x10, 0, 0); Key(0x0D, 0, 0); Key(0x0D, 0, 0x0002); Key(0x10, 0, 0x0002); }
+}
+'@
+
+function Find-First($root, $ct) {
+  $c = New-Object System.Windows.Automation.PropertyCondition($AE::ControlTypeProperty, $ct)
+  return $root.FindFirst($TS::Descendants, $c)
+}
+
+function Find-Name($root, $ct, $name) {
+  $c = New-Object System.Windows.Automation.AndCondition(
+    (New-Object System.Windows.Automation.PropertyCondition($AE::ControlTypeProperty, $ct)),
+    (New-Object System.Windows.Automation.PropertyCondition($AE::NameProperty, $name))
+  )
+  return $root.FindFirst($TS::Descendants, $c)
+}
+
+function Find-All($root, $ct) {
+  $c = New-Object System.Windows.Automation.PropertyCondition($AE::ControlTypeProperty, $ct)
+  return $root.FindAll($TS::Descendants, $c)
+}
+
+# React \u662F\u5206\u6279\u6E32\u67D3\u7684\uFF1A\u8F93\u5165\u6846\u5148\u51FA\u73B0\u3001\u5DE5\u5177\u6761\u4E0E\u6807\u7B7E\u540E\u51FA\u73B0\uFF0C\u5355\u6B21\u67E5\u627E\u4F1A\u8BEF\u5224\u201C\u4E0D\u5B58\u5728\u201D\uFF0C
+# \u6240\u4EE5\u6BCF\u4E2A\u5173\u952E\u63A7\u4EF6\u90FD\u8981\u5E26\u8D85\u65F6\u91CD\u8BD5\uFF0C\u800C\u4E0D\u662F\u67E5\u4E00\u6B21\u5C31 Fail\u3002
+function Wait-Name($root, $ct, $name, $timeoutMs) {
+  $deadline = [DateTime]::UtcNow.AddMilliseconds($timeoutMs)
+  while ([DateTime]::UtcNow -lt $deadline) {
+    $el = Find-Name $root $ct $name
+    if ($el -ne $null) { return $el }
+    Start-Sleep -Milliseconds 250
+  }
+  return $null
+}
+
+# \u5C55\u5F00/\u6536\u8D77\u5FC5\u987B\u5E42\u7B49\uFF1A\u70B9\u4E2D\u4E0B\u62C9\u6761\u76EE\u540E\u6D6E\u5C42\u4F1A\u81EA\u5DF1\u5173\u6389\uFF0C\u6B64\u65F6\u518D Collapse \u4F1A\u629B
+# \u201COperation is not valid due to the current state of the object\u201D\uFF0C\u6574\u6761\u6D41\u7A0B\u5C31\u88AB\u8FD9\u4E00\u53E5\u6253\u65AD\u3002
+function Safe-Expand($el) {
+  try {
+    $ec = $el.GetCurrentPattern([System.Windows.Automation.ExpandCollapsePattern]::Pattern)
+    if ($ec.Current.ExpandCollapseState -ne [System.Windows.Automation.ExpandCollapseState]::Expanded) { $ec.Expand() }
+  } catch { }
+}
+
+function Safe-Collapse($el) {
+  try {
+    $ec = $el.GetCurrentPattern([System.Windows.Automation.ExpandCollapsePattern]::Pattern)
+    if ($ec.Current.ExpandCollapseState -ne [System.Windows.Automation.ExpandCollapseState]::Collapsed) { $ec.Collapse() }
+  } catch { }
+}
+
+function Get-Rect($el) { return $el.Current.BoundingRectangle }
+
+# 1) \u627E\u4E3B\u7A97\u53E3\uFF1A\u6309\u8FDB\u7A0B\u679A\u4E3E\u9876\u5C42\u7A97\u53E3\uFF0C\u6807\u9898\u4EE5 TeleAgent \u5F00\u5934\uFF08\u5BA0\u7269\u7A97\u201C\u5C0F\u8C46\u5B50\u201D\u662F\u540C\u4E00\u8FDB\u7A0B\u7684\u53E6\u4E00\u7A97\u53E3\uFF0C\u8981\u6392\u9664\uFF09
+$main = $null
+for ($i = 0; $i -lt 20; $i++) {
+  $pids = @(Get-Process -Name 'TeleAgent' -ErrorAction SilentlyContinue | ForEach-Object { $_.Id })
+  if ($pids.Count -gt 0) {
+    $wins = $AE::RootElement.FindAll($TS::Children, $COND::TrueCondition)
+    for ($k = 0; $k -lt $wins.Count; $k++) {
+      $w = $wins.Item($k)
+      if (($pids -contains $w.Current.ProcessId) -and ($w.Current.Name -like 'TeleAgent*')) { $main = $w }
+    }
+  }
+  if ($main -ne $null) {
+    $doc = $main.FindFirst($TS::Descendants, (New-Object System.Windows.Automation.PropertyCondition($AE::AutomationIdProperty, 'RootWebArea')))
+    if ($doc -ne $null) { Start-Sleep -Milliseconds 300; $doc = $main.FindFirst($TS::Descendants, (New-Object System.Windows.Automation.PropertyCondition($AE::AutomationIdProperty, 'RootWebArea'))) }
+    if ($doc -ne $null) { break }
+  }
+  Start-Sleep -Milliseconds 500
+}
+if ($main -eq $null) { Fail 'attach' '\u627E\u4E0D\u5230 TeleAgent \u4E3B\u7A97\u53E3\uFF08\u5BA2\u6237\u7AEF\u6CA1\u5F00\u6216\u65E0\u969C\u788D\u6811\u6CA1\u5C31\u7EEA\uFF09' }
+
+# 2) \u70B9\u4FA7\u680F\u300C\u65B0\u5EFA\u4EFB\u52A1\u300D\uFF1A\u540C\u540D\u6309\u94AE\u5728\u6BCF\u7EC4\u4EFB\u52A1\u884C\u4E0A\u4E5F\u6709\uFF0C\u53D6 Y \u6700\u5C0F\u7684\u90A3\u4E2A\uFF08\u4FA7\u680F\u9876\u90E8\u7684\u5168\u5C40\u5165\u53E3\uFF09
+$newTask = $null
+$minY = 1e9
+$btns = Find-All $main $CT::Button
+for ($i = 0; $i -lt $btns.Count; $i++) {
+  $b = $btns.Item($i)
+  if ($b.Current.Name -eq '\u65B0\u5EFA\u4EFB\u52A1') {
+    $r = Get-Rect $b
+    if ($r.Width -gt 0 -and $r.Y -lt $minY) { $newTask = $b; $minY = $r.Y }
+  }
+}
+if ($newTask -eq $null) { Fail 'newtask' '\u4FA7\u680F\u6CA1\u6709\u53EF\u89C1\u7684\u300C\u65B0\u5EFA\u4EFB\u52A1\u300D' }
+$newTask.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+
+# 3) \u7B49\u64B0\u5199\u9762\u677F\uFF1A\u8F93\u5165\u6846\u51FA\u73B0
+$edit = $null
+for ($i = 0; $i -lt 40; $i++) {
+  $edit = Find-First $main $CT::Edit
+  if ($edit -ne $null) { break }
+  Start-Sleep -Milliseconds 250
+}
+if ($edit -eq $null) { Fail 'composer' '\u64B0\u5199\u9762\u677F\u6CA1\u6709\u51FA\u73B0\uFF08\u627E\u4E0D\u5230\u8F93\u5165\u6846\uFF09' }
+
+# 4) \u9009\u9879\u76EE\uFF1A\u9879\u76EE\u9009\u62E9\u5668\u662F\u300C\u8FD0\u884C\u73AF\u5883\u300D\u6807\u7B7E\u53F3\u4FA7\u7684\u90A3\u4E2A ExpandCollapse \u6309\u94AE\uFF0C\u5C55\u5F00\u540E\u70B9\u540C\u540D\u6761\u76EE
+$label = Wait-Name $main $CT::Button '\u8FD0\u884C\u73AF\u5883' $stepMs
+if ($label -eq $null) { Fail 'project' '\u627E\u4E0D\u5230\u300C\u8FD0\u884C\u73AF\u5883\u300D\u9009\u62E9\u5668' }
+Start-Sleep -Milliseconds 400
+$labelRect = Get-Rect $label
+$selector = $null
+$expandables = Find-All $main $CT::Button
+for ($i = 0; $i -lt $expandables.Count; $i++) {
+  $b = $expandables.Item($i)
+  $pats = $b.GetSupportedPatterns() | ForEach-Object { $_.ProgrammaticName }
+  if ($pats -notcontains 'ExpandCollapsePatternIdentifiers.Pattern') { continue }
+  $r = Get-Rect $b
+  if ($r.Width -le 0) { continue }
+  if ([Math]::Abs($r.Y - $labelRect.Y) -lt 10 -and $r.X -gt $labelRect.X -and $r.X -lt $labelRect.Right + 400) { $selector = $b }
+}
+if ($selector -eq $null) { Fail 'project' '\u627E\u4E0D\u5230\u9879\u76EE\u9009\u62E9\u5668' }
+$selRect = Get-Rect $selector
+Safe-Expand $selector
+Start-Sleep -Milliseconds 800
+
+# \u4E0B\u62C9\u6D6E\u5C42\u91CC\u7684\u6761\u76EE\u4E0E\u4FA7\u680F\u6761\u76EE\u540C\u540D\uFF0C\u7528 X > 600\uFF08\u5185\u5BB9\u533A\u8D77\u70B9\uFF09\u7B5B\u6389\u4FA7\u680F\u90A3\u9897\uFF1B
+# \u9009\u62E9\u5668\u81EA\u8EAB\u7684 Name \u4E5F\u7B49\u4E8E\u5F53\u524D\u9879\u76EE\u540D\uFF0C\u518D\u6309 Y \u6392\u9664\u5B83\u81EA\u5DF1\uFF0C\u5426\u5219\u4F1A\u70B9\u5230\u53EA\u652F\u6301 ExpandCollapse \u7684\u6309\u94AE\u4E0A\u3002
+$target = $null
+$cands = Find-All $main $CT::Button
+for ($i = 0; $i -lt $cands.Count; $i++) {
+  $b = $cands.Item($i)
+  if ($b.Current.Name -ne $project) { continue }
+  $r = Get-Rect $b
+  if ($r.Width -le 0) { continue }
+  if ([Math]::Abs($r.Y - $selRect.Y) -lt 12) { continue }
+  if ($r.X -gt 600 -and $r.Y -gt 200) { $target = $b; break }
+}
+if ($target -eq $null) { Fail 'project' ('\u4E0B\u62C9\u91CC\u6CA1\u6709\u9879\u76EE\uFF1A' + $project) }
+$target.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+Start-Sleep -Milliseconds 800
+Safe-Collapse $selector
+if ($selector.Current.Name -ne $project) { Fail 'project' ('\u9879\u76EE\u56DE\u8BFB\u4E0D\u4E00\u81F4\uFF1A' + $selector.Current.Name) }
+
+# 5) \u6821\u9A8C\u6267\u884C\u6A21\u5F0F = \u9ED8\u8BA4\u6743\u9650\uFF08\u53EA\u8BFB\u6821\u9A8C\uFF0C\u4E0D\u66FF\u7528\u6237\u6539\u8BBE\u7F6E\uFF09
+$modeBtn = Wait-Name $main $CT::Button '\u6267\u884C\u6A21\u5F0F' $stepMs
+if ($modeBtn -eq $null) { Fail 'mode' '\u627E\u4E0D\u5230\u300C\u6267\u884C\u6A21\u5F0F\u300D' }
+Safe-Expand $modeBtn
+Start-Sleep -Milliseconds 600
+$radios = Find-All $main $CT::RadioButton
+$modeOk = $false
+for ($i = 0; $i -lt $radios.Count; $i++) {
+  $r = $radios.Item($i)
+  if ($r.Current.Name -like '\u9ED8\u8BA4\u6743\u9650*') {
+    $sel = $r.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern)
+    if ($sel.Current.IsSelected) { $modeOk = $true }
+  }
+}
+Safe-Collapse $modeBtn
+if (-not $modeOk) { Fail 'mode' '\u6267\u884C\u6A21\u5F0F\u4E0D\u662F\u300C\u9ED8\u8BA4\u6743\u9650\u300D\uFF0C\u5DF2\u4E2D\u6B62\uFF08\u4E0D\u6539\u7528\u6237\u8BBE\u7F6E\uFF09' }
+
+# 6) \u6821\u9A8C\u6A21\u578B = \u65D7\u8230\uFF08Toggle \u6309\u94AE\uFF0C\u771F\u5047\u770B ToggleState\uFF09
+$modelBtn = Wait-Name $main $CT::Button '\u9009\u62E9\u6A21\u578B' $stepMs
+if ($modelBtn -eq $null) { Fail 'model' '\u627E\u4E0D\u5230\u300C\u9009\u62E9\u6A21\u578B\u300D' }
+Safe-Expand $modelBtn
+Start-Sleep -Milliseconds 600
+$toggles = Find-All $main $CT::Button
+$modelOk = $false
+for ($i = 0; $i -lt $toggles.Count; $i++) {
+  $b = $toggles.Item($i)
+  if ($b.Current.Name -like '\u65D7\u8230*') {
+    $tp = $b.GetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern)
+    if ($tp.Current.ToggleState -eq [System.Windows.Automation.ToggleState]::On) { $modelOk = $true }
+  }
+}
+Safe-Collapse $modelBtn
+if (-not $modelOk) { Fail 'model' '\u6A21\u578B\u4E0D\u662F\u300C\u65D7\u8230\u300D\uFF0C\u5DF2\u4E2D\u6B62\uFF08\u4E0D\u6539\u7528\u6237\u8BBE\u7F6E\uFF09' }
+
+# 7) \u586B\u6587\u672C\uFF1A\u5FC5\u987B\u5148\u7F6E\u524D + SetFocus\uFF0C\u518D\u9010\u5B57\u7B26\u6CE8\u5165\uFF1B\u6362\u884C\u7528 Shift+Enter\uFF0C\u907F\u514D Enter \u76F4\u63A5\u63D0\u4EA4
+[void][AdInput]::ShowWindow([IntPtr]$main.Current.NativeWindowHandle, 9)
+[void][AdInput]::SetForegroundWindow([IntPtr]$main.Current.NativeWindowHandle)
+Start-Sleep -Milliseconds 400
+$edit.SetFocus()
+Start-Sleep -Milliseconds 300
+# \u6309\u884C\u6CE8\u5165\uFF1A\u884C\u5185\u9010\u5B57\u7B26 Unicode \u76F4\u51FA\uFF0C\u884C\u4E0E\u884C\u4E4B\u95F4\u7528 Shift+Enter\uFF08Enter \u4F1A\u76F4\u63A5\u63D0\u4EA4\uFF09
+$lines = $text -split "\r?
+"
+for ($li = 0; $li -lt $lines.Count; $li++) {
+  if ($li -gt 0) { [AdInput]::ShiftEnter(); Start-Sleep -Milliseconds $paceMs }
+  $chars = $lines[$li].ToCharArray()
+  for ($ci = 0; $ci -lt $chars.Length; $ci++) {
+    [AdInput]::TypeChar($chars[$ci])
+    Start-Sleep -Milliseconds $paceMs
+  }
+}
+Start-Sleep -Milliseconds 600
+
+$vp = $edit.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern)
+$shown = ([string]$vp.Current.Value).Replace([string][char]0xFEFF, '') -replace "\r", ''
+$expect = $text.Trim() -replace "\r", ''
+if ($shown.Trim() -ne $expect) { Fail 'typing' ('\u6CE8\u5165\u540E\u8BFB\u56DE\u4E0D\u4E00\u81F4\uFF0C\u8BFB\u5230 ' + $shown.Length + ' \u5B57') }
+
+# 8) \u63D0\u4EA4\uFF1A\u7B49\u5230\u300C\u8FD0\u884C\u300D\u53EF\u7528\u518D\u70B9\uFF0C\u8FD9\u662F\u201C\u8F93\u5165\u5DF2\u8FDB\u5165 React \u72B6\u6001\u201D\u7684\u552F\u4E00\u53EF\u9760\u4FE1\u53F7
+$runBtn = Wait-Name $main $CT::Button '\u8FD0\u884C' $stepMs
+if ($runBtn -eq $null) { Fail 'submit' '\u627E\u4E0D\u5230\u300C\u8FD0\u884C\u300D' }
+for ($i = 0; $i -lt 40; $i++) {
+  if ($runBtn.Current.IsEnabled) { break }
+  Start-Sleep -Milliseconds 250
+}
+if (-not $runBtn.Current.IsEnabled) { Fail 'submit' '\u300C\u8FD0\u884C\u300D\u4E00\u76F4\u4E0D\u53EF\u7528\uFF0C\u8F93\u5165\u53EF\u80FD\u6CA1\u88AB\u63A5\u53D7' }
+$runBtn.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+Start-Sleep -Milliseconds 1200
+
+Send-Result @{ ok = $true; stage = 'sent'; project = $project; chars = $text.Length }
+exit 0
+`;
+function parseDispatchOutput(stdout) {
+  const lines = String(stdout || "").split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
+  for (let i = lines.length - 1; i >= 0; i--) {
+    try {
+      const parsed = JSON.parse(lines[i]);
+      if (parsed && typeof parsed === "object" && "ok" in parsed) return parsed;
+    } catch {
+    }
+  }
+  return null;
+}
+function resolveShell(deps) {
+  if (deps.exe) return deps.exe;
+  return process.platform === "win32" ? "pwsh.exe" : "pwsh";
+}
+async function dispatchTeleagentTask(payload, deps = {}) {
+  const platform = deps.platform || process.platform;
+  if (platform !== "win32") {
+    return { ok: false, stage: "platform", error: t("UI Automation \u6D3E\u53D1\u53EA\u5728 Windows \u53EF\u7528") };
+  }
+  const normalized2 = normalizePayload(payload);
+  if (!normalized2.ok) return { ok: false, stage: "input", error: normalized2.error };
+  const fsMod = deps.fs || import_node_fs.default;
+  const pathMod3 = deps.path || import_node_path.default;
+  const tmpBase = deps.tmpdir || import_node_os.default.tmpdir();
+  const spawnFn = deps.spawn || import_node_child_process.spawn;
+  const timeoutMs = normalized2.payload.stepTimeoutMs * 3;
+  let dir = "";
+  try {
+    dir = fsMod.mkdtempSync(pathMod3.join(tmpBase, "ad-teleagent-dispatch-"));
+    const scriptPath = pathMod3.join(dir, "dispatch.ps1");
+    fsMod.writeFileSync(scriptPath, POWERSHELL_SCRIPT, "utf8");
+    const args = buildDispatchArgs(scriptPath, normalized2.payload);
+    const result = await new Promise((resolve) => {
+      let stdout = "";
+      let stderr = "";
+      let settled = false;
+      const done = (value) => {
+        if (!settled) {
+          settled = true;
+          resolve(value);
+        }
+      };
+      let child;
+      try {
+        child = spawnFn(resolveShell(deps), args, { windowsHide: true });
+      } catch (error) {
+        done({ ok: false, stage: "spawn", error: String(error && error.message || error) });
+        return;
+      }
+      const timer = setTimeout(() => {
+        try {
+          child.kill();
+        } catch {
+        }
+        done({ ok: false, stage: "timeout", error: t("\u6D3E\u53D1\u8D85\u65F6\uFF08{ms}ms\uFF09", { ms: timeoutMs }) });
+      }, timeoutMs);
+      child.stdout.on("data", (chunk) => {
+        stdout += chunk.toString();
+      });
+      child.stderr.on("data", (chunk) => {
+        stderr += chunk.toString();
+      });
+      child.on("error", (error) => {
+        clearTimeout(timer);
+        done({ ok: false, stage: "spawn", error: String(error && error.message || error) });
+      });
+      child.on("close", (code) => {
+        clearTimeout(timer);
+        const parsed = parseDispatchOutput(stdout);
+        if (parsed) return done(parsed);
+        done({ ok: false, stage: "protocol", error: (stderr || stdout || "").slice(-400) || `\u9000\u51FA\u7801 ${code}` });
+      });
+    });
+    return result;
+  } catch (error) {
+    return { ok: false, stage: "spawn", error: String(error && error.message || error) };
+  } finally {
+    if (dir) {
+      try {
+        fsMod.rmSync(dir, { recursive: true, force: true });
+      } catch {
+      }
+    }
+  }
 }
 
 // src/memory-query-core.js
@@ -14553,6 +14945,16 @@ ${source}`;
     this.copyText(resolved.prompt);
     await this.openAgentApp(agent);
     this.plugin.notice(t("\u{1F4CB} \u4EFB\u52A1\u5DF2\u590D\u5236\uFF0C\u7C98\u8D34\u5230 {agent} \u91CC\u53D1\u51FA", { agent: AGENTS[agent]?.name || agent }), 1e4);
+    if (opts.autoSend && agent === "teleagent" && process.platform === "win32") {
+      const project = String(opts.projectName || "").trim();
+      if (!project) {
+        this.plugin.notice(t("\u6CA1\u6709\u8BC6\u522B\u5230\u9879\u76EE\u540D\uFF0C\u5DF2\u9000\u56DE\u590D\u5236\u4EA4\u63A5"), 8e3);
+        return job;
+      }
+      const result = await dispatchTeleagentTask({ project, text: resolved.prompt });
+      if (result.ok) this.plugin.notice(t("\u5DF2\u6D3E\u53D1\u5230 TeleAgent \xB7 {project}", { project }), 6e3);
+      else this.plugin.notice(t("\u6D3E\u53D1\u5931\u8D25\uFF08{stage}\uFF09\uFF1A{error}", { stage: result.stage, error: String(result.error || "").slice(0, 120) }), 12e3);
+    }
     this.plugin.refreshUI();
     return job;
   }
@@ -14692,10 +15094,10 @@ ${source}`;
   }
   async writeLink(job, sid) {
     if (!this.C.writeLink) return;
-    const path17 = job.path;
+    const path18 = job.path;
     const existing = job.blockId || blockIdOf(job.lineText);
     const blockId = existing || (this.plugin.taskBlockId ? await this.plugin.taskBlockId(sid, job.agent, job.name) : makeBlockId(sid, job.agent, job.name));
-    await updateNote(this.plugin, path17, (text) => {
+    await updateNote(this.plugin, path18, (text) => {
       const lines = text.split("\n");
       let at = job.blockId ? lines.findIndex((l) => blockIdOf(l) === job.blockId) : -1;
       if (at < 0) at = lines.findIndex((l) => l === job.lineText);
@@ -15819,8 +16221,8 @@ var ViewToggleWidget = class extends import_view2.WidgetType {
       };
       if (this.plugin.openRecordViewMenu) {
         const info = view2.state.field?.(this.plugin.editorInfoField, false);
-        const path17 = info?.file?.path || "";
-        this.plugin.openRecordViewMenu(e, { path: path17, line: this.line, key: this.key, viewMode: this.viewMode, onSelect: select });
+        const path18 = info?.file?.path || "";
+        this.plugin.openRecordViewMenu(e, { path: path18, line: this.line, key: this.key, viewMode: this.viewMode, onSelect: select });
       } else {
         select(this.viewMode === "table" ? "outline" : "table");
       }
@@ -17473,7 +17875,7 @@ function isTerminalWorkerState(state = "") {
 }
 function createWorkbenchWave({
   id = "",
-  path: path17 = "",
+  path: path18 = "",
   parentBlockId = "",
   parentTitle = "",
   projectName: projectName2 = "",
@@ -17486,7 +17888,7 @@ function createWorkbenchWave({
   const now = Date.now();
   return {
     id: id || `wave-${now.toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
-    path: String(path17 || ""),
+    path: String(path18 || ""),
     parentBlockId: String(parentBlockId || ""),
     parentTitle: String(parentTitle || ""),
     projectName: String(projectName2 || ""),
@@ -17788,9 +18190,9 @@ function appendSubtasksToParentBlock(text = "", { parentBlockId = "", parentTitl
   lines.splice(insertAt, 0, ...inserted);
   return { text: lines.join("\n"), parentLine, addedLines };
 }
-function findActiveWaveForBoard(waves = {}, { path: path17 = "", parentBlockId = "", parentTitle = "" } = {}) {
+function findActiveWaveForBoard(waves = {}, { path: path18 = "", parentBlockId = "", parentTitle = "" } = {}) {
   const candidates = Object.values(waves || {}).filter((w) => {
-    if (!w || path17 && w.path !== path17) return false;
+    if (!w || path18 && w.path !== path18) return false;
     if (!["waiting", "running", "error"].includes(w.state)) return false;
     if (parentBlockId && w.parentBlockId && w.parentBlockId === parentBlockId) return true;
     if (parentTitle && w.parentTitle && cleanBoardCardTitle(w.parentTitle) === cleanBoardCardTitle(parentTitle)) return true;
@@ -19840,19 +20242,19 @@ function dndHandlers(plugin) {
       const sel = view2.state.selection.main;
       if (sel.empty) return false;
       const info = view2.state.field(plugin.editorInfoField, false);
-      const path17 = info && info.file && info.file.path;
-      if (!path17) return false;
+      const path18 = info && info.file && info.file.path;
+      if (!path18) return false;
       const n = view2.state.doc.lineAt(sel.from).number - 1;
-      plugin.noteDragItem({ path: path17, line: n, lineText: view2.state.doc.line(n + 1).text });
+      plugin.noteDragItem({ path: path18, line: n, lineText: view2.state.doc.line(n + 1).text });
       return false;
     }
   }));
 }
 var GripWidget = class extends import_view4.WidgetType {
-  constructor(plugin, path17, line, text) {
+  constructor(plugin, path18, line, text) {
     super();
     this.plugin = plugin;
-    this.path = path17;
+    this.path = path18;
     this.line = line;
     this.text = text;
   }
@@ -19905,10 +20307,10 @@ function sigFor(x) {
   return [x.kind, x.job && x.job.id, x.job && x.job.state, s && s.sid, s && s.state, s && s.step, s && s.turns, s && s.tokens, td && `${td.done}/${td.total}:${td.cur || ""}`, x.todo && `${x.todo.done}/${x.todo.total}`].join("|");
 }
 var PillWidget = class extends import_view4.WidgetType {
-  constructor(plugin, path17, line, info) {
+  constructor(plugin, path18, line, info) {
     super();
     this.plugin = plugin;
-    this.path = path17;
+    this.path = path18;
     this.line = line;
     this.info = info;
     this.sig = sigFor(info);
@@ -20153,10 +20555,10 @@ function paintLineProgress(el, info) {
   }
 }
 var LineProgressWidget = class extends import_view4.WidgetType {
-  constructor(plugin, path17, line, info) {
+  constructor(plugin, path18, line, info) {
     super();
     this.plugin = plugin;
-    this.path = path17;
+    this.path = path18;
     this.line = line;
     this.info = info;
     this.sig = JSON.stringify(info);
@@ -20223,10 +20625,10 @@ function saidHandlers(plugin) {
 function buildDecorations(view2, plugin) {
   const builder = new import_state3.RangeSetBuilder();
   const info = view2.state.field(plugin.editorInfoField, false);
-  const path17 = info && info.file && info.file.path;
-  if (!path17 || !plugin.settings.showEditorPills) return builder.finish();
+  const path18 = info && info.file && info.file.path;
+  if (!path18 || !plugin.settings.showEditorPills) return builder.finish();
   const doc = view2.state.doc;
-  const map = plugin.lineMap(path17, doc);
+  const map = plugin.lineMap(path18, doc);
   const seen = /* @__PURE__ */ new Set();
   const sel = view2.state.selection.main;
   const cursorLine = plugin._lastEditor === view2 && sel.empty ? doc.lineAt(sel.head).number - 1 : -1;
@@ -20238,7 +20640,7 @@ function buildDecorations(view2, plugin) {
       if (!seen.has(n)) {
         seen.add(n);
         const text = line.text;
-        const job = plugin.jobAtLine(path17, n, text);
+        const job = plugin.jobAtLine(path18, n, text);
         const session = map.sessionByParent.get(n) || null;
         if ((session || job?.sessionId) && plugin.nautilusOwnsLine(text, session || { sid: job.sessionId }, job?.destination !== "background")) {
           if (line.to >= to) break;
@@ -20264,16 +20666,16 @@ function buildDecorations(view2, plugin) {
         const boardState = plugin.taskBoardField ? view2.state.field(plugin.taskBoardField, false) : null;
         const isTopLevelAiParent = Boolean(displayState?.topLevelLines?.has(n) || boardState?.boardLines?.has(n));
         if (n === cursorLine && !isTopLevelAiParent && plugin.settings.dragGrip !== false && BULLET_RE.test(text) && (kwLine(text) || CONTEXT_RECORD_RE.test(text))) {
-          builder.add(line.to, line.to, import_view4.Decoration.widget({ widget: new GripWidget(plugin, path17, n, text), side: 1, block: false }));
+          builder.add(line.to, line.to, import_view4.Decoration.widget({ widget: new GripWidget(plugin, path18, n, text), side: 1, block: false }));
         }
         const prog = line.length < 2e3 && plugin.lineProgressInfo ? plugin.lineProgressInfo(text, map.lines, n, session, job) : null;
         if (!prog && typeof import_view4.Decoration.line === "function" && (RESULT_LINE_RE.test(text) || SUB_LINE_RE.test(text))) {
           builder.add(line.from, line.from, import_view4.Decoration.line({ class: "ad-said" }));
         }
         if (prog) {
-          builder.add(line.to, line.to, import_view4.Decoration.widget({ widget: new LineProgressWidget(plugin, path17, n, prog), side: 1, block: false }));
+          builder.add(line.to, line.to, import_view4.Decoration.widget({ widget: new LineProgressWidget(plugin, path18, n, prog), side: 1, block: false }));
         } else if (state && !isDoneLine(text)) {
-          const widget = new PillWidget(plugin, path17, n, state);
+          const widget = new PillWidget(plugin, path18, n, state);
           builder.add(line.to, line.to, import_view4.Decoration.widget({ widget, side: 1, block: false }));
         }
       }
@@ -21640,8 +22042,8 @@ function dateKey(date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 var isoDay = (key) => String(key).replace(/^(\d{4})\D(\d{2})\D(\d{2})$/, "$1-$2-$3");
-function dayFromNotePath(path17 = "") {
-  const m = /(\d{4})[-_/](\d{2})[-_/](\d{2})/.exec(String(path17 || ""));
+function dayFromNotePath(path18 = "") {
+  const m = /(\d{4})[-_/](\d{2})[-_/](\d{2})/.exec(String(path18 || ""));
   return m ? `${m[1]}-${m[2]}-${m[3]}` : "";
 }
 function shiftDay(key, n) {
@@ -21651,7 +22053,7 @@ function shiftDay(key, n) {
 function heatLevel(tokens, max) {
   return tokens > 0 ? Math.max(1, Math.min(4, Math.ceil(4 * Math.sqrt(tokens / Math.max(1, max))))) : 0;
 }
-function journalSources(text, path17, { autoState = null } = {}) {
+function journalSources(text, path18, { autoState = null } = {}) {
   const lines = text.split("\n"), fenced = fencedLines(lines), owners = ownersOf(lines, fenced), out = [];
   const seen = /* @__PURE__ */ new Set();
   const collectBlock = (owner) => {
@@ -21659,7 +22061,7 @@ function journalSources(text, path17, { autoState = null } = {}) {
     for (let p = owners[owner]; p >= 0; p = owners[p]) parents.unshift(lines[p]);
     const end = subtreeEnd(lines, owner);
     const own = lines.slice(owner, end).filter((_, n) => !fenced.has(owner + n) && (n === 0 || owners[owner + n] === owner));
-    return { path: path17, line: owner, blockId: blockIdOf(lines[owner]), text: [...parents, ...own].join("\n") };
+    return { path: path18, line: owner, blockId: blockIdOf(lines[owner]), text: [...parents, ...own].join("\n") };
   };
   for (let i = 0; i < lines.length; i++) {
     if (fenced.has(i)) continue;
@@ -22129,7 +22531,7 @@ var DashboardData = class {
     if (p.settings.doneArchivePath) paths.add(p.settings.doneArchivePath);
     const sources = /* @__PURE__ */ new Map();
     let unreadable = 0;
-    const files = [...paths].map((path17) => vault.getAbstractFileByPath(path17)).filter((f) => f?.extension === "md");
+    const files = [...paths].map((path18) => vault.getAbstractFileByPath(path18)).filter((f) => f?.extension === "md");
     for (let i = 0; i < files.length; i += 6) {
       await Promise.all(files.slice(i, i + 6).map(async (file) => {
         try {
@@ -22156,7 +22558,7 @@ var DashboardData = class {
       }));
       await new Promise((resolve) => setTimeout(resolve, 0));
     }
-    for (const path17 of this.cache.keys()) if (!paths.has(path17)) this.cache.delete(path17);
+    for (const path18 of this.cache.keys()) if (!paths.has(path18)) this.cache.delete(path18);
     const pages = vault.getMarkdownFiles().filter((f) => !paths.has(f.path) && !f.path.startsWith("Agent Deck/Conversations/") && !/^\d{4}[-_/]\d{2}[-_/]\d{2}$/.test(f.basename)).map((file) => {
       const aliases = metadata.getFileCache(file)?.frontmatter?.aliases;
       return { path: file.path, name: file.basename, aliases: typeof aliases === "string" ? [aliases] : Array.isArray(aliases) ? aliases.filter((a) => typeof a === "string") : [] };
@@ -23154,10 +23556,10 @@ function memoryAnchorId(target, text) {
   return "mem-" + (0, import_crypto12.createHash)("sha256").update(`${target}
 ${String(text || "").trim()}`).digest("hex").slice(0, 8);
 }
-function orderForReview(entries = [], { path: path17 = "", line = "", dir = "" } = {}) {
+function orderForReview(entries = [], { path: path18 = "", line = "", dir = "" } = {}) {
   const prefix = dir ? `${String(dir).replace(/\/+$/, "")}/` : "";
   let start = -1;
-  if (path17 && prefix && path17.startsWith(prefix)) start = entries.findIndex((e) => e.path === path17);
+  if (path18 && prefix && path18.startsWith(prefix)) start = entries.findIndex((e) => e.path === path18);
   if (start < 0 && line) start = entries.findIndex((e) => line.includes(`[[${e.path.replace(/\.md$/, "")}`));
   if (start <= 0) return entries.slice();
   return [...entries.slice(start), ...entries.slice(0, start)];
@@ -23518,12 +23920,12 @@ function dreamModelConfig(cfg = {}) {
     autoLogApiKey: apiKey || cfg.autoLogApiKey || ""
   };
 }
-function evidenceBlocks(text, path17, { aiOnly = false } = {}) {
+function evidenceBlocks(text, path18, { aiOnly = false } = {}) {
   const lines = text.split("\n"), blocks = [], stack = [], directAiOwners = /* @__PURE__ */ new Set();
   const fenced = fencedLines(lines), start = frontmatterEnd(lines);
   let block = null, nextItemId = 1;
   const flush = () => {
-    if (block?.text.trim() && !SEP_ONLY_RE.test(block.text)) blocks.push({ ...block, key: hash3(path17 + "\n" + block.kind + "\n" + block.text) });
+    if (block?.text.trim() && !SEP_ONLY_RE.test(block.text)) blocks.push({ ...block, key: hash3(path18 + "\n" + block.kind + "\n" + block.text) });
     block = null;
   };
   for (let n = start; n < lines.length; n++) {
@@ -23569,7 +23971,7 @@ function evidenceBlocks(text, path17, { aiOnly = false } = {}) {
     for (let offset = 0; offset < Math.max(1, line.length); offset += 3e3) {
       const part = line.slice(offset, offset + 3e3);
       if (block && (block.kind !== kind || block.text.length + part.length + 1 > 3e3)) flush();
-      if (!block) block = { path: path17, kind, line: n + 1, endLine: n + 1, text: "", _itemId: itemId, _aiRelevant: aiRelevant, ...pinned ? { pinned: true } : {} };
+      if (!block) block = { path: path18, kind, line: n + 1, endLine: n + 1, text: "", _itemId: itemId, _aiRelevant: aiRelevant, ...pinned ? { pinned: true } : {} };
       if (pinned) block.pinned = true;
       block.text += (block.text ? "\n" : "") + part;
       block.endLine = n + 1;
@@ -23776,13 +24178,13 @@ var Dreaming = class {
   }
   async loadEntries() {
     const out = [];
-    for (const path17 of await this.listEntryPaths()) {
+    for (const path18 of await this.listEntryPaths()) {
       try {
-        const file = this.plugin.app.vault.getAbstractFileByPath(path17);
+        const file = this.plugin.app.vault.getAbstractFileByPath(path18);
         const parsed = file ? parseMemoryFile(await this.plugin.app.vault.read(file)) : null;
-        if (parsed) out.push({ ...parsed, path: path17 });
+        if (parsed) out.push({ ...parsed, path: path18 });
       } catch (e) {
-        console.error("[agent-deck] \u8BFB\u53D6\u8BB0\u5FC6\u5931\u8D25", path17, e);
+        console.error("[agent-deck] \u8BFB\u53D6\u8BB0\u5FC6\u5931\u8D25", path18, e);
       }
     }
     return out;
@@ -23794,8 +24196,8 @@ var Dreaming = class {
     await this.write(`${this.dir}/${name}.md`, serializeMemoryFile({ id: memory.id, kind: memory.kind, text: memory.text, state, date, sources: evidence, evidence }));
     return `${this.dir}/${name}.md`;
   }
-  isEntryPath(path17) {
-    const p = String(path17 || "");
+  isEntryPath(path18) {
+    const p = String(path18 || "");
     const prefix = `${this.dir}/`;
     return p.startsWith(prefix) && p.endsWith(".md") && p !== `${this.dir}/\u7D22\u5F15.md` && !p.slice(prefix.length).includes("/");
   }
@@ -23812,13 +24214,13 @@ var Dreaming = class {
     if (!clean2) throw new Error(t("\u8BB0\u5FC6\u5185\u5BB9\u4E0D\u80FD\u4E3A\u7A7A"));
     if (!this.storeMode) await this.migrateToStore();
     const id = memoryId(clean2);
-    const path17 = await this.writeEntry({ id, kind, text: clean2, date }, sources, state);
+    const path18 = await this.writeEntry({ id, kind, text: clean2, date }, sources, state);
     await this.syncOverview();
     const basePath = `${this.dir}.base`;
     if (!this.plugin.app.vault.getAbstractFileByPath(basePath)) {
       await this.write(basePath, memoryBase(this.dir));
     }
-    return { path: path17, id };
+    return { path: path18, id };
   }
   // 批量导入条目到记忆库（若尚未迁移到文件库模式，自动先完成迁移并创建 记忆.base）。
   async importEntries(entries = []) {
@@ -23926,8 +24328,8 @@ ${String(rawReply || "").slice(0, 2e3)}`;
     }
     return results;
   }
-  async setEntryState(path17, state) {
-    const file = this.plugin.app.vault.getAbstractFileByPath(path17);
+  async setEntryState(path18, state) {
+    const file = this.plugin.app.vault.getAbstractFileByPath(path18);
     if (!file) return false;
     const raw = await this.plugin.app.vault.read(file);
     const next = raw.replace(/^state:.*$/m, `state: ${state}`).replace(/\nverified: true(?=\n|$)/, "");
@@ -24041,8 +24443,8 @@ ${String(rawReply || "").slice(0, 2e3)}`;
     }
     return { checked: entries.length, drift, edited, missing, fixedFiles };
   }
-  async rewriteSources(path17, sources) {
-    const file = this.plugin.app.vault.getAbstractFileByPath(path17);
+  async rewriteSources(path18, sources) {
+    const file = this.plugin.app.vault.getAbstractFileByPath(path18);
     if (!file) return false;
     const lines = String(await this.plugin.app.vault.read(file)).split("\n");
     const start = lines.indexOf("sources:");
@@ -24114,11 +24516,11 @@ ${String(rawReply || "").slice(0, 2e3)}`;
     const entries = await this.loadEntries();
     const report = { checked: 0, linked: 0, already: 0, skipped: 0, failed: [] };
     const files = /* @__PURE__ */ new Map(), seen = /* @__PURE__ */ new Set(), ours = /^\s*- ⤴ \[\[Agent Deck\/记忆\/[^\]]+\]\]\s*$/;
-    for (const path17 of Array.isArray(this.cfg.backlinked) ? this.cfg.backlinked : []) {
-      const file = this.plugin.app.vault.getAbstractFileByPath(path17);
+    for (const path18 of Array.isArray(this.cfg.backlinked) ? this.cfg.backlinked : []) {
+      const file = this.plugin.app.vault.getAbstractFileByPath(path18);
       if (!file) continue;
       const rawText = String(await this.plugin.app.vault.read(file));
-      files.set(path17, { file, original: rawText, lines: rawText.split("\n").filter((l) => !ours.test(l)), inserts: [] });
+      files.set(path18, { file, original: rawText, lines: rawText.split("\n").filter((l) => !ours.test(l)), inserts: [] });
     }
     for (const entry of entries) {
       const link2 = `[[${entry.path.replace(/\.md$/, "")}]]`;
@@ -24180,7 +24582,7 @@ ${String(rawReply || "").slice(0, 2e3)}`;
       if (next !== rec.original) await this.plugin.app.vault.modify(rec.file, next);
       report.linked += rec.inserts.length;
     }
-    this.cfg.backlinked = [...files.entries()].filter(([, rec]) => rec.inserts.length).map(([path17]) => path17);
+    this.cfg.backlinked = [...files.entries()].filter(([, rec]) => rec.inserts.length).map(([path18]) => path18);
     await this.plugin.saveSettings();
     return report;
   }
@@ -26618,18 +27020,18 @@ var AddModelModal = class extends import_obsidian7.Modal {
 
 // src/dialog.js
 var import_obsidian8 = require("obsidian");
-function resolveTaskProjectState(plugin, path17, lines, block) {
+function resolveTaskProjectState(plugin, path18, lines, block) {
   const contextLines = ancestorLines(lines, block.start);
   const projectHint = plugin.settings?.autoProjectFolder === false ? null : resolveProjectForTask({
     settings: plugin.settings,
-    notePath: path17,
+    notePath: path18,
     contextLines,
     blockText: block.text
   });
   const projectSuggest = suggestProjectForTask({
     settings: plugin.settings,
     recent: plugin.projectFolderSuggestions?.(8) || [],
-    notePath: path17,
+    notePath: path18,
     contextLines,
     blockText: block.text
   });
@@ -26641,7 +27043,7 @@ function resolveTaskProjectState(plugin, path17, lines, block) {
     projectAlt = projectCandidatesFromTask({ blockText: block.text }).find((name) => {
       const key = projectKey(name);
       if (!key || key === hintKey || registered.has(key)) return false;
-      return !plugin.app?.metadataCache?.getFirstLinkpathDest?.(name, path17);
+      return !plugin.app?.metadataCache?.getFirstLinkpathDest?.(name, path18);
     }) || null;
   }
   const cwd = projectConflict ? projectSuggest.path : projectHint ? projectHint.path : "";
@@ -26764,10 +27166,10 @@ function renderProjectFolderPicker(parent, plugin, state, { compact = false, onR
   }
 }
 var DelegateOptionsModal = class extends import_obsidian8.Modal {
-  constructor(app, plugin, path17, line) {
+  constructor(app, plugin, path18, line) {
     super(app);
     this.plugin = plugin;
-    this.path = path17;
+    this.path = path18;
     this.line = line;
     this.agent = plugin.defaultTarget();
     this.model = plugin.defaultModel(this.agent);
@@ -26997,11 +27399,11 @@ var DelegateOptionsModal = class extends import_obsidian8.Modal {
   }
 };
 var ConfirmSendModal = class extends import_obsidian8.Modal {
-  constructor(app, { agent, text, path: path17, where, destination, permission = "", newSession = false, context = [], draft = null, plugin = null, projectState = null }, onSend) {
+  constructor(app, { agent, text, path: path18, where, destination, permission = "", newSession = false, context = [], draft = null, plugin = null, projectState = null }, onSend) {
     super(app);
     this.agent = agent;
     this.text = text;
-    this.path = path17;
+    this.path = path18;
     this.where = where;
     this.destination = destination || destinations(agent)[0]?.id;
     this.permission = permission || defaultWorkMode(agent);
@@ -30511,12 +30913,12 @@ var AutoLog = class {
   }
   // 今天的日记还没建：按「日记」核心插件的模板建一篇，AI 分区骨架照旧交给 placeBlock
   async createJournal(day) {
-    const path17 = this.journalPath(day);
+    const path18 = this.journalPath(day);
     if (typeof this.p.ensureNoteFile !== "function") return null;
-    const { file } = await this.p.ensureNoteFile(path17, await this.journalTemplate(path17));
+    const { file } = await this.p.ensureNoteFile(path18, await this.journalTemplate(path18));
     return file || null;
   }
-  async journalTemplate(path17) {
+  async journalTemplate(path18) {
     const app = this.p.app;
     let tplPath = "";
     try {
@@ -30538,7 +30940,7 @@ var AutoLog = class {
       format = app.internalPlugins?.getPluginById?.("templates")?.instance?.options || {};
     } catch {
     }
-    const title = path17.slice(path17.lastIndexOf("/") + 1).replace(/\.md$/, "");
+    const title = path18.slice(path18.lastIndexOf("/") + 1).replace(/\.md$/, "");
     return expandJournalTemplate(text, { title, dateFormat: format.dateFormat, timeFormat: format.timeFormat });
   }
   viewFor(file) {
@@ -32051,10 +32453,10 @@ function buildPlanMarkdown({ title, goal, steps, at = "", by = "" }) {
 }
 
 // src/workbench-note.js
-var link = (path17, label) => `[[${String(path17).replace(/\.md$/, "")}|${label || String(path17).split("/").pop().replace(/\.md$/, "")}]]`;
+var link = (path18, label) => `[[${String(path18).replace(/\.md$/, "")}|${label || String(path18).split("/").pop().replace(/\.md$/, "")}]]`;
 function buildWorkbenchNote({ boardFiles = [], memory = {}, tasks = [], at = "" } = {}) {
   const stamp = at || (/* @__PURE__ */ new Date()).toISOString().slice(0, 16).replace("T", " ");
-  const byKind = (path17) => /\/任务\//.test(path17) ? t("\u4EFB\u52A1") : /\/规格\//.test(path17) ? t("\u89C4\u683C") : t("\u7B14\u8BB0");
+  const byKind = (path18) => /\/任务\//.test(path18) ? t("\u4EFB\u52A1") : /\/规格\//.test(path18) ? t("\u89C4\u683C") : t("\u7B14\u8BB0");
   const lines = [
     "# \u5DE5\u4F5C\u53F0",
     "",
@@ -32171,9 +32573,9 @@ var MemoryBoardView = class extends import_obsidian12.ItemView {
         col.removeClass("is-over");
         if (e.dataTransfer?.files?.length) return;
         e.preventDefault();
-        const path17 = e.dataTransfer?.getData("text/plain");
-        if (!path17) return;
-        await this.plugin.dreaming.setEntryState(path17, column.state);
+        const path18 = e.dataTransfer?.getData("text/plain");
+        if (!path18) return;
+        await this.plugin.dreaming.setEntryState(path18, column.state);
         await this.refresh();
         this.plugin.dreaming.syncOverview().catch(() => {
         });
@@ -33655,51 +34057,51 @@ function buildTaskPlainText(extracted, sourcePath = "") {
   return `${lines.join("\n").replace(/\n+$/, "")}
 `;
 }
-async function copyTaskFormatted(plugin, path17, line, { buildText, successMsg, viewMode = "" }) {
-  const text = await plugin.readNote(path17);
-  const extracted = extractTaskBlock(text, line, path17, plugin);
+async function copyTaskFormatted(plugin, path18, line, { buildText, successMsg, viewMode = "" }) {
+  const text = await plugin.readNote(path18);
+  const extracted = extractTaskBlock(text, line, path18, plugin);
   if (!extracted) return plugin.notice(t("\u672A\u627E\u5230\u53EF\u5BFC\u51FA\u7684\u4EFB\u52A1\u5757"));
-  const output = buildText(extracted, path17, { viewMode });
+  const output = buildText(extracted, path18, { viewMode });
   if (!writeClipboard(output)) return plugin.notice(t("\u5199\u5165\u526A\u8D34\u677F\u5931\u8D25"));
   plugin.notice(successMsg);
 }
-async function copyTaskMarkdown(plugin, path17, line) {
-  return copyTaskFormatted(plugin, path17, line, {
+async function copyTaskMarkdown(plugin, path18, line) {
+  return copyTaskFormatted(plugin, path18, line, {
     buildText: (extracted) => `${extracted.markdown}
 `,
     successMsg: t("\u5DF2\u6309 Markdown \u683C\u5F0F\u590D\u5236\u5230\u526A\u8D34\u677F")
   });
 }
-async function copyTaskMarkdownTable(plugin, path17, line) {
-  return copyTaskFormatted(plugin, path17, line, {
+async function copyTaskMarkdownTable(plugin, path18, line) {
+  return copyTaskFormatted(plugin, path18, line, {
     buildText: (extracted, src) => buildTaskMarkdownTable(extracted, src),
     successMsg: t("\u5DF2\u6309 Markdown \u8868\u683C\u590D\u5236\u5230\u526A\u8D34\u677F")
   });
 }
-async function copyTaskPlainText(plugin, path17, line) {
-  return copyTaskFormatted(plugin, path17, line, {
+async function copyTaskPlainText(plugin, path18, line) {
+  return copyTaskFormatted(plugin, path18, line, {
     buildText: (extracted, src) => buildTaskPlainText(extracted, src),
     successMsg: t("\u5DF2\u6309\u7EAF\u6587\u672C\u683C\u5F0F\u590D\u5236\u5230\u526A\u8D34\u677F")
   });
 }
-async function copyTaskJson(plugin, path17, line, options = {}) {
-  return copyTaskFormatted(plugin, path17, line, {
+async function copyTaskJson(plugin, path18, line, options = {}) {
+  return copyTaskFormatted(plugin, path18, line, {
     buildText: (extracted, src, opts) => buildTaskExportJson(extracted, src, opts),
     successMsg: t("\u5DF2\u6309 JSON \u683C\u5F0F\u590D\u5236\u5230\u526A\u8D34\u677F"),
     viewMode: options.viewMode || ""
   });
 }
-async function renderMarkdownFragment(plugin, md, path17, comp) {
+async function renderMarkdownFragment(plugin, md, path18, comp) {
   if (!md) return "";
   const host = document.createElement("div");
   try {
-    await import_obsidian17.MarkdownRenderer.render(plugin.app, md, host, path17, comp);
+    await import_obsidian17.MarkdownRenderer.render(plugin.app, md, host, path18, comp);
     return host.innerHTML;
   } finally {
     host.remove();
   }
 }
-async function renderTaskHtmlForExport(plugin, extracted, path17, viewMode) {
+async function renderTaskHtmlForExport(plugin, extracted, path18, viewMode) {
   const effectiveView = resolveExportView(extracted, viewMode);
   const comp = new import_obsidian17.Component();
   comp.load();
@@ -33707,11 +34109,11 @@ async function renderTaskHtmlForExport(plugin, extracted, path17, viewMode) {
     let outlineBodyHtml = "";
     let extraNotesHtml = "";
     if (effectiveView === "outline" || !extracted.structured) {
-      outlineBodyHtml = await renderMarkdownFragment(plugin, extracted.markdown, path17, comp);
+      outlineBodyHtml = await renderMarkdownFragment(plugin, extracted.markdown, path18, comp);
     } else if (extracted.structured.extraMarkdown) {
-      extraNotesHtml = await renderMarkdownFragment(plugin, extracted.structured.extraMarkdown, path17, comp);
+      extraNotesHtml = await renderMarkdownFragment(plugin, extracted.structured.extraMarkdown, path18, comp);
     }
-    return buildTaskViewHtmlDocument(extracted, path17, {
+    return buildTaskViewHtmlDocument(extracted, path18, {
       viewMode: effectiveView,
       outlineBodyHtml,
       extraNotesHtml
@@ -33720,7 +34122,7 @@ async function renderTaskHtmlForExport(plugin, extracted, path17, viewMode) {
     comp.unload();
   }
 }
-async function prepareExportTarget(plugin, path17, line, {
+async function prepareExportTarget(plugin, path18, line, {
   ext,
   filterName,
   dialogTitle,
@@ -33733,8 +34135,8 @@ async function prepareExportTarget(plugin, path17, line, {
     plugin.notice(unavailableMsg);
     return null;
   }
-  const text = await plugin.readNote(path17);
-  const extracted = extractTaskBlock(text, line, path17, plugin);
+  const text = await plugin.readNote(path18);
+  const extracted = extractTaskBlock(text, line, path18, plugin);
   if (!extracted) {
     plugin.notice(t("\u672A\u627E\u5230\u53EF\u5BFC\u51FA\u7684\u4EFB\u52A1\u5757"));
     return null;
@@ -33743,20 +34145,20 @@ async function prepareExportTarget(plugin, path17, line, {
   const title = typeof dialogTitle === "function" ? dialogTitle(effectiveView) : dialogTitle;
   const picked = await remote.dialog.showSaveDialog(remote.getCurrentWindow?.(), {
     title,
-    defaultPath: import_path17.default.join(initialExportDir(plugin, path17), `${extracted.suggestedName}${ext}`),
+    defaultPath: import_path17.default.join(initialExportDir(plugin, path18), `${extracted.suggestedName}${ext}`),
     filters: [{ name: filterName, extensions: [ext.replace(/^\./, "")] }]
   });
   if (picked.canceled || !picked.filePath) return null;
   const targetFile = ensureExt(picked.filePath, ext);
   const vaultBase = plugin.app?.vault?.adapter?.basePath;
-  if (ext === ".md" && vaultBase && import_path17.default.resolve(import_path17.default.join(vaultBase, path17)) === import_path17.default.resolve(targetFile)) {
+  if (ext === ".md" && vaultBase && import_path17.default.resolve(import_path17.default.join(vaultBase, path18)) === import_path17.default.resolve(targetFile)) {
     plugin.notice(t("\u4E0D\u80FD\u8986\u76D6\u5F53\u524D\u6240\u5728\u7B14\u8BB0"));
     return null;
   }
   return { remote, extracted, effectiveView, targetFile };
 }
-async function exportTaskToPdf(plugin, path17, line, options = {}) {
-  const prep = await prepareExportTarget(plugin, path17, line, {
+async function exportTaskToPdf(plugin, path18, line, options = {}) {
+  const prep = await prepareExportTarget(plugin, path18, line, {
     ext: ".pdf",
     filterName: "PDF",
     requireWindow: true,
@@ -33769,7 +34171,7 @@ async function exportTaskToPdf(plugin, path17, line, options = {}) {
   let win = null;
   let tmpHtml = "";
   try {
-    const html = await renderTaskHtmlForExport(plugin, extracted, path17, effectiveView);
+    const html = await renderTaskHtmlForExport(plugin, extracted, path18, effectiveView);
     tmpHtml = import_path17.default.join(import_os17.default.tmpdir(), `agent-deck-pdf-${Date.now()}-${Math.random().toString(36).slice(2)}.html`);
     await import_promises4.default.writeFile(tmpHtml, html, "utf8");
     win = new remote.BrowserWindow({
@@ -33792,17 +34194,17 @@ async function exportTaskToPdf(plugin, path17, line, options = {}) {
     });
   }
 }
-async function exportTaskToTextFile(plugin, path17, line, { ext, filterName, dialogTitle, buildContent, onSuccess, viewMode = "" }) {
-  const prep = await prepareExportTarget(plugin, path17, line, { ext, filterName, dialogTitle, viewMode });
+async function exportTaskToTextFile(plugin, path18, line, { ext, filterName, dialogTitle, buildContent, onSuccess, viewMode = "" }) {
+  const prep = await prepareExportTarget(plugin, path18, line, { ext, filterName, dialogTitle, viewMode });
   if (!prep) return;
   const { extracted, effectiveView, targetFile } = prep;
-  const content = await buildContent(extracted, path17, { viewMode: effectiveView });
+  const content = await buildContent(extracted, path18, { viewMode: effectiveView });
   const written = await writeExportFile(plugin, targetFile, content);
   rememberExportDir(plugin, targetFile);
   plugin.notice(onSuccess(written.path));
 }
-async function exportTaskToHtml(plugin, path17, line, options = {}) {
-  return exportTaskToTextFile(plugin, path17, line, {
+async function exportTaskToHtml(plugin, path18, line, options = {}) {
+  return exportTaskToTextFile(plugin, path18, line, {
     ext: ".html",
     filterName: "HTML",
     dialogTitle: t("\u5BFC\u51FA\u4EFB\u52A1\u4E0E\u5BF9\u8BDD\u4E3A HTML"),
@@ -33811,8 +34213,8 @@ async function exportTaskToHtml(plugin, path17, line, options = {}) {
     onSuccess: (p) => t("\u5DF2\u5BFC\u51FA HTML\uFF1A{path}", { path: p })
   });
 }
-async function exportTaskToMarkdown(plugin, path17, line) {
-  return exportTaskToTextFile(plugin, path17, line, {
+async function exportTaskToMarkdown(plugin, path18, line) {
+  return exportTaskToTextFile(plugin, path18, line, {
     ext: ".md",
     filterName: "Markdown",
     dialogTitle: t("\u5BFC\u51FA\u4EFB\u52A1\u4E0E\u5BF9\u8BDD\u4E3A Markdown"),
@@ -33820,8 +34222,8 @@ async function exportTaskToMarkdown(plugin, path17, line) {
     onSuccess: (p) => t("\u5DF2\u5BFC\u51FA Markdown\uFF1A{path}", { path: p })
   });
 }
-async function exportTaskToJson(plugin, path17, line, options = {}) {
-  return exportTaskToTextFile(plugin, path17, line, {
+async function exportTaskToJson(plugin, path18, line, options = {}) {
+  return exportTaskToTextFile(plugin, path18, line, {
     ext: ".json",
     filterName: "JSON",
     dialogTitle: t("\u5BFC\u51FA\u4EFB\u52A1\u4E0E\u5BF9\u8BDD\u4E3A JSON"),
@@ -33830,8 +34232,8 @@ async function exportTaskToJson(plugin, path17, line, options = {}) {
     onSuccess: (p) => t("\u5DF2\u5BFC\u51FA JSON\uFF1A{path}", { path: p })
   });
 }
-async function exportTaskToCsv(plugin, path17, line) {
-  return exportTaskToTextFile(plugin, path17, line, {
+async function exportTaskToCsv(plugin, path18, line) {
+  return exportTaskToTextFile(plugin, path18, line, {
     ext: ".csv",
     filterName: "CSV",
     dialogTitle: t("\u5BFC\u51FA\u4EFB\u52A1\u4E0E\u5BF9\u8BDD\u4E3A CSV"),
@@ -33839,24 +34241,24 @@ async function exportTaskToCsv(plugin, path17, line) {
     onSuccess: (p) => t("\u5DF2\u5BFC\u51FA CSV\uFF1A{path}", { path: p })
   });
 }
-async function saveTaskAsFile(plugin, path17, line) {
-  const prep = await prepareExportTarget(plugin, path17, line, {
+async function saveTaskAsFile(plugin, path18, line) {
+  const prep = await prepareExportTarget(plugin, path18, line, {
     ext: ".md",
     filterName: "Markdown",
     dialogTitle: t("\u53E6\u5B58\u4E3A\u4EFB\u52A1\u4E0E\u5BF9\u8BDD")
   });
   if (!prep) return;
   const { extracted, targetFile } = prep;
-  const content = buildTaskExportDocument(extracted, path17);
+  const content = buildTaskExportDocument(extracted, path18);
   const written = await writeExportFile(plugin, targetFile, content);
   rememberExportDir(plugin, targetFile);
-  const latest = await plugin.readNote(path17);
-  const check = extractTaskBlock(latest, line, path17, plugin);
+  const latest = await plugin.readNote(path18);
+  const check = extractTaskBlock(latest, line, path18, plugin);
   if (!check || check.rawText !== extracted.rawText) {
     return plugin.notice(t("\u539F\u7B14\u8BB0\u5185\u5BB9\u521A\u6709\u53D8\u5316\uFF0C\u5DF2\u4FDD\u5B58\u526F\u672C\u5230 {path}\uFF0C\u539F\u6587\u4FDD\u7559", { path: written.path }));
   }
   const updated = removeTaskBlockFromNote(latest, check.start, check.end);
-  await plugin.writeNote(path17, updated);
+  await plugin.writeNote(path18, updated);
   plugin.refreshUI?.();
   plugin.notice(t("\u5DF2\u53E6\u5B58\u4E3A\u5E76\u79FB\u51FA\u539F\u6587\u672C\uFF1A{path}", { path: written.path }));
 }
@@ -33920,7 +34322,7 @@ var ReplyModal = class extends import_obsidian18.Modal {
 // src/reply-inbox-view.js
 var import_obsidian19 = require("obsidian");
 var REPLY_INBOX_TYPE = "agent-deck-reply-inbox";
-var shortPath = (path17 = "") => String(path17).replace(/\.md$/, "");
+var shortPath = (path18 = "") => String(path18).replace(/\.md$/, "");
 var ReplyInboxView = class extends import_obsidian19.ItemView {
   constructor(leaf, plugin) {
     super(leaf);
@@ -35295,9 +35697,9 @@ var AgentDeckPlugin = class extends import_obsidian21.Plugin {
   // 主入口用 Obsidian 原生 Base（只读表格：筛选/排序/统计）；看板作为"要改状态时"的可选增强。
   async openMemoryBase() {
     if (!this.dreaming.storeMode) return this.notice(t("\u8BF7\u5148\u8FD0\u884C\u300C\u8BB0\u5FC6\uFF1A\u628A\u957F\u671F\u8BB0\u5FC6\u8FC1\u79FB\u5230\u8BB0\u5FC6\u5E93\u300D"));
-    const path17 = `${this.dreaming.dir}.base`;
-    if (!this.app.vault.getAbstractFileByPath(path17)) await this.app.vault.create(path17, memoryBase(this.dreaming.dir));
-    await this.app.workspace.openLinkText(path17, "", false);
+    const path18 = `${this.dreaming.dir}.base`;
+    if (!this.app.vault.getAbstractFileByPath(path18)) await this.app.vault.create(path18, memoryBase(this.dreaming.dir));
+    await this.app.workspace.openLinkText(path18, "", false);
   }
   async openMemoryBoard() {
     const existing = this.app.workspace.getLeavesOfType(MEMORY_BOARD_TYPE)[0];
@@ -35319,9 +35721,9 @@ var AgentDeckPlugin = class extends import_obsidian21.Plugin {
       }
     }).open();
   }
-  async deleteMemoryFile(path17) {
-    if (!this.dreaming.isEntryPath(path17)) return false;
-    const file = this.app.vault.getAbstractFileByPath(path17);
+  async deleteMemoryFile(path18) {
+    if (!this.dreaming.isEntryPath(path18)) return false;
+    const file = this.app.vault.getAbstractFileByPath(path18);
     if (!file) return false;
     await this.app.vault.trash(file, true);
     await this.dreaming.syncOverview();
@@ -35329,7 +35731,7 @@ var AgentDeckPlugin = class extends import_obsidian21.Plugin {
       await this.dreaming.ensureReverseLinks({ write: true });
     }
     await this.refreshMemoryBoards();
-    this.notice(t("\u5DF2\u5220\u9664\u8BB0\u5FC6\uFF1A{path}", { path: path17 }));
+    this.notice(t("\u5DF2\u5220\u9664\u8BB0\u5FC6\uFF1A{path}", { path: path18 }));
     return true;
   }
   async deleteCurrentMemory() {
@@ -36429,8 +36831,8 @@ var AgentDeckPlugin = class extends import_obsidian21.Plugin {
   // ---------- note line map ----------
   // doc 缓存仅保留静态文档结构（lines / links / linkByLine / blockIds），
   // session / job / externalState 每次即时拼装，避免文档未改时读到过期状态。
-  lineMap(path17, doc) {
-    let cached2 = this._lineMaps[path17];
+  lineMap(path18, doc) {
+    let cached2 = this._lineMaps[path18];
     if (!cached2 || cached2.doc !== doc) {
       const lines = doc.toString().split("\n");
       const owners = ownersOf(lines), fenced = fencedLines(lines);
@@ -36452,7 +36854,7 @@ var AgentDeckPlugin = class extends import_obsidian21.Plugin {
         links.push(entry);
       }
       cached2 = { doc, lines, links, linkByLine, blockIds };
-      this._lineMaps[path17] = cached2;
+      this._lineMaps[path18] = cached2;
     }
     const sessionByParent = /* @__PURE__ */ new Map();
     let liveBySid;
@@ -36482,8 +36884,8 @@ var AgentDeckPlugin = class extends import_obsidian21.Plugin {
     }
     return { doc, lines: cached2.lines, sessionByParent, linkByLine: cached2.linkByLine };
   }
-  jobAtLine(path17, line, text) {
-    const jobs = Object.values(this.jobs).filter((j) => j.path === path17);
+  jobAtLine(path18, line, text) {
+    const jobs = Object.values(this.jobs).filter((j) => j.path === path18);
     const bid = blockIdOf(text);
     let best = null;
     for (const j of jobs) {
@@ -36510,22 +36912,22 @@ var AgentDeckPlugin = class extends import_obsidian21.Plugin {
     });
   }
   // 编辑器里找打开着这篇笔记的那个 MarkdownView（不一定是当前激活的：拖拽时焦点常在面板上）
-  viewForPath(path17) {
+  viewForPath(path18) {
     let found = null;
     this.app.workspace.iterateAllLeaves((leaf) => {
       const v = leaf.view;
-      if (!found && v instanceof import_obsidian21.MarkdownView && v.file && v.file.path === path17 && v.editor) found = v;
+      if (!found && v instanceof import_obsidian21.MarkdownView && v.file && v.file.path === path18 && v.editor) found = v;
     });
     return found;
   }
   // Hidden editors in Obsidian Reading ("preview") view go stale after background
   // vault writes; only use an open editor directly when it is in editing mode.
-  sourceViewForPath(path17) {
-    const view2 = this.viewForPath(path17);
+  sourceViewForPath(path18) {
+    const view2 = this.viewForPath(path18);
     return view2 && (!view2.getMode || view2.getMode() === "source") ? view2 : null;
   }
-  async toggleRecordPin(path17, lineIndex, { editor = null } = {}) {
-    if (!path17 || !Number.isInteger(lineIndex) || lineIndex < 0) return false;
+  async toggleRecordPin(path18, lineIndex, { editor = null } = {}) {
+    if (!path18 || !Number.isInteger(lineIndex) || lineIndex < 0) return false;
     let nowPinned = false;
     if (editor?.cm?.state?.doc && lineIndex < editor.cm.state.doc.lines) {
       const lineObj = editor.cm.state.doc.line(lineIndex + 1);
@@ -36537,7 +36939,7 @@ var AgentDeckPlugin = class extends import_obsidian21.Plugin {
       this.notice(nowPinned ? t("\u5DF2 Pin \u5173\u952E\u8BB0\u5F55") : t("\u5DF2\u53D6\u6D88 Pin"), 3e3);
       return nowPinned;
     }
-    await updateNote(this, path17, (text) => {
+    await updateNote(this, path18, (text) => {
       const lines = text.split("\n");
       if (lineIndex >= lines.length) return text;
       const next = togglePinMarker(lines[lineIndex]);
@@ -36826,7 +37228,7 @@ var AgentDeckPlugin = class extends import_obsidian21.Plugin {
   canContinueSession(session, opts) {
     return canContinueSession(session, this.jobs, opts);
   }
-  sessionsAtTask(path17, line, lines) {
+  sessionsAtTask(path18, line, lines) {
     const block = blockAt(lines, line);
     if (!block) return [];
     const bid = blockIdOf(lines[block.start]);
@@ -36842,7 +37244,7 @@ var AgentDeckPlugin = class extends import_obsidian21.Plugin {
       found.set(`${link2.agent}:${link2.sid}`, { ...this.usage.meta.get(link2.sid), ...link2, ...transport ? { transport } : {} });
     }
     for (const job of Object.values(this.jobs)) {
-      if (job.path !== path17 || !(bid && job.blockId === bid || job.lineText === lines[block.start])) continue;
+      if (job.path !== path18 || !(bid && job.blockId === bid || job.lineText === lines[block.start])) continue;
       found.set(`${job.agent}:${job.sessionId || job.id}`, { ...this.usage.meta.get(job.sessionId), ...job, sid: job.sessionId });
     }
     return [...found.values()];
@@ -36880,17 +37282,17 @@ var AgentDeckPlugin = class extends import_obsidian21.Plugin {
     editor.setCursor({ line: slot.line, ch: (slot.indent + "- \u270D\uFE0F \u7B54\uFF1A").length });
     this.notice(t("\u5199\u5B8C\u540E\u53EF\u4EE5\u300C\u56DE\u7B54\u5E76\u7EE7\u7EED\u300D\uFF0C\u6216\u76F4\u63A5\u8BA9 Agent \u7EED\u8DD1"), 6e3);
   }
-  async replyToQuestion(path17, editor, { line } = {}) {
+  async replyToQuestion(path18, editor, { line } = {}) {
     let lines;
     let atLine = Number.isInteger(line) ? line : -1;
     if (atLine < 0) {
-      const sourceView = this.sourceViewForPath(path17);
+      const sourceView = this.sourceViewForPath(path18);
       const ed = sourceView?.editor || editor;
       if (!ed) return this.notice(t("\u8BF7\u5148\u6253\u5F00\u8FD9\u7BC7\u7B14\u8BB0"));
       lines = ed.getValue().split("\n");
       atLine = ed.getCursor().line;
     } else {
-      lines = (await this.readNote(path17)).split("\n");
+      lines = (await this.readNote(path18)).split("\n");
     }
     const info = this.threadAt(lines, atLine);
     if (!info) return this.notice(t("\u628A\u5149\u6807\u653E\u5728\u8981\u56DE\u590D\u7684\u90A3\u4E00\u6761\u4EFB\u52A1\u91CC"));
@@ -36901,19 +37303,19 @@ var AgentDeckPlugin = class extends import_obsidian21.Plugin {
       options: suggestOptions(question.text),
       value: question.answer || "",
       hint: t("\u53EA\u5199\u8FDB\u7B14\u8BB0\u91CC\u90A3\u884C\u300C\u270D\uFE0F \u7B54\uFF1A\u300D\uFF0C\u4E0D\u65B0\u5F00\u4F1A\u8BDD"),
-      onSubmit: (answer, { continue: keepGoing } = {}) => this.applyReply(path17, block.start, { questionText: question.text, answer, continueSession: keepGoing }),
-      canContinue: this.sessionsAtTask(path17, block.start, lines).some((s) => this.canContinueSession(s))
+      onSubmit: (answer, { continue: keepGoing } = {}) => this.applyReply(path18, block.start, { questionText: question.text, answer, continueSession: keepGoing }),
+      canContinue: this.sessionsAtTask(path18, block.start, lines).some((s) => this.canContinueSession(s))
     }).open();
   }
   // 老数据兼容：把已经写好的 ❓ / ✍️ 补上块号（幂等，可对有历史问答的笔记跑一遍）。
-  async anchorThread(path17, editor) {
+  async anchorThread(path18, editor) {
     const lines = editor.getValue().split("\n");
     const block = blockAt(lines, editor.getCursor().line);
     if (!block) return this.notice(t("\u628A\u5149\u6807\u653E\u5728\u8981\u8865\u5757\u53F7\u7684\u90A3\u4E00\u6761\u4EFB\u52A1\u91CC"));
     const blockId = blockIdOf(lines[block.start]);
     let changed = false;
-    await updateNote(this, path17, (text) => {
-      const next = anchorThreadText(text, { blockId, atLine: block.start, seedPrefix: path17 });
+    await updateNote(this, path18, (text) => {
+      const next = anchorThreadText(text, { blockId, atLine: block.start, seedPrefix: path18 });
       changed = next !== text;
       return next;
     });
@@ -36981,13 +37383,13 @@ var AgentDeckPlugin = class extends import_obsidian21.Plugin {
     this.refreshReplyInbox();
   }
   // 复制 `[[笔记#^ad-q-…]]`：别的笔记、会话、Linear 里都能直接指到这一问。
-  async copyQuestionRef(path17, thread) {
-    const lines = (await this.readNote(path17)).split("\n");
+  async copyQuestionRef(path18, thread) {
+    const lines = (await this.readNote(path18)).split("\n");
     const blockId = blockIdOf(lines[thread.block.start] || "");
-    const seed = `${path17}|${blockId}|${thread.question.text}`;
+    const seed = `${path18}|${blockId}|${thread.question.text}`;
     const id = thread.question.id || makeQuestionId(seed);
-    if (!thread.question.id) await updateNote(this, path17, (text) => ensureQuestionId(text, { blockId, questionText: thread.question.text, seed }));
-    const link2 = `[[${path17.replace(/\.md$/, "")}#^${id}]]`;
+    if (!thread.question.id) await updateNote(this, path18, (text) => ensureQuestionId(text, { blockId, questionText: thread.question.text, seed }));
+    const link2 = `[[${path18.replace(/\.md$/, "")}#^${id}]]`;
     try {
       await navigator.clipboard.writeText(link2);
     } catch {
@@ -36995,17 +37397,17 @@ var AgentDeckPlugin = class extends import_obsidian21.Plugin {
     this.notice(t("\u5DF2\u590D\u5236\u5757\u5F15\u7528\uFF1A{link}", { link: link2 }), 6e3);
   }
   // 写回答（幂等）+ 可选续聊同一会话。抽成方法，方便真机验证直接调用。
-  async applyReply(path17, atLine, { questionText = "", answer = "", continueSession = false } = {}) {
+  async applyReply(path18, atLine, { questionText = "", answer = "", continueSession = false } = {}) {
     if (!String(answer || "").trim()) return false;
-    const before = await this.readNote(path17);
+    const before = await this.readNote(path18);
     const lines = before.split("\n");
     const block = blockAt(lines, atLine);
     const blockId = block ? blockIdOf(lines[block.start]) : "";
-    const seed = `${path17}|${blockId}|${questionText}`;
+    const seed = `${path18}|${blockId}|${questionText}`;
     const questionId = makeQuestionId(seed);
-    await updateNote(this, path17, (text) => ensureQuestionId(text, { blockId, questionText, seed }));
+    await updateNote(this, path18, (text) => ensureQuestionId(text, { blockId, questionText, seed }));
     let changed = false;
-    await updateNote(this, path17, (text) => {
+    await updateNote(this, path18, (text) => {
       const next = fillAnswer(text, { questionText, answer, blockId, questionId });
       changed = next !== text;
       return next;
@@ -37013,25 +37415,25 @@ var AgentDeckPlugin = class extends import_obsidian21.Plugin {
     if (Array.isArray(this.settings?.replyInbox) && this.settings.replyInbox.length) {
       const beforeInbox = this.settings.replyInbox.length;
       this.settings.replyInbox = inboxRemove(this.settings.replyInbox, {
-        path: path17,
+        path: path18,
         blockId,
         questionId,
         question: questionText
-      }).filter((x) => !(x.path === path17 && blockId && x.blockId === blockId && questionText && x.question === questionText));
+      }).filter((x) => !(x.path === path18 && blockId && x.blockId === blockId && questionText && x.question === questionText));
       if (this.settings.replyInbox.length !== beforeInbox) {
         await this.saveSettings();
         this.refreshReplyInbox();
       }
     }
     this.notice(changed ? t("\u5DF2\u5199\u56DE\u56DE\u7B54\uFF1A{answer}", { answer: truncate(answer, 40) }) : t("\u56DE\u7B54\u5DF2\u7ECF\u662F\u8FD9\u6837\u4E86\uFF0C\u6CA1\u6709\u6539\u52A8"), changed ? 6e3 : 5e3);
-    if (continueSession) await this.continueAfterReply(path17, atLine, answer);
+    if (continueSession) await this.continueAfterReply(path18, atLine, answer);
     return changed;
   }
   // 续聊：回答当成下一轮的追问发给原来那个会话，不新开。
-  async continueAfterReply(path17, atLine, answer) {
-    const lines = (await this.readNote(path17)).split("\n");
+  async continueAfterReply(path18, atLine, answer) {
+    const lines = (await this.readNote(path18)).split("\n");
     const block = blockAt(lines, atLine);
-    const sessions = this.sessionsAtTask(path17, atLine, lines);
+    const sessions = this.sessionsAtTask(path18, atLine, lines);
     const session = [...sessions].reverse().find((s) => this.canContinueSession(s)) || sessions.at(-1);
     if (!session) return this.notice(t("\u8FD9\u4E00\u5757\u8FD8\u6CA1\u7ED1\u5B9A\u4F1A\u8BDD\uFF1B\u56DE\u7B54\u5DF2\u5199\u8FDB\u7B14\u8BB0"), 6e3);
     const blockId = block ? blockIdOf(lines[block.start]) : "";
@@ -37040,7 +37442,7 @@ var AgentDeckPlugin = class extends import_obsidian21.Plugin {
 ${t("\u8BF7\u6309\u8FD9\u4E2A\u7EE7\u7EED\uFF0C\u4E0D\u7528\u518D\u95EE\u540C\u4E00\u4EF6\u4E8B\u3002")}`;
       await this.delegator.continueSession({
         ...session,
-        path: path17,
+        path: path18,
         ...blockId ? { blockId } : {},
         ...session.destination ? {} : { destination: "background" }
       }, prompt);
@@ -37049,23 +37451,23 @@ ${t("\u8BF7\u6309\u8FD9\u4E2A\u7EE7\u7EED\uFF0C\u4E0D\u7528\u518D\u95EE\u540C\u4
     }
   }
   // 原地手写完 `✍️ 答` 之后直接发给会话继续，不用重开 ReplyModal。
-  async submitWrittenReply(path17, editor, { line } = {}) {
+  async submitWrittenReply(path18, editor, { line } = {}) {
     let lines;
     let atLine = Number.isInteger(line) ? line : -1;
     if (atLine < 0) {
-      const sourceView = this.sourceViewForPath(path17);
+      const sourceView = this.sourceViewForPath(path18);
       const ed = sourceView?.editor || editor;
       if (!ed) return this.notice(t("\u8BF7\u5148\u6253\u5F00\u8FD9\u7BC7\u7B14\u8BB0"));
       lines = ed.getValue().split("\n");
       atLine = ed.getCursor().line;
     } else {
-      lines = (await this.readNote(path17)).split("\n");
+      lines = (await this.readNote(path18)).split("\n");
     }
     const block = blockAt(lines, atLine);
     if (!block) return this.notice(t("\u628A\u5149\u6807\u653E\u5728\u8981\u7EED\u804A\u7684\u90A3\u4E00\u6761\u4EFB\u52A1\u91CC"));
     const written = latestWrittenAnswer(lines, block);
     if (!written) return this.notice(t("\u8FD9\u4E00\u5757\u91CC\u8FD8\u6CA1\u6709\u5199\u597D\u7684\u300C\u270D\uFE0F \u7B54\u300D"));
-    const sessions = this.sessionsAtTask(path17, block.start, lines);
+    const sessions = this.sessionsAtTask(path18, block.start, lines);
     if (!sessions.length) return this.notice(t("\u8FD9\u4E00\u5757\u8FD8\u6CA1\u7ED1\u5B9A\u4F1A\u8BDD"));
     if (!sessions.some((s) => this.canContinueSession(s))) {
       return this.notice(t("\u5F53\u524D\u7ED1\u5B9A\u7684\u4F1A\u8BDD\u4E0D\u652F\u6301\u5728 Obsidian \u5185\u7EED\u804A\uFF0C\u8BF7\u5728\u539F\u5BA2\u6237\u7AEF\u7EE7\u7EED"));
@@ -37076,26 +37478,26 @@ ${t("\u8BF7\u6309\u8FD9\u4E2A\u7EE7\u7EED\uFF0C\u4E0D\u7528\u518D\u95EE\u540C\u4
       const qid = written.question?.id || "";
       const qtext = written.question?.text || "";
       this.settings.replyInbox = inboxRemove(this.settings.replyInbox || [], {
-        path: path17,
+        path: path18,
         blockId,
         questionId: qid,
         question: qtext
-      }).filter((x) => !(x.path === path17 && blockId && x.blockId === blockId && qtext && x.question === qtext));
+      }).filter((x) => !(x.path === path18 && blockId && x.blockId === blockId && qtext && x.question === qtext));
       if (this.settings.replyInbox.length !== before) {
         await this.saveSettings();
         this.refreshReplyInbox();
       }
     }
-    await this.continueAfterReply(path17, block.start, written.answer);
+    await this.continueAfterReply(path18, block.start, written.answer);
   }
-  openFollowUp(session, { path: path17 = "", line = -1, blockId = "", title = "" } = {}) {
+  openFollowUp(session, { path: path18 = "", line = -1, blockId = "", title = "" } = {}) {
     new FollowUpModal(this.app, {
       session,
       title,
       onSubmit: async (prompt) => {
         const target = {
           ...session,
-          ...path17 ? { path: path17 } : {},
+          ...path18 ? { path: path18 } : {},
           ...blockId ? { blockId } : {},
           ...session.destination ? {} : { destination: "background" }
         };
@@ -37104,39 +37506,53 @@ ${t("\u8BF7\u6309\u8FD9\u4E2A\u7EE7\u7EED\uFF0C\u4E0D\u7528\u518D\u95EE\u540C\u4
       }
     }).open();
   }
-  async taskActions(path17, line, event) {
+  // 人在场的一键派发：把这一行任务交给 TeleAgent 的 UI Automation 通道，自动建任务、填词并点「运行」。
+  // 项目名从任务上下文里解析（wikilink / 标题前缀 / 笔记路径），解析不到就明确拒绝——
+  // 猜错项目会把任务派进别的代码库，比不派发更糟。
+  async dispatchToTeleagent(path18, line, lines) {
+    const blockText2 = String(lines[line] || "");
+    const context = lines.slice(Math.max(0, line - 4), line + 1);
+    const resolved = resolveProjectForTask({ settings: this.settings, notePath: path18, contextLines: context, blockText: blockText2 });
+    const project = String(resolved?.name || "").trim();
+    if (!project) {
+      this.notice(t("\u8FD9\u4E2A\u4EFB\u52A1\u6CA1\u6709\u767B\u8BB0\u8FC7\u9879\u76EE\u76EE\u5F55\uFF0C\u5148\u5728\u8BBE\u7F6E\u91CC\u767B\u8BB0\u9879\u76EE\u6587\u4EF6\u5939"), 8e3);
+      return;
+    }
+    await this.delegator.handoff({ agent: "teleagent", path: path18, line, lineText: blockText2, projectName: project, autoSend: true });
+  }
+  async taskActions(path18, line, event) {
     let text;
     try {
-      text = await this.readNote(path17);
+      text = await this.readNote(path18);
     } catch {
       return;
     }
     const lines = text.split("\n"), block = blockAt(lines, line);
     if (!block) return;
-    const sourceView = this.sourceViewForPath(path17);
-    const view2 = sourceView || this.viewForPath(path17);
-    const sessions = this.sessionsAtTask(path17, line, lines);
+    const sourceView = this.sourceViewForPath(path18);
+    const view2 = sourceView || this.viewForPath(path18);
+    const sessions = this.sessionsAtTask(path18, line, lines);
     const menu = new import_obsidian21.Menu();
     const thread = this.threadAt(lines, line);
     const blockId = blockIdOf(lines[block.start]);
     if (thread?.question && pendingQuestion(thread.parsed)) {
       menu.addItem((mi) => mi.setTitle(t("\u270D\uFE0F \u56DE\u590D\u8FD9\u4E00\u95EE\u2026")).onClick(() => {
         if (sourceView?.editor) sourceView.editor.setCursor({ line: thread.question.line, ch: 0 });
-        this.replyToQuestion(path17, sourceView?.editor, { line: thread.question.line });
+        this.replyToQuestion(path18, sourceView?.editor, { line: thread.question.line });
       }));
-      menu.addItem((mi) => mi.setTitle(t("\u590D\u5236\u8FD9\u4E00\u95EE\u7684\u5757\u5F15\u7528\uFF08[[\u7B14\u8BB0#^\u5757\u53F7]]\uFF09")).onClick(() => this.copyQuestionRef(path17, thread)));
+      menu.addItem((mi) => mi.setTitle(t("\u590D\u5236\u8FD9\u4E00\u95EE\u7684\u5757\u5F15\u7528\uFF08[[\u7B14\u8BB0#^\u5757\u53F7]]\uFF09")).onClick(() => this.copyQuestionRef(path18, thread)));
       menu.addSeparator();
     } else {
       const written = latestWrittenAnswer(lines, block);
       if (written && !written.hasResultAfter && sessions.some((s) => this.canContinueSession(s))) {
-        menu.addItem((mi) => mi.setTitle(t("\u628A\u5DF2\u5199\u597D\u7684 \u270D\uFE0F \u7B54 \u53D1\u7ED9\u4F1A\u8BDD\u7EE7\u7EED")).setIcon("send").onClick(() => this.submitWrittenReply(path17, sourceView?.editor, { line: block.start })));
+        menu.addItem((mi) => mi.setTitle(t("\u628A\u5DF2\u5199\u597D\u7684 \u270D\uFE0F \u7B54 \u53D1\u7ED9\u4F1A\u8BDD\u7EE7\u7EED")).setIcon("send").onClick(() => this.submitWrittenReply(path18, sourceView?.editor, { line: block.start })));
         menu.addSeparator();
       }
     }
     for (const [index, session] of sessions.entries()) {
       const title = `${AGENTS[session.agent]?.name || session.agent} \xB7 ${t("\u4F1A\u8BDD {n}", { n: index + 1 })}`;
       if (this.canContinueSession(session, { requireSid: false })) {
-        menu.addItem((mi) => mi.setTitle(t("\u7EE7\u7EED\u5BF9\u8BDD\uFF08\u8FFD\u95EE\uFF09\xB7 {title}", { title })).setIcon("message-square-plus").setDisabled(!session.sid || activeJob(session)).onClick(() => this.openFollowUp(session, { path: path17, line: block.start, blockId, title: session.title || session.name || "" })));
+        menu.addItem((mi) => mi.setTitle(t("\u7EE7\u7EED\u5BF9\u8BDD\uFF08\u8FFD\u95EE\uFF09\xB7 {title}", { title })).setIcon("message-square-plus").setDisabled(!session.sid || activeJob(session)).onClick(() => this.openFollowUp(session, { path: path18, line: block.start, blockId, title: session.title || session.name || "" })));
       }
       menu.addItem((mi) => mi.setTitle(t("\u67E5\u770B\u6B63\u6587\u4E0E\u4FDD\u5B58\u5BF9\u8BDD \xB7 {title}", { title })).setDisabled(!session.sid).onClick(() => this.openConversation(session)));
       if (canOpenClient(session)) menu.addItem((mi) => mi.setTitle(t("\u5728\u5BA2\u6237\u7AEF\u6253\u5F00 \xB7 {title}", { title })).setDisabled(!session.sid || hasAgentCapability(session.agent, "waitDesktopUntilDone") && activeJob(session)).onClick(() => this.openClientSession(session)));
@@ -37144,9 +37560,12 @@ ${t("\u8BF7\u6309\u8FD9\u4E2A\u7EE7\u7EED\uFF0C\u4E0D\u7528\u518D\u95EE\u540C\u4
       else if (session.handoff && !session.sid && activeJob(session)) menu.addItem((mi) => mi.setTitle(t("\u53D6\u6D88\u4EA4\u63A5 \xB7 {title}", { title })).onClick(() => this.cancelJob(session.id)));
       menu.addSeparator();
     }
-    for (const agent of AGENT_ORDER.filter((a) => this.agentEnabled(a) && !AGENTS[a].trackingOnly)) menu.addItem((mi) => mi.setTitle(t("\u91CD\u65B0\u59D4\u6D3E\uFF08\u65B0\u4F1A\u8BDD\uFF09\xB7 {agent}", { agent: AGENTS[agent].name })).onClick(() => this.delegateDrop(agent, { path: path17, line: block.start, lineText: lines[block.start] }, null, { newSession: true })));
+    for (const agent of AGENT_ORDER.filter((a) => this.agentEnabled(a) && !AGENTS[a].trackingOnly)) menu.addItem((mi) => mi.setTitle(t("\u91CD\u65B0\u59D4\u6D3E\uFF08\u65B0\u4F1A\u8BDD\uFF09\xB7 {agent}", { agent: AGENTS[agent].name })).onClick(() => this.delegateDrop(agent, { path: path18, line: block.start, lineText: lines[block.start] }, null, { newSession: true })));
+    if (process.platform === "win32" && this.agentEnabled("teleagent")) {
+      menu.addItem((mi) => mi.setTitle(t("\u6D3E\u53D1\u5230 TeleAgent\uFF08\u81EA\u52A8\u586B\u5199\u5E76\u53D1\u9001\uFF09")).setIcon("send").onClick(() => this.dispatchToTeleagent(path18, block.start, lines)));
+    }
     menu.addSeparator();
-    menu.addItem((mi) => mi.setTitle(t("\u5728\u9879\u76EE\u5DE5\u4F5C\u53F0\u62C6\u89E3\u5E76\u5206\u914D\u5C0F\u961F")).setIcon("folder-kanban").onClick(() => this.openProjectWorkbench({ path: path17, line: block.start })));
+    menu.addItem((mi) => mi.setTitle(t("\u5728\u9879\u76EE\u5DE5\u4F5C\u53F0\u62C6\u89E3\u5E76\u5206\u914D\u5C0F\u961F")).setIcon("folder-kanban").onClick(() => this.openProjectWorkbench({ path: path18, line: block.start })));
     if (sourceView?.editor) {
       menu.addItem((mi) => mi.setTitle(t("\u7ED1\u5B9A\u6216\u5408\u5E76\u5230\u5176\u4ED6\u4EFB\u52A1")).onClick(() => {
         sourceView.editor.setCursor({ line: block.start, ch: 0 });
@@ -37165,7 +37584,7 @@ ${t("\u8BF7\u6309\u8FD9\u4E2A\u7EE7\u7EED\uFF0C\u4E0D\u7528\u518D\u95EE\u540C\u4
     const icons = { outline: "list-tree", table: "table", cards: "layout-grid", timeline: "history" };
     setLucide(el, icons[viewMode] || "list-tree");
   }
-  populateRecordExportMenu(sub, { path: path17 = "", line = 0, viewMode = "outline" } = {}) {
+  populateRecordExportMenu(sub, { path: path18 = "", line = 0, viewMode = "outline" } = {}) {
     const viewLabels = {
       outline: t("\u5927\u7EB2"),
       table: t("\u8868\u683C"),
@@ -37173,20 +37592,20 @@ ${t("\u8BF7\u6309\u8FD9\u4E2A\u7EE7\u7EED\uFF0C\u4E0D\u7528\u518D\u95EE\u540C\u4
       timeline: t("\u65F6\u95F4\u7EBF")
     };
     const activeViewLabel = viewLabels[viewMode] || viewLabels.outline;
-    sub.addItem((si) => si.setTitle(t("\u5BFC\u51FA\u4E3A PDF\uFF08{view}\uFF09", { view: activeViewLabel })).setIcon("file-text").onClick(() => exportTaskToPdf(this, path17, line, { viewMode })));
-    sub.addItem((si) => si.setTitle(t("\u5BFC\u51FA\u4E3A HTML\uFF08{view}\uFF09", { view: activeViewLabel })).setIcon("globe").onClick(() => exportTaskToHtml(this, path17, line, { viewMode })));
-    sub.addItem((si) => si.setTitle(t("\u5BFC\u51FA\u4E3A Markdown (.md)")).setIcon("file-code").onClick(() => exportTaskToMarkdown(this, path17, line)));
-    sub.addItem((si) => si.setTitle(t("\u5BFC\u51FA\u4E3A JSON (.json)")).setIcon("braces").onClick(() => exportTaskToJson(this, path17, line, { viewMode })));
-    sub.addItem((si) => si.setTitle(t("\u5BFC\u51FA\u4E3A CSV (.csv)")).setIcon("table").onClick(() => exportTaskToCsv(this, path17, line)));
+    sub.addItem((si) => si.setTitle(t("\u5BFC\u51FA\u4E3A PDF\uFF08{view}\uFF09", { view: activeViewLabel })).setIcon("file-text").onClick(() => exportTaskToPdf(this, path18, line, { viewMode })));
+    sub.addItem((si) => si.setTitle(t("\u5BFC\u51FA\u4E3A HTML\uFF08{view}\uFF09", { view: activeViewLabel })).setIcon("globe").onClick(() => exportTaskToHtml(this, path18, line, { viewMode })));
+    sub.addItem((si) => si.setTitle(t("\u5BFC\u51FA\u4E3A Markdown (.md)")).setIcon("file-code").onClick(() => exportTaskToMarkdown(this, path18, line)));
+    sub.addItem((si) => si.setTitle(t("\u5BFC\u51FA\u4E3A JSON (.json)")).setIcon("braces").onClick(() => exportTaskToJson(this, path18, line, { viewMode })));
+    sub.addItem((si) => si.setTitle(t("\u5BFC\u51FA\u4E3A CSV (.csv)")).setIcon("table").onClick(() => exportTaskToCsv(this, path18, line)));
     sub.addSeparator();
-    sub.addItem((si) => si.setTitle(t("\u590D\u5236\u4E3A Markdown")).setIcon("clipboard-copy").onClick(() => copyTaskMarkdown(this, path17, line)));
-    sub.addItem((si) => si.setTitle(t("\u590D\u5236\u4E3A Markdown \u8868\u683C")).setIcon("table").onClick(() => copyTaskMarkdownTable(this, path17, line)));
-    sub.addItem((si) => si.setTitle(t("\u590D\u5236\u4E3A\u7EAF\u6587\u672C")).setIcon("align-left").onClick(() => copyTaskPlainText(this, path17, line)));
-    sub.addItem((si) => si.setTitle(t("\u590D\u5236\u4E3A JSON")).setIcon("copy").onClick(() => copyTaskJson(this, path17, line, { viewMode })));
+    sub.addItem((si) => si.setTitle(t("\u590D\u5236\u4E3A Markdown")).setIcon("clipboard-copy").onClick(() => copyTaskMarkdown(this, path18, line)));
+    sub.addItem((si) => si.setTitle(t("\u590D\u5236\u4E3A Markdown \u8868\u683C")).setIcon("table").onClick(() => copyTaskMarkdownTable(this, path18, line)));
+    sub.addItem((si) => si.setTitle(t("\u590D\u5236\u4E3A\u7EAF\u6587\u672C")).setIcon("align-left").onClick(() => copyTaskPlainText(this, path18, line)));
+    sub.addItem((si) => si.setTitle(t("\u590D\u5236\u4E3A JSON")).setIcon("copy").onClick(() => copyTaskJson(this, path18, line, { viewMode })));
     sub.addSeparator();
-    sub.addItem((si) => si.setTitle(t("\u53E6\u5B58\u4E3A\u5E76\u79FB\u51FA\u539F\u6587\u2026")).setIcon("folder-output").onClick(() => saveTaskAsFile(this, path17, line)));
+    sub.addItem((si) => si.setTitle(t("\u53E6\u5B58\u4E3A\u5E76\u79FB\u51FA\u539F\u6587\u2026")).setIcon("folder-output").onClick(() => saveTaskAsFile(this, path18, line)));
   }
-  openRecordViewMenu(event, { path: path17 = "", line = 0, viewMode = "outline", onSelect } = {}) {
+  openRecordViewMenu(event, { path: path18 = "", line = 0, viewMode = "outline", onSelect } = {}) {
     const menu = new import_obsidian21.Menu();
     const views = [
       ["outline", t("\u5927\u7EB2"), "list-tree"],
@@ -37199,9 +37618,9 @@ ${t("\u8BF7\u6309\u8FD9\u4E2A\u7EE7\u7EED\uFF0C\u4E0D\u7528\u518D\u95EE\u540C\u4
         mi.setTitle(label).setIcon(icon).setChecked(viewMode === id).onClick(() => onSelect?.(id));
       });
     }
-    if (path17) {
+    if (path18) {
       menu.addSeparator();
-      const opts = { path: path17, line, viewMode };
+      const opts = { path: path18, line, viewMode };
       menu.addItem((mi) => {
         mi.setTitle(t("\u5BFC\u51FA")).setIcon("download");
         if (typeof mi.setSubmenu === "function") {
@@ -37290,14 +37709,14 @@ ${t("\u8BF7\u6309\u8FD9\u4E2A\u7EE7\u7EED\uFF0C\u4E0D\u7528\u518D\u95EE\u540C\u4
     });
   }
   // ---------- editor actions ----------
-  async delegateAtLine(path17, line, extraOpts = {}) {
-    const file = this.app.vault.getAbstractFileByPath(path17);
+  async delegateAtLine(path18, line, extraOpts = {}) {
+    const file = this.app.vault.getAbstractFileByPath(path18);
     if (!file) return this.notice(t("\u627E\u4E0D\u5230\u8FD9\u7BC7\u7B14\u8BB0"));
-    const lines = (await this.readNote(path17)).split("\n");
-    return this.delegateDrop(this.defaultTarget(), { path: path17, line, lineText: lines[line] }, null, extraOpts);
+    const lines = (await this.readNote(path18)).split("\n");
+    return this.delegateDrop(this.defaultTarget(), { path: path18, line, lineText: lines[line] }, null, extraOpts);
   }
-  openDelegateModal(path17, line) {
-    new DelegateOptionsModal(this.app, this, path17, line).open();
+  openDelegateModal(path18, line) {
+    new DelegateOptionsModal(this.app, this, path18, line).open();
   }
   // Which journal the two commands act on: the note you are looking at when it
   // sits next to today's journal, otherwise today's journal.
@@ -37466,12 +37885,12 @@ ${t("\u8BF7\u6309\u8FD9\u4E2A\u7EE7\u7EED\uFF0C\u4E0D\u7528\u518D\u95EE\u540C\u4
   }
   openSessionForEditor(editor, view2) {
     if (!view2 || !view2.file) return;
-    const path17 = view2.file.path, line = editor.getCursor().line;
-    const map = this.lineMap(path17, editor.cm.state.doc);
+    const path18 = view2.file.path, line = editor.getCursor().line;
+    const map = this.lineMap(path18, editor.cm.state.doc);
     let s = map.sessionByParent.get(line);
     if (!s) {
       const text = editor.getLine(line);
-      const job = this.jobAtLine(path17, line, text);
+      const job = this.jobAtLine(path18, line, text);
       if (job) return this.openJob(job.id);
     }
     if (!s) return this.notice(t("\u8FD9\u4E00\u884C\u4E0B\u9762\u6CA1\u6709 \u{1F517} \u7ED1\u5B9A"));
@@ -37596,9 +38015,9 @@ ${t("\u8BF7\u6309\u8FD9\u4E2A\u7EE7\u7EED\uFF0C\u4E0D\u7528\u518D\u95EE\u540C\u4
     file = await this.app.vault.create(pathStr, content);
     return { path: pathStr, file };
   }
-  async writeWorkbenchTasks({ path: path17 = "", line = -1, parentTitle = "", subtasks = [], enableBoard = true } = {}) {
+  async writeWorkbenchTasks({ path: path18 = "", line = -1, parentTitle = "", subtasks = [], enableBoard = true } = {}) {
     var _a;
-    const ensured = await this.ensureNoteFile(path17);
+    const ensured = await this.ensureNoteFile(path18);
     const targetPath = ensured.path;
     const activeSubtasks = (subtasks || []).filter((s) => s && s.checked !== false && String(s.title || "").trim());
     if (!activeSubtasks.length) throw new Error(t("\u6CA1\u6709\u53EF\u5199\u5165\u7684\u5B50\u4EFB\u52A1"));
@@ -37691,7 +38110,7 @@ ${t("\u8BF7\u6309\u8FD9\u4E2A\u7EE7\u7EED\uFF0C\u4E0D\u7528\u518D\u95EE\u540C\u4
     return { path: targetPath, lines: finalLines, parentLine, parentBlockId, subtaskLines };
   }
   async dispatchWorkbenchTasks({
-    path: path17,
+    path: path18,
     lines,
     subtaskLines = [],
     cwd = "",
@@ -37703,9 +38122,9 @@ ${t("\u8BF7\u6309\u8FD9\u4E2A\u7EE7\u7EED\uFF0C\u4E0D\u7528\u518D\u95EE\u540C\u4
     round = 1
   } = {}) {
     var _a;
-    const file = this.app.vault.getAbstractFileByPath(path17);
-    if (!file) throw new Error(t("\u627E\u4E0D\u5230\u76EE\u6807\u7B14\u8BB0\uFF1A{path}", { path: path17 }));
-    const freshLines = lines || (await this.readNote(path17)).split("\n");
+    const file = this.app.vault.getAbstractFileByPath(path18);
+    if (!file) throw new Error(t("\u627E\u4E0D\u5230\u76EE\u6807\u7B14\u8BB0\uFF1A{path}", { path: path18 }));
+    const freshLines = lines || (await this.readNote(path18)).split("\n");
     const tasks = subtaskLines.map((item) => ({ item, block: blockAt(freshLines, item.line) })).filter((x) => x.block);
     if (!tasks.length) return;
     const siblingModel = tasks.length > 1 ? {
@@ -37761,7 +38180,7 @@ ${t("\u8BF7\u6309\u8FD9\u4E2A\u7EE7\u7EED\uFF0C\u4E0D\u7528\u518D\u95EE\u540C\u4
         };
       });
       const wave = createWorkbenchWave({
-        path: path17,
+        path: path18,
         parentBlockId,
         parentTitle: parentTitle || t("\u534F\u4F5C\u9879\u76EE"),
         projectName: projectName2,
@@ -37774,7 +38193,7 @@ ${t("\u8BF7\u6309\u8FD9\u4E2A\u7EE7\u7EED\uFF0C\u4E0D\u7528\u518D\u95EE\u540C\u4
       (_a = this.settings).workbenchWaves || (_a.workbenchWaves = {});
       this.settings.workbenchWaves[wave.id] = wave;
       if (parentBlockId || parentTitle) {
-        await updateNote(this, path17, (text) => updateTaskBlockStatusById(text, {
+        await updateNote(this, path18, (text) => updateTaskBlockStatusById(text, {
           blockId: parentBlockId,
           title: parentTitle,
           targetColumn: "doing",
@@ -37787,10 +38206,10 @@ ${t("\u8BF7\u6309\u8FD9\u4E2A\u7EE7\u7EED\uFF0C\u4E0D\u7528\u518D\u95EE\u540C\u4
     }
     this.refreshUI();
   }
-  async dispatchBoardGroup(path17, parentLine, { model: providedModel = null } = {}) {
-    const file = this.app.vault.getAbstractFileByPath(path17);
+  async dispatchBoardGroup(path18, parentLine, { model: providedModel = null } = {}) {
+    const file = this.app.vault.getAbstractFileByPath(path18);
     if (!file) return this.notice(t("\u627E\u4E0D\u5230\u8FD9\u7BC7\u7B14\u8BB0"));
-    let text = await this.readNote(path17);
+    let text = await this.readNote(path18);
     let lines = text.split("\n");
     const groups = extractTaskBoardGroups(text, {
       trackedIds: this.recordTrackedIds ? this.recordTrackedIds() : /* @__PURE__ */ new Set(),
@@ -37802,7 +38221,7 @@ ${t("\u8BF7\u6309\u8FD9\u4E2A\u7EE7\u7EED\uFF0C\u4E0D\u7528\u518D\u95EE\u540C\u4
     let parentBlockId = blockIdOf(lines[parentLine]);
     if (!parentBlockId) {
       const generated = makeBlockId("", "ad", readableSlug(grp?.title || ""));
-      await updateNote(this, path17, (cur) => {
+      await updateNote(this, path18, (cur) => {
         const curLines = cur.split("\n");
         if (!curLines[parentLine]) return cur;
         const ensured = ensureBlockId(curLines[parentLine], generated);
@@ -37810,7 +38229,7 @@ ${t("\u8BF7\u6309\u8FD9\u4E2A\u7EE7\u7EED\uFF0C\u4E0D\u7528\u518D\u95EE\u540C\u4
         parentBlockId = ensured.blockId;
         return curLines.join("\n");
       });
-      text = await this.readNote(path17);
+      text = await this.readNote(path18);
       lines = text.split("\n");
     }
     const model = providedModel || buildTaskBoardModel(grp, this);
@@ -37825,7 +38244,7 @@ ${t("\u8BF7\u6309\u8FD9\u4E2A\u7EE7\u7EED\uFF0C\u4E0D\u7528\u518D\u95EE\u540C\u4
       boardContext: buildBoardSiblingContext(model, card.line)
     }));
     const existingWave = findActiveWaveForBoard(this.settings.workbenchWaves, {
-      path: path17,
+      path: path18,
       parentBlockId,
       parentTitle: model.title
     });
@@ -37837,7 +38256,7 @@ ${t("\u8BF7\u6309\u8FD9\u4E2A\u7EE7\u7EED\uFF0C\u4E0D\u7528\u518D\u95EE\u540C\u4
       defaultAgent: this.defaultTarget?.()
     });
     await this.dispatchWorkbenchTasks({
-      path: path17,
+      path: path18,
       lines,
       subtaskLines,
       parentTitle: model.title,
@@ -38638,22 +39057,22 @@ ${body}` });
   openExternal(url) {
     return openExternal(url);
   }
-  async readNote(path17) {
-    const view2 = this.sourceViewForPath(path17);
+  async readNote(path18) {
+    const view2 = this.sourceViewForPath(path18);
     if (view2) return view2.editor.getValue();
-    const file = this.app.vault.getAbstractFileByPath(path17);
-    if (!file) throw new Error(t("\u627E\u4E0D\u5230\u7B14\u8BB0\uFF1A{path}", { path: path17 }));
+    const file = this.app.vault.getAbstractFileByPath(path18);
+    if (!file) throw new Error(t("\u627E\u4E0D\u5230\u7B14\u8BB0\uFF1A{path}", { path: path18 }));
     return await this.app.vault.read(file);
   }
-  async writeNote(path17, text) {
-    const view2 = this.sourceViewForPath(path17);
+  async writeNote(path18, text) {
+    const view2 = this.sourceViewForPath(path18);
     if (view2) {
       const change = diffLines(view2.editor.getValue(), text);
       if (change) view2.editor.transaction({ changes: [change] });
       return;
     }
-    const file = this.app.vault.getAbstractFileByPath(path17);
-    if (!file) throw new Error(t("\u627E\u4E0D\u5230\u7B14\u8BB0\uFF1A{path}", { path: path17 }));
+    const file = this.app.vault.getAbstractFileByPath(path18);
+    if (!file) throw new Error(t("\u627E\u4E0D\u5230\u7B14\u8BB0\uFF1A{path}", { path: path18 }));
     await this.app.vault.process(file, () => text);
   }
   async checkBinary(kind) {

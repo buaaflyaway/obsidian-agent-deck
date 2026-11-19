@@ -78,6 +78,18 @@ export default {
   "在桌面客户端中聊": "Chat in the desktop app",
   "复制任务并打开客户端，等待你粘贴发送。":
     "Copies the task and opens the client; paste it and send from there.",
+  "派发到 TeleAgent（自动填写并发送）": "Dispatch to TeleAgent (type and send for me)",
+  "这个任务没有登记过项目目录，先在设置里登记项目文件夹":
+    "This task has no registered project folder; register one in settings first.",
+  "没有识别到项目名，已退回复制交接":
+    "No project name was recognized; fell back to the copy-and-paste handoff.",
+  "已派发到 TeleAgent · {project}": "Dispatched to TeleAgent · {project}",
+  "派发失败（{stage}）：{error}": "Dispatch failed ({stage}): {error}",
+  "缺少项目名（project）": "Missing project name (project)",
+  "缺少要派发的文本（text）": "Missing text to dispatch (text)",
+  "文本超过 {n} 字上限": "Text exceeds the {n}-character limit",
+  "UI Automation 派发只在 Windows 可用": "UI Automation dispatch is only available on Windows",
+  "派发超时（{ms}ms）": "Dispatch timed out ({ms} ms)",
   "建立会话后打开 Harness；当前轮结束后在侧栏选择同一会话继续。":
     "Starts the session, then opens Harness; when this turn ends, pick the same session in the sidebar to continue.",
   "先执行首轮，结束后打开桌面中的同一会话；首轮期间避免两边同时发送。":

@@ -37,7 +37,7 @@ import { AgentDeckView, VIEW_TYPE } from "./view.js";
 import { DashboardView, DASHBOARD_TYPE } from "./dashboard.js";
 import { AgentDeckSettingsTab } from "./settings.js";
 import { syncModelGroups } from "./model-groups.js";
-import { recentProjectFolders } from "./project-folders.js";
+import { recentProjectFolders, resolveProjectForTask } from "./project-folders.js";
 import { DelegateOptionsModal, ConfirmSendModal, FollowUpModal, ArchiveTargetModal, askApiConsentInApp, askJournalMarkerRepair, defaultWorkMode, resolveTaskProjectState } from "./dialog.js";
 import { agentIcon, setLucide } from "./icons.js";
 import { createEditorExtension, dispatchRefresh, ITEM_MIME } from "./editor.js";
@@ -2324,6 +2324,21 @@ export default class AgentDeckPlugin extends Plugin {
     }).open();
   }
 
+  // 人在场的一键派发：把这一行任务交给 TeleAgent 的 UI Automation 通道，自动建任务、填词并点「运行」。
+  // 项目名从任务上下文里解析（wikilink / 标题前缀 / 笔记路径），解析不到就明确拒绝——
+  // 猜错项目会把任务派进别的代码库，比不派发更糟。
+  async dispatchToTeleagent(path, line, lines) {
+    const blockText = String(lines[line] || "");
+    const context = lines.slice(Math.max(0, line - 4), line + 1);
+    const resolved = resolveProjectForTask({ settings: this.settings, notePath: path, contextLines: context, blockText });
+    const project = String(resolved?.name || "").trim();
+    if (!project) {
+      this.notice(t("这个任务没有登记过项目目录，先在设置里登记项目文件夹"), 8000);
+      return;
+    }
+    await this.delegator.handoff({ agent: "teleagent", path, line, lineText: blockText, projectName: project, autoSend: true });
+  }
+
   async taskActions(path, line, event) {
     let text;
     try { text = await this.readNote(path); } catch { return; }
@@ -2361,6 +2376,9 @@ export default class AgentDeckPlugin extends Plugin {
       menu.addSeparator();
     }
     for (const agent of AGENT_ORDER.filter(a => this.agentEnabled(a) && !AGENTS[a].trackingOnly)) menu.addItem(mi => mi.setTitle(t("重新委派（新会话）· {agent}", { agent: AGENTS[agent].name })).onClick(() => this.delegateDrop(agent, { path, line: block.start, lineText: lines[block.start] }, null, { newSession: true })));
+    if (process.platform === "win32" && this.agentEnabled("teleagent")) {
+      menu.addItem(mi => mi.setTitle(t("派发到 TeleAgent（自动填写并发送）")).setIcon("send").onClick(() => this.dispatchToTeleagent(path, block.start, lines)));
+    }
     menu.addSeparator();
     menu.addItem(mi => mi.setTitle(t("在项目工作台拆解并分配小队")).setIcon("folder-kanban").onClick(() => this.openProjectWorkbench({ path, line: block.start })));
     if (sourceView?.editor) {

@@ -22,6 +22,7 @@
 | [`specs/harness-delta-2026-11-18.zh-CN.md`](specs/harness-delta-2026-11-18.zh-CN.md) | 单批增量说明（文本 harness 视角）：这一轮新增了什么、因此能做到什么、回复协议的设计意见 |
 | [`specs/dream-shared-memory.md`](specs/dream-shared-memory.md) | **方向草案**：Dream 记忆按条共享（scope/audience、发布层、MCP 接入、撤销红线），参照 Notion 的 MCP + personal memories 模型 |
 | [`specs/teleagent-adapter.zh-CN.md`](specs/teleagent-adapter.zh-CN.md) | 已实现 P0：TeleAgent（星辰超级智能体）只读追踪——本地 SQLite 契约、真实环境变量（`SUPER_AGENT_APP_DATA_DIR`）、多账号发现、附件绝对路径剥离；P1 复制交接与 P2 深链仍未实现 |
+| [`specs/teleagent-uia-automation.zh-CN.md`](specs/teleagent-uia-automation.zh-CN.md) | **界面操作通道**：Windows UI Automation 实测（元素树规模、`AutomationId` 缺失、懒启用预热、`ClickablePoint` 未实现、Slate 输入框可写性）、四条路线取舍与定位原语 |
 
 ## `docs/research/` 调研索引
 | 文档 | 覆盖范围 |
