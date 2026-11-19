@@ -1,197 +1,181 @@
 # Agent Deck
 
-> Delegate AI work from your journal. Review daily token usage and project activity in a dashboard.
+> Watch, direct and review your local AI agents from inside Obsidian.
 
-[中文](README.md) ｜ **English** ｜ [GitHub Releases](https://github.com/MatsuriMW/obsidian-agent-deck/releases) ｜ [Changelog](CHANGELOG.md)
+**English** ｜ [中文](README.md) ｜ [GitHub Releases](https://github.com/MatsuriMW/obsidian-agent-deck/releases) ｜ [Changelog](CHANGELOG.md) ｜ [Discord](https://discord.gg/hVPpAnChv7) ｜ [GitHub Discussions](https://github.com/MatsuriMW/obsidian-agent-deck/discussions)
 
-This project is still early and evolving quickly. Some parts of the experience may be rough, and occasional updates may introduce breaking changes. Check the [Roadmap](https://matsuri.site/portfolio/journal-workflow/#whistlist) to submit suggestions and vote on upcoming features, or open a [GitHub Issue](https://github.com/MatsuriMW/obsidian-agent-deck/issues) / email [klauschen2799@gmail.com](mailto:klauschen2799@gmail.com) to report bugs.
-
-<p align="center">
-  <a href="https://github.com/MatsuriMW/obsidian-agent-deck/releases/download/1.2.1/agent-deck-demo-4k60.mp4"><img src="assets/demo.gif" width="800" alt="Agent Deck demo: a session card dropped on a journal task binds it, a task dropped on an agent delegates it, status and the answer are written back"></a>
-</p>
-
-<p align="center">25-second demo (Chinese captions) · click for the <a href="https://github.com/MatsuriMW/obsidian-agent-deck/releases/download/1.2.1/agent-deck-demo-4k60.mp4">4K60 version with sound</a></p>
-
-Agent Deck brings AI agent sessions scattered across separate local clients onto one deck inside Obsidian: see at a glance which agent is running, which one is waiting for you, and how far each has progressed. Delegate work directly from any task line in your notes, and let progress, active time, and answers flow back into the same journal.
-
----
-
-## Core Architecture & Information Flow
+Agent Deck is under active development. See the [roadmap](https://matsuri.site/portfolio/journal-workflow/#wishlist) for what's coming next, or say hello on [Discord](https://discord.gg/hVPpAnChv7), [GitHub Discussions](https://github.com/MatsuriMW/obsidian-agent-deck/discussions) or [GitHub Issues](https://github.com/MatsuriMW/obsidian-agent-deck/issues).
 
 <p align="center">
-  <img src="assets/architecture.en.svg" width="900" alt="Agent Deck Core Architecture and Information Flow: Task delegation, 8 local AI agents, read-only tracking, multi-view journal sync, Review Dashboard, and Dreaming">
+  <a href="https://github.com/MatsuriMW/obsidian-agent-deck/releases/download/1.2.1/agent-deck-demo-4k60.mp4"><img src="assets/demo.gif" width="800" alt="Agent Deck demo: drag a session onto a journal task to bind it, drag a task onto an agent to delegate, status and results are written back"></a>
 </p>
 
----
+<p align="center">25-second demo · click for the <a href="https://github.com/MatsuriMW/obsidian-agent-deck/releases/download/1.2.1/agent-deck-demo-4k60.mp4">4K60 version</a></p>
 
-## Core Features
+Agent Deck gathers the AI sessions scattered across your local clients into Obsidian: see who is running, who is waiting and how far each task has gone, delegate straight from a task line in your journal or notes, and get progress, duration and conclusions written back to that same line.
 
-### 1. Unified Multi-Agent Session Panel
-- **Tracks 9 local agents**: **Claude Code, Codex, WorkBuddy, DeepSeek Harness, Antigravity, OpenCode, Qoder**, plus **Cursor** (3.30.14+ Hooks, tracking only) and **Grok Bot** (Sand desktop client with per-bot selection, tracking only).
-- **Project-first concurrency management**: The **Now** section groups active, waiting, and errored/limit-hit sessions by workspace project by default (with a one-click toggle back to flat **List**), showing participating agents, status badges, open-folder shortcut, Project Workbench launcher, and project-wide stop controls. **Recent Sessions** switches between `7 / 30 / 120` days and stacks either **By agent** or **By project**.
-- **Live status & quick jump**: Distinguishes running, waiting for reply, needs approval, hit limit, paused, errored, and finished sessions; click a session card to switch back to its client or terminal tab (or jump directly to the note line for pending handoff jobs).
-- **Primary agents & global search**: Pin up to 2 primary agents for full history and cross-day catch-up (other enabled agents read sessions active today); search across all scanned local sessions by title, project, model, or content, and view a 14-day activity trend.
+## Contents
 
-### 2. Task-Line Delegation & Drag-and-Drop Binding
-- **Three ways to delegate**:
-  - Click the paper-plane grip at the end of a task line (or double-click / `⌘`-click to pick the agent);
-  - Drag a list item from your note onto an agent card in the sidebar;
-  - Type `@` in a task line to pick an agent, then `/` for model and reasoning effort (e.g. `@codex/gpt-6.1-sol/high`).
-- **Pre-send preview & wikilink context**: Preview the block and choose a work destination before sending; delegating a sub-item automatically carries its ancestor chain (excluding unrelated sibling branches), its child subtree, and excerpts from explicit `[[wikilinks]]`, and you can edit an AI reply block to delegate again from it.
-- **Drag to bind**: Drop a session card onto an existing list item to bind it, or onto an empty line to create a new bound task. Regular bound sessions show a status pill. Background tasks show one progress row below the parent task with cancel/retry actions; it disappears when the answer is ready.
+- [0. At a glance](#0-at-a-glance)
+- [1. Multi-agent session tracking](#1-multi-agent-session-tracking)
+- [2. Delegate from your notes](#2-delegate-from-your-notes)
+- [3. Project workbench and in-place board](#3-project-workbench-and-in-place-board)
+- [4. Journal, tidy and archive](#4-journal-tidy-and-archive)
+- [5. Collaboration Dashboard](#5-collaboration-dashboard)
+- [6. Notes as context](#6-notes-as-context)
+- [7. Menu bar, Dreaming and UI language](#7-menu-bar-dreaming-and-ui-language)
+- [Agent support](#agent-support)
+- [Install and requirements](#install-and-requirements)
+- [Known limits](#known-limits)
+- [Privacy and license](#privacy-and-license)
 
-### 3. Project Workbench & In-Place Fractal Boards
-- **Team presets, Copilot planning & concurrent dispatch**: Open the **Project Workbench** from the sidebar, command palette, or task menu to pick from five built-in team presets (covering engineering and knowledge work: Full-stack Dev, Debug & Refactor, Research & Docs, Deep Research, and Editorial Writing — automatically routing around disabled or hit-limit agents and remembering per-project preferences), decompose goals into editable subtask drafts via the configured organizer model or quick local split, write standard `- TODO ... @agent` Markdown (placed inside the active journal band with pre-assigned block IDs), and dispatch multiple agents concurrently after review.
-- **In-place Fractal Boards (Editing view)**: Any parent list item with 2 or more direct child tasks (status keywords, standard `[ ]` checkboxes, or `![[note#^blockId]]` mirrors) gets a `Board N` toggle right on its line:
-  - **Dual column modes & recursive Zoom**: Switch between **By status** (`TODO / DOING / Wait / DONE`) and **By group** (direct child phases as columns, grandchild tasks as cards); click `↳` on any card with nested subtasks to zoom in with clickable breadcrumbs;
-  - **Full in-board workflow**: Track completion progress, quick-add cards inline (`+ Card`), assign `@agent` per card, drag subtrees across columns or reorder cards (atomically rewriting standard Markdown without proprietary syntax). Single-card transcript, stop, and dispatch actions (including sibling board context via Harness) live in the right-click menu, so cards no longer carry a bottom-right button row; one-click Dispatch TODO stays in the board header. Card titles and conclusions render Markdown—bold, inline code, wikilinks and external links are clickable, while clicking plain title text still jumps to the outline.
-  - **Compact height, pinning & bulk actions**: Each column shows about three normal cards (four when every card is short) and scrolls internally for the rest. Drop on a card's upper/lower half to insert before/after, or on empty column space to append. Pin a card via `📌` or pin selected cards in bulk; pinning only changes the projection order (stored in `data.json`, Markdown untouched). Card and column checkboxes support bulk status changes, pin/unpin, and deleting whole card subtrees (records and children included, with a second confirmation and editor undo); right-clicking with a multi-selection opens the same bulk actions. Mirror cards only participate in pinning—status changes and deletion go through the source note.
-  - **Single-source mirror cards**: Reference tasks across notes via `- ![[note#^blockId]]` or `- [[note#^blockId]]` as dashed **Mirror** cards—status changes write back to the primary source note, while Dashboard analytics and Dreaming explicitly ignore mirror lines to prevent double counting.
+## Features
 
-Demo order: team draft → Markdown outline → grouped board. See the [release notes](CHANGELOG.md#演示素材与验证范围) for observed behavior and pending acceptance checks.
+### 0. At a glance
+
+Watch every agent in the sidebar, delegate from your notes, and flip one AI record between four views; the board and the dashboard then show the output.
 
 <p align="center">
-  <img src="assets/project-workbench.en.png" width="760" alt="Agent Deck Project Workbench in English: five built-in team presets including Deep Research Team and Editorial Writing Team, role assignments, and editable subtask drafts">
+  <img src="assets/shadow/ai-record-views.webp" width="880" alt="One AI record in four views: outline, table, cards and timeline">
 </p>
-<p align="center">
-  <img src="assets/fractal-board-and-sidebar.en.png" width="840" alt="In-place Fractal Kanban Board in English alongside the project-grouped Agent Deck sidebar showing live running, queued, and waiting sessions">
-</p>
-
-> **Interactive 1.10.0 Welcome Showcase**: On your first launch after installing or upgrading to **1.10.0**, Agent Deck automatically creates and opens `Agent Deck/Welcome-1.10.0.md` (`功能示例-1.10.0.md` in Chinese UI) — a safe simulated sandbox (no real sessions or analytics affected) demonstrating the Fractal Board (with Zoom & mirror jump) and all four AI record views side by side. Reopen anytime via Command Palette → `Open 1.10.0 feature showcase note`.
-
-### 4. Human–AI Journal, Organization & Archiving
-- **Auto-journaling & write-back**: Periodically matches or creates daily-note task lines for today's sessions and syncs status, `⏱` active spans, per-turn records (brief / standard / detailed), and nested child session / side-chat / subagent blocks. Newly generated top-level AI record titles default to bold Markdown (`**title**`) with project/bot prefixes, and can be customized under **Settings → Records → Journal & Archive → More settings → Record formatting rules** (title bolding, project/bot prefix, time range, max title length, and Grok Bot idle auto-DONE threshold). Background answers of up to 500 characters are written inline in full; longer answers return a link to a Markdown file under `Agent Deck/Answers/` containing the full question and answer with internal tracking metadata removed (no extra summary model called). Regular session conclusions default to 350 characters, with long addresses shortened to clickable labels. Each session only follows its recent activity: the first time a session or bot is hooked, just its latest 10 turns are backfilled, and afterwards only turns produced that day are tracked, so older history is never re-written (adjustable under **More settings → Rounds recorded on first sight**).
-- **Keyword colours and icons**: every task keyword in the journal (`DOING` / `PAUSED` / `TOREVIEW` / `DONE` / `TODOFORAI` …) is coloured and carries its `tsq-ico` icon in both the editor and reading view, matching Logseq Style Tasks (TODOseq) one-to-one, including the icon animation when a keyword changes. AI auto-records stay unstruck even when `DONE`, while hand-written tasks keep their strikethrough. Toggle under **Records → Journal & Archive → Keyword colours and icons**; when TODOseq is installed, turn off both its "Format task keywords" and "Keyword icons" switches; Agent Deck yields to TODOseq per layer, so nothing renders twice.
-- **Title protection & record folding**: Preserves manually edited AI task titles verbatim; shows only the latest AI conclusion by default while keeping history expandable; supports manual status locking; keeps internal tracking IDs hidden and removes them automatically on completion or archival.
-- **Four persistent record views & view-aware export**: Switch any top-level AI record block in place between **Outline / Table / Cards / Timeline** (persisted per block without rewriting underlying Markdown), and export from the view menu's Export submenu as expanded view-aware PDF or standalone HTML, lossless Markdown (`.md`), structured JSON (`.json`), CSV (`.csv`), or clipboard snippets:
+<p align="center"><b>Four record views</b>: switch per block without rewriting the underlying Markdown.</p>
 
 <p align="center">
-  <img src="assets/ai-record-views.en.png" width="840" alt="AI auto-record views in English: Table View and Cards View side by side inside the interactive 1.10.0 Welcome Showcase">
+  <img src="assets/shadow/fractal-board-and-sidebar.en.png" width="840" alt="In-place fractal board next to the sidebar: the same outline, switched into a grouped board">
 </p>
-
-- **Outline shortcuts & batch task status**: `⌥⌘↑` **Go to ancestor** (press repeatedly to climb; the cursor lands just before the trailing `^blockId`), `⌥⌘⇧↑` **Go to top-level ancestor**, `⌥⌘↓` **Group rows**, plus **Batch update task status…** from the command palette or the editor context menu (`Ctrl+Alt` replaces `⌥⌘` on Windows / Linux):
-  - **Group rows is built to batch-merge AI auto-records**: **select any number of AI record blocks (children included) in the journal and one keystroke inserts an empty parent at their shallowest indent and demotes the whole selection beneath it — following Obsidian's `useTab` / `tabSize` and leaving the cursor on the new parent. The new parent immediately gets a `Board N` toggle, so you can flip to the in-place board and review that batch by status or group: the quickest way to audit a day of scattered agent runs.**
-  - **Batch status changes**: drag-selected, cross-level and multi-cursor (`Cmd+Click`) selections are deduplicated to their shallowest root list items, so internal `💬` / `🔗` record lines and child items are never mis-edited; keyworded tasks, plain list items and `[ ]` / `[/]` / `[x]` / `[-]` checkboxes update in a single transaction (one undo step), and AI manual status locks / "resume automatic status" keep working.
+<p align="center"><b>In-place board</b>: the same Markdown toggles between outline and board; drag a card to change its status.</p>
 
 <p align="center">
-  <img src="assets/group-rows-merged.png" width="840" alt="After Group rows: a batch of AI auto-records sits under one parent block, still keeping each round's conclusion">
+  <img src="assets/shadow/dashboard-overview.en.png" width="840" alt="Collaboration review dashboard: token heatmap, daily rhythm, agent and model distribution, project effort">
 </p>
+<p align="center"><b>Collaboration review</b>: how much you used each day, on which project, and which agent was busiest.</p>
 
-- **One-click tidy & archive**: **Tidy log** reorganizes the current daily note by template (in progress, to do, completed, framed by dividers). Only complete bounded sections are organized; outside notes stay unchanged. Notes without a complete frame receive empty sections; **Archive finished logs to…** moves completed AI blocks out of the journal into a target note grouped by date.
-- **Nautilus Spiral compatibility**: Works alongside [Nautilus Spiral](https://github.com/MatsuriMW/nautilus-spiral) by letting Agent Deck handle AI note writes while Nautilus keeps scheduling and tracking displays (Agent Deck restores token display whenever Nautilus does not show tokens for the same session).
+### 1. Multi-agent session tracking
 
-### 5. Review Dashboard (Experimental, On by Default)
-- Displays a GitHub-style **daily token heatmap** and **24-hour rhythm & concurrency** chart (input, output, and cache reads; does not represent monetary cost, with no estimates when missing) with 7/30/90-day, 1-year, and custom date filters.
-- Summarizes **By Agent** (with official Agent icons) and **By Model** (tokens, per-turn average, cache hit ratio) for linked filtering, and aggregates **Project activity** (sortable by tokens, active time, sessions, or name in ascending/descending order) from note links, titles, folders, keywords, and aliases; supports manual project overrides, per-day drill-down, and jumping back to the source journal block or session.
-- Uses only locally tracked history; makes no extra model calls and never modifies your journal.
+- **11 local agents in one place**: Claude Code, Codex, WorkBuddy, DeepSeek Harness, Antigravity, OpenCode, Qoder, Hermes Agent, QwenWork (千问办公), Cursor and Grok Bot.
+- **See Now by project**: the sidebar groups active sessions by workspace project; switch to a status view (waiting / unclaimed / running / error) or a flat list. Recent sessions can be filtered to 7 / 30 / 120 days and stacked by agent or project.
+- **States at a glance**: running, waiting for a reply, needs confirmation, limit reached, paused, error and done; subagent sessions are indented under their parent, and clicking a card switches back to that client or terminal tab.
+- **Primaries and search**: mark up to two agents as primary (full history; the rest only read today), and search every scanned session by title, project, model or body text.
+
+### 2. Delegate from your notes
+
+- **Three ways to delegate**: click the paper-plane at the end of a task line, drag a note item onto an agent card in the sidebar, or type `@` in the task line to pick an agent and `/` to pick a model and reasoning effort.
+- **Preview before sending**: preview the body and child blocks, switch the project folder, and choose the work mode and permissions for this run; delegating from a subtask carries the parent chain and related note excerpts automatically.
+- **Follow up in the note**: when an agent asks a question, a `❓` line appears under the task and lands in the sidebar Reply inbox; writing `✍️ Answer: …` by hand sends it back without leaving the note.
+- **Bind by dragging**: drop a session card on a task line to bind it, or on an empty line to create a task; background jobs show one progress line under the parent block with cancel and retry.
+
+### 3. Project workbench and in-place board
+
+- **Squad presets**: five built-in squads (full-stack, debugging and refactoring, research and docs, deep report, long-form writing) that skip disabled or rate-limited agents; enter a goal and get an editable subtask draft, then run it across agents.
+- **Steward check-in**: if a collaboration wave produces nothing new for 15 minutes, you get one reminder and the child card is updated.
+- **In-place board**: any block with several direct children gets a "Board N" toggle on its line; open it to view that block as a board in the current note, split by status or by group, with card zoom, cross-column drag, bulk status changes and pinning.
+- **Mirror cards**: reference a task from another note with `![[Note#^block-id]]`; the board shows it as a mirror and status changes write back to the source note.
+
+### 4. Journal, tidy and archive
+
+- **Automatic journaling**: sessions are scanned through the day, matched to (or created as) journal task lines, and their status, active time and per-round records are kept in sync; pick brief, standard or detailed records, and long answers are saved as separate notes with a link.
+- **Keyword colours**: task keywords such as `DOING` / `PAUSED` / `TOREVIEW` / `DONE` are coloured and iconified in both editing and reading views, matching Logseq Style Tasks.
+- **Titles and folding**: AI titles you edited by hand are never overwritten, and older rounds stay folded so the latest conclusion stays visible.
+- **Four views**: switch one record between outline, table, cards and timeline, then export the current view to PDF, HTML, Markdown, JSON or CSV.
+- **Tidy and archive**: reorganise the day into "doing / to do / done" in one command, or archive finished AI tasks by date into a note you choose.
+- **Works with Nautilus Spiral**: pair it with [Nautilus Spiral](https://github.com/MatsuriMW/nautilus-spiral) so Agent Deck owns the AI writes while Spiral keeps its schedule and progress display.
+
+### 5. Collaboration Dashboard
+
+- **Daily token heatmap** plus **24-hour rhythm and concurrency**: 7 / 30 / 90 days, a year or a custom range; nothing is estimated when data is missing.
+- **Agent and model distribution**: who used the most, cache hit rate, average per round.
+- **Project effort**: sessions are attributed to projects from journal links and titles, correctable by hand, and can be drilled into by date back to the source journal or session. No extra model calls.
+
+### 6. Notes as context
+
+> Everything here rests on one rule: whatever the AI produces or consumes is Markdown, so it lives back in your vault where you can read it, edit it, and see the change immediately.
+
+- **Memory library (one note per memory)**: each memory is a Markdown file; browse it as a **Base table**, drag it across three states in the **memory board**, or review it one by one (confirm / reject).
 
 <p align="center">
-  <img src="assets/dashboard-overview.en.png" width="840" alt="Agent Deck Review Dashboard in English showing Token activity heatmap, total tokens, active time, and sessions">
-</p>
-<p align="center">
-  <img src="assets/dashboard-agents-recent.en.png" width="840" alt="Agent Deck Review Dashboard 24-hour rhythm, By Agent and By Model breakdowns alongside project-grouped Recent sessions in the sidebar">
+  <img src="assets/shadow/memory-base.png" width="900" alt="The memory Base table (All memories): filter by type and state, each row readable and editable">
 </p>
 
-### 6. macOS Menu Bar Helper, Dreaming & Bilingual UI
-- **Solid macOS menu bar panel**: An always-accessible icon (or customizable global shortcut **`⌃⌥⌘D`**) for checking today's metrics and active/waiting sessions from any app and jumping straight to them.
-- **Dreaming long-term memory (optional, off by default)**: Distills long-term memories from the past 14 days of journals and delegated notes into editable Markdown with optional export/sync.
-- **Automatic UI language**: Follows Obsidian's language setting (Chinese or English) without changing note contents or CLI prompts.
+- **Memory that is used and traceable**: up to five relevant memories are injected when delegating, each with a link back to the journal, so the agent can check the source; the line a memory came from gets a backlink. The `Memory: health check` command lists entries with no source, pending confirmation or duplicates.
+- **Dispatch drafts and full context**: `Delegate: write a draft (do not send)` writes the complete payload and attaches it to the task line so you can edit before sending; sending saves a snapshot for later review. The editor's unsaved content is read first, and the parent outline, Q&A, memories and linked notes are included automatically. Too many links keep a path instead of full text, failures are reported instead of skipped, and notes marked `private` are never sent out.
+- **Goal → task.md → board**: `Plan: turn this line into task.md` splits one line into steps with acceptance criteria, and the resulting file becomes a board automatically; any note with a checklist can also become a board.
+- **Skill cards**: `Skills: refresh skill cards` turns local skills into notes; write `[[Skills/xxx]]` in a task to hand that skill to the agent. Hand-edited cards keep their text when refreshed.
+- **Workbench**: `Workbench: refresh overview` writes an index page with boards, memory stats and recent plans.
 
----
+### 7. Menu bar, Dreaming and UI language
 
-## Supported Agents at a Glance
+- **macOS menu bar**: a menu bar icon and the global shortcut `⌃⌥⌘D` show today's numbers, running and waiting sessions, and jump straight to them.
+- **Dreaming long-term memory** (optional, off by default): distils editable long-term memories from the last 14 days of journals and delegations, with an exportable copy.
+- **Bilingual UI**: the interface follows Obsidian's language setting; note text and prompts sent to agents stay unchanged.
+- **Keys stay out of the vault**: API keys can come from environment variables or a local secrets file, and `Export redacted diagnostics` produces a shareable report.
 
-| Agent | Session Tracking | Background Delegation | Desktop Handoff | Terminal Interactive | Direct Session Jump |
-|---|---|---|---|---|---|
-| **Claude Code** | Yes | Yes (`claude`) | Yes (auto-opens after turn 1) | Yes | Yes (desktop / terminal tab) |
-| **Codex** | Yes | Yes | Yes (via App Server after turn 1) | Yes | Yes (desktop / terminal tab) |
-| **DeepSeek Harness** | Yes | Yes (`dsh acp`) | Opens app only | — | Focuses app & copies session ID |
-| **Antigravity** | Yes | Yes (`agy acp`) | No | — | Focuses app & copies session ID |
-| **OpenCode** | Yes | Yes (`opencode-cli acp`) | Auto-opens app after turn 1 (shared DB) | Yes | Manual selection in app |
-| **Qoder** | Yes | Yes (`qodercli`) | Clipboard handoff to desktop | Yes (`qodercli`) | CLI resumes in terminal; desktop copies ID for manual pick |
-| **WorkBuddy** | Yes | No | Clipboard handoff to desktop | Yes (`codebuddy`) | Native WorkBuddy sessions & terminal resume (`codebuddy -r`) |
-| **Cursor** | Yes (3.30.14+ Hooks + logs) | No | No (tracking only) | — | Opens app & copies session ID |
-| **Grok Bot** | Yes (per-bot multi-select) | No | No (tracking only) | — | Focuses Grok Bot desktop app |
+## Agent support
 
----
+| Agent | Session tracking | Background delegation | Desktop handoff | Terminal |
+|---|---|---|---|---|
+| **Claude Code** | Yes | Yes | Yes (opens after the first round) | Yes |
+| **Codex** | Yes | Yes | Yes (opens after the first round) | Yes |
+| **DeepSeek Harness** | Yes | Yes | Focuses the client only | — |
+| **Antigravity** | Yes | Yes | No | — |
+| **OpenCode** | Yes | Yes | Opens after the first round | Yes |
+| **Qoder** | Yes | Yes | Copies the task and opens the app | Yes |
+| **Hermes Agent** | Yes | Yes | No (no desktop UI) | Yes |
+| **QwenWork (千问办公)** | Yes | No | No (tracking only) | — |
+| **WorkBuddy** | Yes | No | Copies the task and opens the app | Yes |
+| **Cursor** | Yes (Hooks required) | No | No (tracking only) | — |
+| **Grok Bot** | Yes (per-Bot selection) | No | No (tracking only) | — |
 
-## Installation & Requirements
+## Install and requirements
 
-### 1. Installing the Plugin
-Install directly from Obsidian Community Plugins, or download manually from GitHub Releases (current version **1.10.3**, requires Obsidian **1.4.0+** desktop):
+### Install
 
-1. Open **Settings → Community plugins → Browse** in Obsidian, search for **Agent Deck**, then install and enable it.
-2. Or download `main.js`, `manifest.json`, and `styles.css` from [GitHub Releases](https://github.com/MatsuriMW/obsidian-agent-deck/releases), place them in `<your-vault>/.obsidian/plugins/agent-deck/`, and enable **Agent Deck** in **Settings → Community plugins**.
+1. In Obsidian, open Settings → Community plugins → Browse, search for **Agent Deck**, then install and enable it;
+2. Or download the latest [GitHub Release](https://github.com/MatsuriMW/obsidian-agent-deck/releases), copy `main.js`, `manifest.json` and `styles.css` into `<your vault>/.obsidian/plugins/agent-deck/`, then enable it in the plugin settings.
 
-<details>
-<summary>Building from source (developers only)</summary>
+Current version: **1.13.3**, requires Obsidian **1.4.0+** on desktop.
 
-Requires Node.js and npm:
+### What you need
 
-```bash
-git clone https://github.com/MatsuriMW/obsidian-agent-deck.git
-cd obsidian-agent-deck
-npm install
-npm run build
-```
+Tracking, task binding and the Dashboard need **no extra dependencies**: the plugin only reads local session records and never calls the network. Install the client you actually use before using delegation, auto-journaling or Dreaming:
 
-Copy the generated `main.js`, `manifest.json`, and `styles.css` into `<your-vault>/.obsidian/plugins/agent-deck/` (or run `npm run install:plugin -- <vault-path>`).
-
-</details>
-
-### 2. Runtime Dependencies (Prepare Only What You Use)
-
-- **Tracking, binding & Review Dashboard only**: **No extra dependencies required.** The plugin reads local client logs directly (Cursor requires enabling Hooks in settings) and makes no network requests.
-- **Delegation, auto-journaling, AI summaries/polishing & Dreaming**: Require the corresponding local agent CLI or desktop app to be installed and authenticated, or an OpenAI-compatible API for summarization/Dreaming:
-
-| Feature / Agent | Required on Your Machine |
+| What you want to use | What to install first |
 |---|---|
-| **Claude Code** | Installed and authenticated `claude` CLI (`/login` or `~/.claude/settings.json` `env` auth; plus Claude desktop app for desktop continuation) |
-| **Codex** | Installed and authenticated `codex` CLI and Codex desktop app (bundled CLI is supported) |
-| **DeepSeek Harness** | ACP-capable `dsh` installation with valid model/provider credentials |
-| **Antigravity** | Standalone **Antigravity CLI (`agy`)** with CLI login (installing the IDE alone is not enough) |
-| **OpenCode** | OpenCode desktop app (bundles `opencode-cli`) or standalone `opencode` CLI with configured provider |
-| **Qoder** | `qodercli` installed and logged in for background/terminal delegation; Qoder desktop app for desktop handoff |
-| **WorkBuddy** | Chinese-edition WorkBuddy desktop app (`codebuddy` CLI separately if using terminal mode) |
-| **Cursor** | Cursor Desktop **3.30.14+** with Cursor Hooks installed via **Settings → Sources & Scan → More settings** (tracking only) |
-| **Grok Bot** | Grok Bot desktop app (Sand client) with bots selected in the Grok Bot card under **Settings → Records → Sources & Scan** (none selected by default; tracking only) |
-| **Auto-journaling / AI summaries / Dreaming** | Any authenticated local CLI (`agy`, `claude`, `codex`, `qodercli`, `codebuddy`, including `~/.claude/settings.json` `env` auth) OR an **OpenAI-compatible API** (presets for DeepSeek, OpenAI, OpenRouter, Alibaba Cloud Qwen, local Ollama, or custom endpoints under **Records → Journal model**; Dreaming inherits by default and can override separately) |
-| **macOS menu bar helper** | `swiftc` from Xcode Command Line Tools (`xcode-select --install`); can be disabled in settings if unused |
+| **Claude Code** | Claude Code CLI or desktop app, signed in |
+| **Codex** | Codex CLI and desktop app, signed in |
+| **DeepSeek Harness** | DeepSeek Harness client with a model and account configured |
+| **Antigravity** | The standalone Antigravity CLI (the IDE alone is not enough) |
+| **OpenCode** | OpenCode desktop app or CLI |
+| **Qoder** | Qoder CLI; the desktop app for handoff only |
+| **Hermes Agent** | Hermes CLI; nothing extra if you only track |
+| **QwenWork (千问办公)** | QwenWork desktop app (tracking only) |
+| **WorkBuddy** | China edition of WorkBuddy; `codebuddy` for terminal use |
+| **Cursor** | Cursor 3.30.14+ with Cursor Hooks enabled in settings |
+| **Grok Bot** | Grok Bot desktop app, with the Bots you want selected in settings |
+| **Auto-journal / summaries / Dreaming** | Any signed-in local CLI, or an OpenAI-compatible API (DeepSeek, OpenAI, OpenRouter, Qwen, local Ollama, …) |
+| **macOS menu bar** | Xcode Command Line Tools (`xcode-select --install`) |
 
-> **Notes**:
-> - When Obsidian launches from the macOS GUI, its `PATH` may differ from your terminal. If a binary isn't found, set its full absolute path in plugin settings.
-> - The **Check** button in Delegation settings only verifies executable paths and versions—it does **not** prove login status or model quota. Use **Test connection** in Records / Dreaming settings (or test in your terminal) to verify live responses.
+> When Obsidian is launched from the macOS GUI, CLI tools may not be on the PATH; fill in the full path in the plugin settings. The "Check" button only verifies path and version, so confirm sign-in in the client itself.
 
----
+## Known limits
 
-## Current Limitations & Unsupported Features
+1. **Desktop only**: Obsidian mobile is not supported. macOS is tested; Windows is still being adapted, and the menu bar helper is macOS-only.
+2. **Delegation needs local clients**: tasks run through your local CLI or desktop app; remote API keys cannot replace them, and the plugin does not install or sign in for you.
+3. **The conversation view is read-only**: it is for reading, stopping the current round and saving an archive, with no free-text box. Supported sessions can be followed up from the task menu or the Reply inbox; the rest continue in their client.
+4. **Client boundaries**:
+   - **Cursor**: tracks only new sessions after Hooks are enabled; no delegation or terminal use.
+   - **WorkBuddy**: China edition only; the standalone CodeBuddy CLI does not share its sessions.
+   - **Qoder**: the CLI and desktop database are separate; missing per-turn tokens show as unavailable rather than estimated.
+   - **Antigravity**: CLI and IDE sessions are separate; exports leave out tool results and internal reasoning.
+   - **DeepSeek Harness**: the client is still moving fast; delegated sessions may land in "Ungrouped" and usually need a client refresh to appear.
+   - **OpenCode**: background and desktop share sessions, but you still pick the session once in the app.
+   - **Hermes Agent**: no desktop UI; use the plugin or resume in the terminal.
+   - **QwenWork (千问办公)**: tracking only, no delegation. Current desktop conversations are fully readable; older logs without tokens honestly show 0.
+   - **Grok Bot**: desktop only; cloud sandboxes without per-message tokens show "usage unavailable", and there is no archive concept.
+5. **Terminal interaction**: opening a terminal for an interactive session is verified on **Tern** and **Herdr** only; Terminal.app, iTerm2 and Warp are untested.
+6. **In progress**: a visual context preview before dispatch, drift-proof references, per-memory Dream sharing, Windows verification, and more agents and terminals — see the [roadmap](https://matsuri.site/portfolio/journal-workflow/#wishlist).
 
-1. **Platform Support**
-   - **Desktop only**: Obsidian mobile is not supported.
-   - **Windows unverified**: Developed and tested on macOS; Windows has not been verified yet. The menu bar helper is macOS-only, and terminal tab switching / several binary discovery paths currently rely on macOS tooling.
-2. **No Generic Remote API Backend for Task Delegation**
-   - Automatic task delegation launches local CLI or desktop processes; there is no generic remote API/SDK runner for delegating coding tasks (while auto-journaling, AI summaries, and Dreaming do support OpenAI-compatible APIs). The plugin does not install CLIs or sign users in automatically.
-3. **No In-Plugin Follow-Up Chat**
-   - The transcript modal inside Obsidian is read-only (for inspecting, stopping the current turn, and archiving conversations); follow-up turns must be continued in each agent's own desktop app or terminal.
-4. **Per-Agent Boundaries**
-   - **Cursor**: Supports **3.30.14+ desktop** Hooks-based read-only tracking only; no task delegation or terminal interaction, and legacy unhooked DB sessions are excluded.
-   - **WorkBuddy**: Only the **Chinese edition** is supported; international **WorkBuddy AI** is not supported. Managed background execution is unavailable, and independent `codebuddy` CLI sessions cannot be imported into the WorkBuddy desktop app.
-   - **Qoder**: `qodercli` sessions and the Qoder desktop database are separate—background tasks resume in terminal (`qodercli -r <id>`), and desktop mode uses clipboard handoff. Token counts are not estimated when omitted by the desktop format.
-   - **Antigravity**: CLI sessions and original IDE sessions do not mix, archive detection is not guaranteed, and exported transcripts exclude tool outputs, internal reasoning, and attachments.
-   - **DeepSeek Harness**: The desktop client is still evolving rapidly with limited stability, and deep links do not jump directly to a specific session.
-   - **OpenCode**: CLI and desktop share local storage, but launching the desktop app still requires selecting the session manually.
-   - **Grok Bot**: Supports Sand desktop read-only persistence tracking and per-bot multi-select filtering only; no task delegation or terminal interaction. Token/model metrics omitted by the cloud sandbox are shown as "Usage unavailable" without estimation; there is no client archive state, so idle conversations auto-mark `DONE` after the configured inactivity window (`120` min default).
-5. **Terminal Delegation Verification**
-   - Interactive terminal delegation is currently verified end-to-end only on **Tern** and **Herdr**. **Terminal.app, iTerm2, and Warp** are untested (Warp lacks a scripting interface and can only be brought forward).
-6. **Planned / Not Yet Implemented**
-   - **Reading-view rendering for AI record multi-views and fractal boards**, **explicit Second-Brain Project Context Pack**, **Pi support**, **choosing model / effort / recording granularity directly inside the delegation sheet**, **per-block granularity overrides on existing AI blocks**, **automatic send for WorkBuddy**, and **LLM Wiki auto-ingestion** are planned on the roadmap and not available in this release.
+## Privacy and license
 
----
-
-## Privacy & License
-
-- **Local-first**: Session parsing, panel analytics, the Review Dashboard, and the macOS menu bar helper only read local files and send zero telemetry. Task text or journal excerpts are sent to your locally configured CLI model provider only when you run delegation, AI organization/summarization, or Dreaming.
-- **License**: [Apache 2.0](LICENSE) (see also [NOTICE](NOTICE)).
-- **More docs**: Full version history in [CHANGELOG.md](CHANGELOG.md); developer specs, architecture, and roadmap notes in [docs/](docs/).
-- **Feedback & Roadmap**: Open a [GitHub Issue](https://github.com/MatsuriMW/obsidian-agent-deck/issues) to report bugs or visit the [Roadmap](https://matsuri.site/portfolio/journal-workflow/#whistlist) to submit and vote on feature ideas.
-- **Updates**: Follow [@Matsurimywaifu](https://x.com/Matsurimywaifu) on X/Twitter.
+- **Local first**: session reading, panel statistics, the Dashboard and the menu bar only read local files and upload nothing. Only when you delegate, tidy, summarise or run Dreaming is the relevant text sent to a model service your local client is signed in to.
+- **License**: [Apache 2.0](LICENSE), see [NOTICE](NOTICE).
+- **More**: full changes in [CHANGELOG.md](CHANGELOG.md); developer docs in [docs/](docs/); updates on Twitter [@Matsurimywaifu](https://x.com/Matsurimywaifu).

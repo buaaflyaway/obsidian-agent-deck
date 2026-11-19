@@ -6,7 +6,7 @@ import { hasAgentCapability } from "./agent-registry.js";
 import { sessionProjectName, normalizeProjectRoot, disambiguateProjectLabels } from "./readers.js";
 import { activeJob, destinations } from "./workflow.js";
 import * as J from "./journal.js";
-import { parseMirrorRef } from "./outline.js";
+import { frontmatterEnd, parseMirrorRef } from "./outline.js";
 import { taskMention, stripTaskMention } from "./task-mentions.js";
 
 export const STANDALONE_PROJECT_ID = "__standalone__";
@@ -103,6 +103,46 @@ function stateRank(state) {
   return 5;
 }
 
+/** 「现在」按状态分组的固定顺序、徽章颜色与是否算「要你处理」。 */
+export const NOW_STATUS_BUCKETS = [
+  { id: "waiting", label: "等你", tone: "wait", attention: true },
+  { id: "pending", label: "⏳ 待认领", tone: "wait", attention: false },
+  { id: "running", label: "在跑", tone: "live", attention: false },
+  { id: "error", label: "异常", tone: "error", attention: true },
+];
+
+/**
+ * Which status bucket a live row belongs to. Pending jobs (dispatched but no
+ * session claimed them yet) are checked first: their job state reads
+ * "starting" and would otherwise look like a running session.
+ */
+export function nowStatusOf(session, now = Date.now()) {
+  if (!session) return "";
+  if (session.isPendingJob) return "pending";
+  const st = session.state || "idle";
+  if (st === "error" || st === "limit") return "error";
+  if (RUNNING_STATES.has(st)) return "running";
+  if (isWaitingSession(session, now)) return "waiting";
+  return "";
+}
+
+/** Group live sessions and active jobs into the 「现在」 status buckets, empty ones dropped. */
+export function buildNowStatusGroups(sessions = [], { jobs = {}, agentEnabled = () => true, now = Date.now() } = {}) {
+  const merged = mergeSessionsWithJobs(sessions, jobs, agentEnabled);
+  const buckets = new Map(NOW_STATUS_BUCKETS.map((b) => [b.id, { ...b, sessions: [] }]));
+  for (const s of merged) {
+    const id = nowStatusOf(s, now);
+    if (id) buckets.get(id).sessions.push(s);
+  }
+  const out = [];
+  for (const g of buckets.values()) {
+    if (!g.sessions.length) continue;
+    g.sessions.sort((a, b) => stateRank(a.state) - stateRank(b.state) || (b.lastAt || 0) - (a.lastAt || 0));
+    out.push(g);
+  }
+  return out;
+}
+
 function resolveDirectProjectIdentity(session) {
   const root = normalizeProjectRoot(session?.cwd || "");
   if (root) return { name: sessionProjectName(root), root };
@@ -182,9 +222,22 @@ export function mergeSessionsWithJobs(sessions = [], jobs = {}, agentEnabled = (
   return out;
 }
 
-/**
- * Group live/recent sessions and active jobs by workspace project for P0 process management.
- */
+export function orderNowSessions(items = [], settings = {}) {
+  const hidden = settings?.nowHidden || {};
+  const order = settings?.nowOrder || [];
+  return (items || [])
+    .filter((x) => x && !hidden[x.sid])
+    .map((x, i) => ({ x, i, k: order.indexOf(x.sid) }))
+    .sort((a, b) => {
+      if (a.k < 0 && b.k < 0) return a.i - b.i;
+      if (a.k < 0) return -1;
+      if (b.k < 0) return 1;
+      return a.k - b.k;
+    })
+    .map((o) => o.x);
+}
+
+/** Group live/recent sessions and active jobs by workspace project for P0 process management. */
 export function buildProjectGroups(sessions = [], { jobs = {}, agentEnabled = () => true, now = Date.now() } = {}) {
   const merged = mergeSessionsWithJobs(sessions, jobs, agentEnabled);
   const bySid = new Map(merged.map((s) => [s.sid, s]));
@@ -553,7 +606,7 @@ export function cleanBoardCardTitleMarkdown(rawBody = "", trigger = "@") {
 /**
  * Extract parent task blocks that contain >= 2 direct child task items for in-place Fractal Kanban projection.
  */
-export function extractTaskBoardGroups(text, { trackedIds = new Set(), trigger = "@" } = {}) {
+export function extractTaskBoardGroups(text, { trackedIds = new Set(), trigger = "@", fileBoard = false } = {}) {
   if (!text) return [];
   const lines = String(text).split("\n");
   const fenced = J.fencedLines(lines);
@@ -589,7 +642,7 @@ export function extractTaskBoardGroups(text, { trackedIds = new Set(), trigger =
       }
       const trimmed = lines[m].trim();
       if (/^[-*+]\s+💬\s/.test(trimmed)) {
-        latestConclusion = trimmed.replace(/^[-*+]\s+💬\s+(?:第\d+轮[：:])?\s*/, "").replace(J.RECORD_PROVENANCE_RE, "").trim();
+        latestConclusion = J.stripPinMarker(trimmed.replace(/^[-*+]\s+💬\s+(?:第\d+轮[：:])?\s*/, "").replace(J.RECORD_PROVENANCE_RE, "")).trim();
       }
       if (w === subIndent && J.LIST_RE.test(lines[m]) && !J.RECORD_LINE_RE.test(lines[m])) {
         const subKw = J.kwLine(lines[m]);
@@ -704,6 +757,41 @@ export function extractTaskBoardGroups(text, { trackedIds = new Set(), trigger =
       cards,
       topLevel: true,
     });
+  }
+
+  // 文件级看板：整篇笔记没有"母项 + 子项"结构时（比如 spec/规则清单），
+  // 用最后一个非列表行当锚点合成一个根，顶层列表项直接当卡片。
+  if (fileBoard && !out.length) {
+    const cards = [];
+    const from = frontmatterEnd(lines);
+    for (let k = from; k < lines.length; k++) {
+      if (fenced.has(k) || !lines[k].trim()) continue;
+      if (J.width(lines[k]) !== 0) continue;
+      if (!J.LIST_RE.test(lines[k]) || J.RECORD_LINE_RE.test(lines[k])) continue;
+      const card = parseChildCard(k, lines.length - 1, 0);
+      if (!card) continue;
+      cards.push(card);
+      k = card.endLine;
+    }
+    const firstCard = cards.length ? Math.min(...cards.map((c) => c.line)) : -1;
+    if (cards.length >= 2 && firstCard > from) {
+      const anchor = firstCard - 1;
+      const heading = lines.slice(0, firstCard).find((l) => /^#{1,6}\s+\S/.test(l));
+      const title = (heading ? heading.replace(/^#{1,6}\s+/, "") : "").trim() || t("整篇笔记");
+      out.push({
+        key: `fileboard:${title}`,
+        stableKey: `fileboard:${title}`,
+        line: anchor,
+        endLine: lines.length - 1,
+        indent: -1,
+        title,
+        kw: null,
+        tracked: false,
+        cards,
+        topLevel: true,
+        fileBoard: true,
+      });
+    }
   }
 
   const byLine = new Map(out.map((g) => [g.line, g]));
@@ -1237,9 +1325,9 @@ export function extractBlockResultText(noteText = "", { blockId = "", title = ""
     const ansMatch = /\[[^\]]+\]\(([^)]*Answers\/[^)]+\.md)\)/i.exec(trimmed);
     if (ansMatch) answerLink = ansMatch[1];
     if (/^[-*+]\s+💬\s/.test(trimmed)) {
-      const clean = trimmed
+      const clean = J.stripPinMarker(trimmed
         .replace(/^[-*+]\s+💬\s+(?:第\d+轮[：:]\s*)?/, "")
-        .replace(J.RECORD_PROVENANCE_RE, "")
+        .replace(J.RECORD_PROVENANCE_RE, ""))
         .trim();
       if (clean) comments.push(clean);
     }

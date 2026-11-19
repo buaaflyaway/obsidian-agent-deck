@@ -95,7 +95,7 @@ export function applyTaskTool(fc, name, input, callId = "") {
   return buildTaskTodo(tk);
 }
 
-export function startRound(fc, ms, rawAsk, key = "") {
+export function startRound(fc, ms, rawAsk, key = "", live = null) {
   if (!fc.rounds) fc.rounds = { seen: new Set(), list: [] };
   if (key && fc.rounds.seen.has(key)) return fc.rounds.list.length;
   if (key) fc.rounds.seen.add(key);
@@ -104,6 +104,8 @@ export function startRound(fc, ms, rawAsk, key = "") {
   const last = fc.rounds.list[fc.rounds.list.length - 1];
   if (last && last.ask === ask && Math.abs(ms - last.at) < 2000) return fc.rounds.list.length;
   fc.rounds.list.push({ n: fc.rounds.list.length + 1, at: ms, doneAt: 0, ask, said: "" });
+  // 新的一轮从空白开始：上一轮最后那句话不能漏进这一轮的结论里。
+  if (live) live.lastText = "";
   return fc.rounds.list.length;
 }
 
@@ -130,16 +132,21 @@ export function ingestClaudeLine(ctx, line, fc, touched) {
     if (typeof text === "string" && text.startsWith("<task-notification>") && q.sessionId) usage.subNotice(q.sessionId, text, Date.parse(q.timestamp) || 0);
     return;
   }
-  if (line.indexOf('"type":"assistant"') < 0 && line.indexOf('"type":"user"') < 0 && line.indexOf('"type":"custom-title"') < 0 && line.indexOf('"type":"last-prompt"') < 0) return;
+  if (line.indexOf('"type":"assistant"') < 0 && line.indexOf('"type":"user"') < 0 && line.indexOf('"type":"custom-title"') < 0 && line.indexOf('"type":"ai-title"') < 0 && line.indexOf('"type":"last-prompt"') < 0) return;
   let d;
   try { d = JSON.parse(line); } catch { return; }
-  if (d.type === "custom-title") {
-    if (d.customTitle) {
-      fc.titles.set(d.sessionId, d.customTitle);
-      usage.titles.set(d.sessionId, d.customTitle);
-      const m = usage.meta.get(d.sessionId); if (m) m.title = d.customTitle;
+  if (d.type === "custom-title" || d.type === "ai-title") {
+    const title = d.type === "custom-title" ? d.customTitle : d.aiTitle;
+    const sid = d.sessionId || fc.sid;
+    if (title && sid) {
+      if (usage.noteClientTitle) usage.noteClientTitle(sid, title, { fc, custom: d.type === "custom-title" });
+      else {
+        fc.titles.set(sid, title);
+        usage.titles.set(sid, title);
+        const m = usage.meta.get(sid); if (m) m.title = title;
+      }
     }
-    fc.sid = d.sessionId || fc.sid;
+    fc.sid = sid;
     return;
   }
   if (d.type === "last-prompt") { fc.sid = d.sessionId || fc.sid; return; }
@@ -152,10 +159,11 @@ export function ingestClaudeLine(ctx, line, fc, touched) {
   const sid = fc.sid;
   const { key, day, s } = usage.touchSess(fc, touched, ms, sid, fc.cwd, fc.app);
   const v = usage.liveOf(fc, sid, ms);
-  v.title = fc.titles.get(sid) || usage.titles.get(sid) || v.title;
+  v.title = usage.titles.get(sid) || fc.titles.get(sid) || v.title;
   v.cwd = fc.cwd; v.app = fc.app;
   if (d.type === "assistant" && d.message) {
-    v.model = d.message.model || v.model;
+    const model = d.message.model && d.message.model !== "unknown" ? d.message.model : "";
+    if (model) v.model = model;
     const c = d.message.content;
     for (const b of Array.isArray(c) ? c : []) {
       if (b.type === "tool_use") {
@@ -181,7 +189,7 @@ export function ingestClaudeLine(ctx, line, fc, touched) {
     if (u && d.message.id && !d.isSidechain) {
       const id = `${d.message.id}:${d.requestId || ""}`;
       const prev = fc.msgs.get(id) || { out: 0, fresh: 0, cached: 0 };
-      const m = { key, sid, proj: s.proj, model: d.message.model, out: u.output_tokens || 0, fresh: (u.input_tokens || 0) + (u.cache_creation_input_tokens || 0), cached: u.cache_read_input_tokens || 0, at: ms };
+      const m = { key, sid, proj: s.proj, model: (d.message.model && d.message.model !== "unknown" ? d.message.model : "") || v.model || "", out: u.output_tokens || 0, fresh: (u.input_tokens || 0) + (u.cache_creation_input_tokens || 0), cached: u.cache_read_input_tokens || 0, at: ms };
       fc.msgs.set(id, m);
       usage.noteMeta(fc, sid, {
         title: v.title, text: s.text, cwd: fc.cwd, app: fc.app, model: v.model,
@@ -200,7 +208,7 @@ export function ingestClaudeLine(ctx, line, fc, touched) {
     const text = cleanUserPrompt(typeof c === "string" ? c : Array.isArray(c) && !c.some((b) => b.type === "tool_result") ? c.filter((b) => b.type === "text").map((b) => b.text).join("") : "");
     if (isPromptText(text)) {
       day.prompts++;
-      startRound(fc, ms, text, d.uuid || String(ms));
+      startRound(fc, ms, text, d.uuid || String(ms), v);
       v.turns = fc.rounds ? fc.rounds.list.length : 0;
       v.rounds = fc.rounds ? fc.rounds.list : [];
       if (s.text.length < 300) s.text += (s.text ? " / " : "") + text.replace(/\s+/g, " ").slice(0, 300 - s.text.length);
@@ -263,7 +271,7 @@ export function ingestCodexLine(ctx, line, fc, touched) {
       const text = cleanUserPrompt((Array.isArray(p.content) ? p.content : []).filter((b) => b && b.type === "input_text").map((b) => b.text || "").join(""));
       if (text && isPromptText(text)) {
         day.prompts++;
-        startRound(fc, ms, text, String(ms));
+        startRound(fc, ms, text, String(ms), v);
         v.turns = fc.rounds ? fc.rounds.list.length : 0;
         v.rounds = fc.rounds ? fc.rounds.list : [];
         if (s.text.length < 300) s.text += (s.text ? " / " : "") + text.replace(/\s+/g, " ").slice(0, 300 - s.text.length);
@@ -302,9 +310,12 @@ export function ingestWorkbuddyLine(ctx, line, fc, touched) {
   try { d = JSON.parse(line); } catch { return; }
   if (d.type === "ai-title") {
     if (d.aiTitle) {
-      fc.titles.set(fc.sid, d.aiTitle);
-      usage.titles.set(fc.sid, d.aiTitle);
-      const m = usage.meta.get(fc.sid); if (m) m.title = d.aiTitle;
+      if (usage.noteClientTitle) usage.noteClientTitle(fc.sid, d.aiTitle, { fc });
+      else {
+        fc.titles.set(fc.sid, d.aiTitle);
+        usage.titles.set(fc.sid, d.aiTitle);
+        const m = usage.meta.get(fc.sid); if (m) m.title = d.aiTitle;
+      }
     }
     return;
   }
@@ -319,7 +330,7 @@ export function ingestWorkbuddyLine(ctx, line, fc, touched) {
   const wbApp = /(?:^|[\\/])\.codebuddy(?:[\\/]|$)/.test(String(fc.path || "")) ? "cli" : "workbuddy";
   const { key, day, s } = usage.touchSess(fc, touched, ms, fc.sid, fc.cwd, wbApp);
   const v = usage.liveOf(fc, fc.sid, ms);
-  v.title = fc.titles.get(fc.sid) || usage.titles.get(fc.sid) || (wbDb && wbDb.title) || v.title;
+  v.title = usage.titles.get(fc.sid) || fc.titles.get(fc.sid) || (wbDb && wbDb.title) || v.title;
   v.cwd = fc.cwd;
   if (wbDb && wbDb.model && wbDb.model !== "auto" && !v.model) v.model = wbDb.model;
   if (d.type === "message") {
@@ -335,10 +346,10 @@ export function ingestWorkbuddyLine(ctx, line, fc, touched) {
       const text = cleanUserPrompt(raw);
       if (isPromptText(text)) {
         day.prompts++;
-        startRound(fc, ms, text, d.id || String(ms));
+        startRound(fc, ms, text, d.id || String(ms), v);
         if (!v.title) {
           const t0 = text.replace(/\s+/g, " ").trim().slice(0, 80);
-          if (t0) { fc.titles.set(fc.sid, t0); usage.titles.set(fc.sid, t0); v.title = t0; }
+          if (t0) { fc.titles.set(fc.sid, t0); v.title = t0; }
         }
         if (s.text.length < 300) s.text += (s.text ? " / " : "") + text.replace(/\s+/g, " ").slice(0, 300 - s.text.length);
       }
@@ -406,16 +417,16 @@ export function ingestAntigravityLine(ctx, line, fc, touched) {
     v.cwd = fc.cwd || "~"; v.app = "antigravity";
     if (text && isPromptText(text)) {
       day.prompts++;
-      startRound(fc, ms, text, String(d.step_index ?? ms));
+      startRound(fc, ms, text, String(d.step_index ?? ms), v);
       v.turns = fc.rounds ? fc.rounds.list.length : 0;
       v.rounds = fc.rounds ? fc.rounds.list : [];
       if (!fc.titles.has(sid)) {
         const t0 = text.replace(/^@\[[^\]]+\]\s*/, "").replace(/\s+/g, " ").trim().slice(0, 80);
-        if (t0) { fc.titles.set(sid, t0); usage.titles.set(sid, t0); }
+        if (t0) fc.titles.set(sid, t0);
       }
       if (s.text.length < 300) s.text += (s.text ? " / " : "") + text.replace(/\s+/g, " ").slice(0, 300 - s.text.length);
     }
-    v.title = fc.titles.get(sid) || usage.titles.get(sid) || v.title;
+    v.title = usage.titles.get(sid) || fc.titles.get(sid) || v.title;
     v.state = "run"; v.step = "";
     usage.noteMeta(fc, sid, { title: v.title, text: s.text, cwd: v.cwd, app: "antigravity", model: fc.model || v.model || "antigravity", lastAt: Math.max(ms, usage.meta.get(sid)?.lastAt || 0), state: v.state, step: v.step, todo: v.todo, turns: v.turns, rounds: v.rounds });
     return;
@@ -423,7 +434,7 @@ export function ingestAntigravityLine(ctx, line, fc, touched) {
   if (d.type !== "PLANNER_RESPONSE" && d.status !== "ERROR") return;
   const { key, s } = usage.touchSess(fc, touched, ms, sid, fc.cwd || "~", "antigravity");
   const v = usage.liveOf(fc, sid, ms);
-  v.title = fc.titles.get(sid) || usage.titles.get(sid) || v.title;
+  v.title = usage.titles.get(sid) || fc.titles.get(sid) || v.title;
   if (fc.model) v.model = fc.model;
   if (d.type === "PLANNER_RESPONSE") {
     const tools = Array.isArray(d.tool_calls) ? d.tool_calls : [];
@@ -499,9 +510,12 @@ export function ingestDshLine(ctx, line, fc, touched) {
   if (typ === "session/title") {
     const title = d.data && d.data.title;
     if (title) {
-      fc.titles.set(fc.sid, title);
-      usage.titles.set(fc.sid, title);
-      const m = usage.meta.get(fc.sid); if (m) m.title = title;
+      if (usage.noteClientTitle) usage.noteClientTitle(fc.sid, title, { fc });
+      else {
+        fc.titles.set(fc.sid, title);
+        usage.titles.set(fc.sid, title);
+        const m = usage.meta.get(fc.sid); if (m) m.title = title;
+      }
     }
     return;
   }
@@ -520,7 +534,7 @@ export function ingestDshLine(ctx, line, fc, touched) {
     const kind = data.source && data.source.kind;
     if (isPromptText(text) && (!kind || kind === "user")) {
       day.prompts++;
-      startRound(fc, ms, text, String(d.seq ?? ms));
+      startRound(fc, ms, text, String(d.seq ?? ms), v);
       v.turns = fc.rounds ? fc.rounds.list.length : 0;
       v.rounds = fc.rounds ? fc.rounds.list : [];
       if (s.text.length < 300) s.text += (s.text ? " / " : "") + text.replace(/\s+/g, " ").slice(0, 300 - s.text.length);
@@ -568,9 +582,18 @@ export function ingestDshLine(ctx, line, fc, touched) {
   } else if (typ === "turn/end") {
     const reason = data.reason || {};
     const isChild = !!(fc.parentSid || fc.isSubagent);
-    if (reason.kind === "error") { v.state = "error"; v.err = String(reason.error && reason.error.message || "").slice(0, 120); }
+    const errText = String((reason.error && (reason.error.message || reason.error.code)) || "");
+    // 额度不够和普通报错不是一回事：前者要落到 HITLIMIT，而不是 ERRORED。
+    const quota = reason.kind === "error" && /ACCOUNT_QUOTA|Insufficient Balance|\b402\b|quota|rate.?limit|额度|余额/i.test(`${errText} ${reason.error?.code || ""}`);
+    if (reason.kind === "error") { v.state = quota ? "limit" : "error"; v.err = errText.slice(0, 120); }
     else if (reason.kind === "aborted") v.state = "cancelled";
     else v.state = isChild ? "done" : "wait";
+    // 这一轮为什么会没有正文：整轮被中断 / 额度断掉，留给日记显式记一句。
+    const cur = fc.rounds && fc.rounds.list[fc.rounds.list.length - 1];
+    if (cur) {
+      if (reason.kind === "aborted") cur.aborted = true;
+      if (quota) cur.quota = true;
+    }
     v.step = "";
     finishRound(fc, ms, v.lastText, v.state === "wait" || v.state === "done");
     v.turns = fc.rounds ? fc.rounds.list.length : 0;
@@ -591,6 +614,7 @@ const CUSTOM_INGESTORS = new Map();
 export const BUILTIN_AGENT_INGESTORS = {
   claude: ingestClaudeLine,
   qoder: ingestClaudeLine,
+  qwenwork: ingestClaudeLine,
   codex: ingestCodexLine,
   workbuddy: ingestWorkbuddyLine,
   antigravity: ingestAntigravityLine,

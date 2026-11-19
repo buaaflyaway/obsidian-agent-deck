@@ -43,6 +43,10 @@ export default {
   "父子任务不能直接互相合并": "A parent task and its child cannot be merged into each other",
 
   // dream.js — progress, notices and refusals.
+  "长期记忆（Dreaming 整理，按本次任务挑出相关条目；标「待验证推断」的是推断而不是事实，与用户本次明确表达冲突时以本次为准）：":
+    "Long-term memory (tended by Dreaming, matched to this task; anything marked as an unverified inference is a guess rather than a fact, and the user's explicit wording here wins):",
+  "（待验证推断）": " (unverified inference)",
+  "长期记忆笔记的生成区块标记不完整，请先修复标记": "The generated block markers in the long-term memory note are incomplete; fix them first",
   "记忆路径必须是库内的 .md 文件路径": "The memory path must be a .md file path inside the vault",
   "陪伴档案中的 Dreaming 区段不完整，请先修复标记":
     "The Dreaming section in the companion profile is incomplete; fix its markers first",
@@ -50,6 +54,10 @@ export default {
   "Dreaming 正在整理": "Dreaming is already organizing",
   "正在采集用户日志与 AI 记录…": "Collecting your journal and AI records…",
   "正在采集含 AI 自动记录的条目…": "Collecting entries with AI auto-records…",
+  "没有授权调用 API（会产生费用），这次先用会话标题记": "The API call was not approved (it costs money), so session titles are used this time",
+  "deepseek 退出码 {code}": "deepseek exited with code {code}",
+  "分区标记没动；补上分区标记和 --- 分割线后再整理": "Section markers left untouched; add the section markers and --- rules, then organize again",
+  "这份日记的分区标记缺得太多，补不齐；请按三处分区标题手动补齐": "Too many section markers are missing to repair; restore the three section headings by hand",
   "正在整理 {count} 块材料（共 {total} 块），等待模型返回…":
     "Organizing {count} blocks of material (of {total}); waiting for the model…",
   "正在校验并写入长期记忆…": "Validating and writing long-term memory…",

@@ -5,11 +5,11 @@ import os from 'node:os';
 import path from 'node:path';
 import { Delegator } from '../src/delegation.js';
 import { DEFAULTS } from '../src/constants.js';
+import { writeMockNodeBin, cleanupDelegatorDir, rmDirSafe } from './helpers/mock-cli.mjs';
 
 function fixture(mode='normal') {
- const dir=fs.mkdtempSync(path.join(os.tmpdir(),'ad-agy-')),bin=path.join(dir,'agy'),events=path.join(dir,'events.jsonl');
- fs.writeFileSync(bin,`#!/usr/bin/env node
-const fs=require('fs'),rl=require('readline').createInterface({input:process.stdin});
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'ad-agy-')),events=path.join(dir,'events.jsonl');
+ const bin=writeMockNodeBin(dir,'agy',`const fs=require('fs'),rl=require('readline').createInterface({input:process.stdin});
 const mode=${JSON.stringify(mode)},send=m=>process.stdout.write(JSON.stringify(m)+'\\n');
 let current='gemini-test',promptId;
 const options=()=>[{id:'model',category:'model',type:'select',currentValue:current,options:[{value:'gemini-test',name:'Gemini Test'},{value:'gemini-other',name:'Gemini Other'}]},{id:'thought_level',category:'thought_level',type:'select',currentValue:'medium',options:[{value:'low'},{value:'medium'},{value:'high'}]}];
@@ -26,12 +26,12 @@ if(m.method==='session/prompt'){
 if(m.id===999){send({id:promptId,result:{stopReason:'end_turn'}});return;}
 if(m.id!=null)send({id:m.id,result:{}});
 });
-`);fs.chmodSync(bin,0o755);
+rl.on('close',()=>process.exit(0));`);
  const settings=structuredClone(DEFAULTS);settings.delegate.antigravity={path:bin,model:'gemini-test',effort:'medium',cwd:dir,autoApprove:false};settings.autoWriteResult=false;settings.delegate.writeLink=false;settings.delegate.confirmFirst=false;
  const plugin={settings,jobs:{},vaultPath:dir,notice(){},saveSettings(){},saveJobs(){},refreshUI(){},readNote:async()=>'- TODO test task',modelById:()=>null};
  const d=new Delegator(plugin);d.handoff=()=>{throw new Error('Antigravity must use ACP, not clipboard handoff')};
  const read=()=>fs.existsSync(events)?fs.readFileSync(events,'utf8').trim().split('\n').filter(Boolean).map(JSON.parse):[];
- const cleanup=()=>{for(const r of d.runners.values()){r.cancel();r.child?.kill()}clearTimeout(d._saveT);fs.rmSync(dir,{recursive:true,force:true})};
+ const cleanup=()=>cleanupDelegatorDir(d,dir);
  return{d,plugin,dir,read,cleanup,send:opts=>d.delegate({agent:'antigravity',file:{path:'test.md'},line:0,...opts})};
 }
 async function settle(j){const end=Date.now()+2000;while(!['done','error','cancelled'].includes(j.state)&&Date.now()<end)await new Promise(r=>setTimeout(r,10));}
@@ -48,9 +48,8 @@ test('Antigravity restores ACP job after plugin reload and keeps same conversati
 test('Antigravity rejects unsupported effort before sending a task',async()=>{const f=fixture();try{const j=await f.send({effort:'xhigh'});await settle(j);assert.equal(j.state,'error');assert.match(j.error,/不支持推理强度/);assert.equal(f.read().some(m=>m.method==='session/prompt'),false)}finally{f.cleanup()}});
 
 test('OpenCode delegates via opencode-cli acp without requiring thought_level option and supports follow-up',async()=>{
- const dir=fs.mkdtempSync(path.join(os.tmpdir(),'ad-oc-')),bin=path.join(dir,'opencode'),events=path.join(dir,'events.jsonl');
- fs.writeFileSync(bin,`#!/usr/bin/env node
-const fs=require('fs'),rl=require('readline').createInterface({input:process.stdin});
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'ad-oc-')),events=path.join(dir,'events.jsonl');
+ const bin=writeMockNodeBin(dir,'opencode',`const fs=require('fs'),rl=require('readline').createInterface({input:process.stdin});
 const send=m=>process.stdout.write(JSON.stringify(m)+'\\n');
 const options=()=>[{id:'model',category:'model',type:'select',currentValue:'opencode/minimax-m2.5-free',options:[{value:'opencode/minimax-m2.5-free',name:'MiniMax M2.5 Free'}]},{id:'mode',category:'mode',type:'select',currentValue:'build',options:[{value:'build',name:'build'},{value:'plan',name:'plan'}]}];
 rl.on('line',line=>{const m=JSON.parse(line);fs.appendFileSync(${JSON.stringify(events)},line+'\\n');
@@ -58,8 +57,8 @@ if(m.method==='initialize'){send({id:m.id,result:{agentCapabilities:{loadSession
 if(m.method==='session/new'||m.method==='session/resume'){send({id:m.id,result:{sessionId:m.params.sessionId||'ses_test123',configOptions:options()}});return;}
 if(m.method==='session/prompt'){send({method:'session/update',params:{sessionId:m.params.sessionId,update:{sessionUpdate:'agent_message_chunk',content:{type:'text',text:'OPENCODE_OK'}}}});send({id:m.id,result:{stopReason:'end_turn'}});return;}
 if(m.id!=null)send({id:m.id,result:{configOptions:options()}});
-});`);
- fs.chmodSync(bin,0o755);
+});
+rl.on('close',()=>process.exit(0));`);
  const settings=structuredClone(DEFAULTS);settings.delegate.opencode={path:bin,model:'opencode-default',effort:'high',cwd:dir,autoApprove:true};settings.autoWriteResult=false;settings.delegate.writeLink=false;settings.delegate.confirmFirst=false;
  const plugin={settings,jobs:{},vaultPath:dir,notice(){},saveSettings(){},saveJobs(){},refreshUI(){},readNote:async()=>'- TODO test opencode',modelById:()=>null};
  const d=new Delegator(plugin);
@@ -74,22 +73,17 @@ if(m.id!=null)send({id:m.id,result:{configOptions:options()}});
   assert.equal(next.state,'done');
   assert.equal(next.conversation.length,4);
  }finally{
-  for(const r of d.runners.values()){r.cancel();r.child?.kill()}
-  clearTimeout(d._saveT);
-  fs.rmSync(dir,{recursive:true,force:true});
+  cleanupDelegatorDir(d,dir);
  }
 });
 
 test('Qoder delegates via qodercli in background and uses clipboard handoff for desktop',async()=>{
- const dir=fs.mkdtempSync(path.join(os.tmpdir(),'ad-qoder-')),bin=path.join(dir,'qodercli'),argsFile=path.join(dir,'args.json');
- fs.writeFileSync(bin,`#!/usr/bin/env node
-const fs=require('fs');
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'ad-qoder-')),argsFile=path.join(dir,'args.json');
+ const bin=writeMockNodeBin(dir,'qodercli',`const fs=require('fs');
 const argv=process.argv.slice(2);
 fs.writeFileSync(${JSON.stringify(argsFile)},JSON.stringify(argv));
 if(process.env.QODER_MODE==='unauth'){process.stderr.write('Not logged in. Please run "qodercli login" first.\\n');process.exit(1);}
-process.stdout.write('QODER_OK\\n');
-`);
- fs.chmodSync(bin,0o755);
+process.stdout.write('QODER_OK\\n');`);
  const settings=structuredClone(DEFAULTS);settings.delegate.qoder={path:bin,model:'qoder-ultimate',effort:'high',permission:'auto',cwd:dir,openDesktop:false};settings.autoWriteResult=false;settings.delegate.writeLink=false;settings.delegate.confirmFirst=false;
  const plugin={settings,jobs:{},vaultPath:dir,notice(){},saveSettings(){},saveJobs(){},refreshUI(){},readNote:async()=>'- TODO test qoder',modelById:()=>null};
  const d=new Delegator(plugin);
@@ -129,8 +123,65 @@ process.stdout.write('QODER_OK\\n');
   assert.equal(copied,'');
  }finally{
   delete process.env.QODER_MODE;
-  for(const r of d.runners.values()){r.cancel();r.child?.kill()}
-  clearTimeout(d._saveT);
-  fs.rmSync(dir,{recursive:true,force:true});
+  cleanupDelegatorDir(d,dir);
  }
+});
+
+test('Antigravity autoApprove skips permission modal and Turn 2 writeback updates the note', async () => {
+  const fPerm = fixture('permission');
+  try {
+    // 1. autoApprove: true skips requestAcpPermission entirely
+    fPerm.plugin.settings.delegate.antigravity.autoApprove = true;
+    let prompted = 0;
+    fPerm.plugin.requestAcpPermission = async () => { prompted++; return 'permit-123'; };
+    const jp = await fPerm.send({ destination: 'background' });
+    await settle(jp);
+    assert.equal(jp.state, 'done');
+    assert.equal(prompted, 0, 'autoApprove: true must not ask permission');
+    assert.equal(fPerm.read().find((m) => m.id === 999).result.outcome.optionId, 'permit-123');
+  } finally {
+    fPerm.cleanup();
+  }
+
+  const f = fixture();
+  let note = '- TODO 测试自动授权和续聊 ^ad-agy1\n';
+  const files = new Map();
+  f.plugin.readNote = async () => note;
+  f.plugin.writeNote = async (_p, next) => { note = next; };
+  f.plugin.app = {
+    vault: {
+      getAbstractFileByPath: (p) => (p === 'test.md' ? { path: p } : files.get(p) || null),
+      createFolder: async () => {},
+      create: async (p, text) => { const file = { path: p, text }; files.set(p, file); return file; },
+      modify: async (file, text) => { file.text = text; },
+      read: async (file) => file.text,
+    },
+  };
+  f.plugin.settings.autoWriteResult = true;
+  f.plugin.settings.delegate.writeLink = true;
+  try {
+    const j = await f.send({ destination: 'background' });
+    await settle(j);
+    for (let k = 0; k < 50 && !j.resultWritten; k++) await new Promise((r) => setTimeout(r, 10));
+    assert.equal(j.state, 'done');
+    assert.ok(note.includes('💬 AGY_OK'), 'Turn 1 wrote result back to note');
+
+    // 2. Simulating continueSession after jobs cleanup (passing path/blockId/transport) still runs Turn 2 and writes back
+    delete f.plugin.jobs[j.id];
+    const next = await f.d.continueSession({
+      agent: 'antigravity',
+      sid: j.sessionId,
+      transport: 'acp',
+      path: 'test.md',
+      blockId: 'ad-agy1',
+      destination: 'background',
+      cwd: f.dir,
+    }, '第二轮追问');
+    await settle(next);
+    for (let k = 0; k < 50 && !next.resultWritten; k++) await new Promise((r) => setTimeout(r, 10));
+    assert.equal(next.state, 'done');
+    assert.ok(note.includes('💬 第2轮：AGY_OK'), 'Turn 2 wrote result back to note');
+  } finally {
+    f.cleanup();
+  }
 });

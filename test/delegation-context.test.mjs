@@ -1,3 +1,4 @@
+import test from "node:test";
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
@@ -56,6 +57,8 @@ const auto = '- DOING 🤖 自动记录 ^ad-auto\n  - 💬 可继续的上下文
 target.app = { vault: { getAbstractFileByPath: () => ({path:'note.md'}), read: async () => auto } };
 target.viewForPath = () => null;
 assert.ok(!(await target.delegateTarget({path:'note.md',line:0,lineText:auto.split('\n')[0]})).error, 'auto records remain available for delegation');
+target.viewForPath = () => ({ getMode: () => 'preview', editor: { getValue() { throw new Error('preview hidden editor is stale'); } } });
+assert.ok(!(await target.delegateTarget({path:'note.md',line:0,lineText:auto.split('\n')[0]})).error, 'preview mode reads fresh vault note instead of stale editor');
 console.log('PASS accumulated AI context, subtree boundaries, protected summaries and titles, and delegation entry');
 
 const multilines = ['- 项目', '  母块的补充说明', '  ```md', '  - 代码示例，不能当母块', '  ```', '  - 💬 分析结果', '    结果的补充说明', '    - TODO 执行'];
@@ -106,3 +109,29 @@ assert.equal(decorate(bgView,bgPlugin).length,0,'completed background answers ha
 bgJob.destination='desktop';
 assert.equal(decorate(bgView,bgPlugin).length,1,'desktop sessions keep their existing pill');
 console.log('PASS background progress: one provider, no finished pill, desktop behavior preserved');
+
+test("草稿链接：从任务块子树里找出派发草稿，后者优先", async () => {
+  const { findDraftLink } = await import("../src/delegation.js");
+  const lines = [
+    "- TODO 做事 ^ad-x",
+    "\t- 📝 [[Agent Deck/派发/2026-11-18-a|派发草稿]]",
+    "\t- 📝 [[Agent Deck/派发/2026-11-18-b]]",
+    "- TODO 别的",
+  ];
+  assert.equal(findDraftLink(lines, { start: 0, end: 2 }), "Agent Deck/派发/2026-11-18-b", "后出现的优先");
+  assert.equal(findDraftLink(lines, { start: 3, end: 3 }), "", "别的块不串");
+  assert.equal(findDraftLink(lines, null), "");
+  assert.equal(findDraftLink(["[[]]"], { start: 0, end: 0 }), "");
+});
+
+test("载荷命名：有块号按块号命名（同一任务只保留一份），无块号带时间戳", async () => {
+  const { Delegator } = await import("../src/delegation.js");
+  const d = Object.create(Delegator.prototype);
+  const withBlock = d.payloadName({ date: "2026-11-18", time: "051234", name: "整理视频链接", anchor: "ad-wb-abc123" });
+  const same = d.payloadName({ date: "2026-11-19", time: "090000", name: "整理视频链接", anchor: "ad-wb-abc123" });
+  assert.match(withBlock, /^2026-11-18-ad-wb-abc123-/);
+  assert.equal(withBlock.split("-").slice(3).join("-"), same.split("-").slice(3).join("-"), "同块号 → 同一身份");
+  assert.notEqual(withBlock, same, "但日期不同会换文件");
+  const noBlock = d.payloadName({ date: "2026-11-18", time: "051234", name: "x" });
+  assert.match(noBlock, /^2026-11-18-051234-/);
+});

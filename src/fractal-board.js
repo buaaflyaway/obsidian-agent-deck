@@ -1120,7 +1120,8 @@ export function taskBoardExtension(plugin, refreshEffect) {
     const sourcePath = info?.file?.path || "";
     const ids = trackedBlockIds(plugin);
     const trigger = mentionTrigger(plugin);
-    const groups = extractTaskBoardGroups(text, { trackedIds: ids, trigger });
+    const fileBoard = Boolean(sourcePath && plugin.settings?.taskBoardFiles?.[sourcePath]);
+    const groups = extractTaskBoardGroups(text, { trackedIds: ids, trigger, fileBoard });
     const boardLines = new Set();
 
     const mirrorCache = plugin._mirrorBoardCache || null;
@@ -1171,8 +1172,10 @@ export function taskBoardExtension(plugin, refreshEffect) {
     create: (state) => build(state),
     update(value, tr) {
       let changed = tr.docChanged;
+      const sourcePath = tr.state.field?.(plugin.editorInfoField, false)?.file?.path || "";
+      const fileBoard = Boolean(sourcePath && plugin.settings?.taskBoardFiles?.[sourcePath]);
       const groups = changed || tr.effects.some((e) => e.is(setTaskBoardEffect))
-        ? extractTaskBoardGroups(tr.state.doc.toString(), { trackedIds: trackedBlockIds(plugin), trigger: mentionTrigger(plugin) })
+        ? extractTaskBoardGroups(tr.state.doc.toString(), { trackedIds: trackedBlockIds(plugin), trigger: mentionTrigger(plugin), fileBoard })
         : null;
       for (const e of tr.effects) {
         if (e.is(setTaskBoardEffect)) {

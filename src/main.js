@@ -8,7 +8,7 @@ import { settingsAgentOrder, recommendPrimaryAgents } from "./settings-agents.js
 import fs from "fs";
 import { archiveCompletedTo } from "./journal-archive.js";
 import { planJournal, renderJournal, ACTIVE_HEADING, LEGACY_HEADINGS } from "./organize-journal.js";
-import { readJournalLayout, configuredJournalLayout } from "./journal-layout.js";
+import { readJournalLayout, configuredJournalLayout, repairJournalLayout, stripJournalLayout } from "./journal-layout.js";
 import { JournalOrganizer } from "./journal-organizer.js";
 import { semanticTaskId } from "./task-id.js";
 import { AttentionTracker } from "./attention.js";
@@ -20,32 +20,54 @@ import {
   Plugin, Notice, MarkdownView, MarkdownRenderChild, Menu, editorInfoField,
 } from "obsidian";
 import {
-  AGENTS, AGENT_ORDER, MODEL_CATALOG, DEFAULTS, deepMerge, syncDelegationSettings, dayKey, dayKeyToday, fmtMin, fmtTok, fmtClock, timeAgo, truncate, clamp, visibleMenuAgents, journalPath,
+  AGENTS, AGENT_ORDER, MODEL_CATALOG, DEFAULTS, deepMerge, syncDelegationSettings, dayKey, dayKeyToday, fmtMin, fmtTok, fmtClock, timeAgo, truncate, clamp, visibleMenuAgents, journalPath, STORE_VERSION, MEMORY_QUERY_ASSET_VERSION,
 } from "./constants.js";
 import {
-  AgentUsage, UsageStore, projectName, normalizeProjectRoot, SUMMARY_VERSION,
+  AgentUsage, UsageStore, projectName, normalizeProjectRoot, SUMMARY_VERSION, USAGE_CACHE_VERSION,
   cursorEventsDir, cursorHooksStatus, isCursorRunning,
   installCursorHooks as installCursorHooksHelper,
   uninstallCursorHooks as uninstallCursorHooksHelper,
   grokBotPersistenceDir,
 } from "./readers.js";
-import { Delegator, blockAt, freshTaskText, stripInternalIdentifiers, ancestorLines, delegationText, openSession as openSessionRaw, openExternal as openExternalRaw, findAgentBinary, findLink, sessionDeepLink, openAgentApp, isCliSession, isCodexDesktop } from "./delegation.js";
+import { evaluatePermissionPolicy } from "./security.js";
+import { readRecentTraces, checkExternalAssets, buildDiagnosticReport } from "./trace.js";
+import { Delegator, blockAt, freshTaskText, stripInternalIdentifiers, ancestorLines, delegationText, findDraftLink, openSession as openSessionRaw, openExternal as openExternalRaw, openTerminal, findAgentBinary, findLink, sessionDeepLink, openAgentApp, isCliSession, isCodexDesktop } from "./delegation.js";
+import { pickPermissionOption } from "./delegation-runners.js";
 import { AgentDeckView, VIEW_TYPE } from "./view.js";
 import { DashboardView, DASHBOARD_TYPE } from "./dashboard.js";
 import { AgentDeckSettingsTab } from "./settings.js";
 import { syncModelGroups } from "./model-groups.js";
-import { DelegateOptionsModal, ConfirmSendModal, ArchiveTargetModal } from "./dialog.js";
+import { recentProjectFolders } from "./project-folders.js";
+import { DelegateOptionsModal, ConfirmSendModal, FollowUpModal, ArchiveTargetModal, askApiConsentInApp, askJournalMarkerRepair, defaultWorkMode, resolveTaskProjectState } from "./dialog.js";
 import { agentIcon, setLucide } from "./icons.js";
 import { createEditorExtension, dispatchRefresh, ITEM_MIME } from "./editor.js";
 import { keywordMarksExtension, keywordIconsExtension, keywordPostProcessor } from "./keyword-style.js";
 import { MenuBarBridge } from "./menubar.js";
+import { SessionTitleManager } from "./session-titles.js";
 import { integrateRecordFolding } from "./fold-integration.js";
 import { renderAIRecords } from "./record-display.js";
+import { blockSessionMap } from "./ai-records.js";
+import {
+  RECORD_MENU_SECTION as RECORD_SECTION,
+  createRecordMenuSection,
+  parentTimelineLine as findParentTimelineLine,
+  recordCopyText,
+  recordDeleteRange,
+} from "./record-menu.js";
 import { AutoLog } from "./autolog.js";
+import { detectJournalProviders, runJournalModel, setJournalApiConsent } from "./llm.js";
 import { JournalSync } from "./sync.js";
 import * as J from "./journal.js";
 import { mentionOptions, mentionTrigger } from "./task-mentions.js";
 import { Dreaming } from "./dream.js";
+import { memoryBase, orderForReview } from "./memory-store.js";
+import { buildPlanMarkdown, parsePlan, planSlug, plannerFixPrompt, plannerPrompt } from "./planner.js";
+import { buildWorkbenchNote } from "./workbench-note.js";
+import { SKILL_DIR, cardPathOf, nextCardContent, scanSkills, skillIndexMarkdown } from "./skill-cards.js";
+import { MEMORY_BOARD_TYPE, MemoryBoardView } from "./memory-board.js";
+import { MemoryReviewModal } from "./memory-review.js";
+import { MemoryCreateModal, MemoryImportModal } from "./memory-import.js";
+import { registerContextResolver } from "./harness.js";
 import { ConversationModal, AcpPermissionModal } from "./conversation-modal.js";
 import { registerTaskAgentSuggest } from "./mention-suggest.js";
 import { t, currentLanguage } from "./i18n.js";
@@ -60,8 +82,12 @@ import {
 } from "./task-export.js";
 import { scanAgentWait, scanLimitQueue, resolveExternalState, buildLineProgressInfo } from "./external-state.js";
 import { ManagedTimers, CircuitBreaker, safeRun } from "./runtime-guard.js";
-import { hasAgentCapability, usesDeckSessionLink } from "./agent-registry.js";
+import { hasAgentCapability, usesDeckSessionLink, canContinueSession } from "./agent-registry.js";
 import { updateNote } from "./note-updates.js";
+import { parseThread, pendingQuestion, answerSlot, fillAnswer, ensureQuestionId, anchorThreadText, makeQuestionId, suggestOptions, latestWrittenAnswer } from "./thread-replies.js";
+import { ReplyModal } from "./reply-modal.js";
+import { ReplyInboxView, REPLY_INBOX_TYPE } from "./reply-inbox-view.js";
+import { inboxAdd, inboxRemove } from "./reply-inbox.js";
 import { ProjectWorkbenchModal } from "./workbench-modal.js";
 import {
   extractTaskBoardGroups,
@@ -70,6 +96,11 @@ import {
   insertWorkbenchBlockLines,
   resolveSessionProject,
   isWaitingSession,
+  isActiveNowSession,
+  buildProjectGroups,
+  buildNowStatusGroups,
+  mergeSessionsWithJobs,
+  orderNowSessions,
   classifyTaskStatusColumn,
   buildBoardSiblingContext,
   cleanBoardCardTitleMarkdown,
@@ -90,6 +121,7 @@ import {
   STANDALONE_PROJECT_ID,
 } from "./project-workbench.js";
 import { setTaskBoardEffect, taskBoardMode } from "./fractal-board.js";
+import { judgeWave, newFindings, syncSeen, STEWARD_WATCH_MS } from "./steward-watch.js";
 import { SHOWCASE_VERSION, showcasePath, applyShowcaseDefaults, buildShowcaseMarkdown } from "./welcome-demo.js";
 
 const fsp = fs.promises;
@@ -147,12 +179,27 @@ export default class AgentDeckPlugin extends Plugin {
       onCancel: ({ job }) => this.onWorkbenchJobSettled(job),
     });
     this.menubar = new MenuBarBridge(this);
+    this.sessionTitles = new SessionTitleManager(this);
     this.autoLog = new AutoLog(this);
+    // API 会算钱：自动整理 / 润色真要调用 API 前先问一句，没人应答就按「不用」处理。
+    setJournalApiConsent((info) => this.confirmApiCall(info));
     this.dreaming = new Dreaming(this);
+    // 派发时按任务挑出相关长期记忆；开关见设置 → Dreaming →「派发时注入相关记忆」。
+    this._offMemoryContext = registerContextResolver({
+      name: "dream-memory",
+      resolve: async (context) => {
+        const task = [context.block?.text || "", ...(context.contextLines || [])].join("\n");
+        const section = await this.dreaming.contextSection(task);
+        return section ? { section } : null;
+      },
+    });
     this.journalSync = new JournalSync(this);
     this.journalOrganizer = new JournalOrganizer(this);
 
     this.registerView(VIEW_TYPE, (leaf) => new AgentDeckView(leaf, this));
+    this.registerView(MEMORY_BOARD_TYPE, (leaf) => new MemoryBoardView(leaf, this));
+    this.registerView(REPLY_INBOX_TYPE, (leaf) => new ReplyInboxView(leaf, this));
+    this.addRibbonIcon("message-square-dot", t("回复信箱"), () => this.openReplyInbox({ focus: true }));
     this.registerView(DASHBOARD_TYPE, (leaf) => new DashboardView(leaf, this));
     this.settingTab = new AgentDeckSettingsTab(this.app, this);
     this.addSettingTab(this.settingTab);
@@ -163,7 +210,66 @@ export default class AgentDeckPlugin extends Plugin {
       this.registerEvent(this.app.workspace.on("editor-menu", (menu, editor) => {
         const cm = editor?.cm;
         if (!cm) return;
+        const cursorLine = editor.getCursor().line;
+        const cursorRaw = editor.getLine(cursorLine) || "";
+        const isRecord = J.CONTEXT_RECORD_RE.test(cursorRaw);
+        const canPinCursor = isRecord
+          || /^\s*(?:[-*+]|\d+[.)])\s+TODO\s+🤖\s/.test(cursorRaw)
+          || Boolean(J.kwLine(cursorRaw)?.kw);
         const selected = selectedTaskLines(cm.state.doc, cm.state.selection);
+        if (!selected.length && !canPinCursor) return;
+        // AI 记录的右键菜单整组放在最上面，Pin 排第一；记录菜单不配图标。
+        const canSection = createRecordMenuSection(menu);
+        const addRecordItem = (build) => {
+          menu.addItem((item) => {
+            if (canSection && typeof item.setSection === "function") item.setSection(RECORD_SECTION);
+            return build(item);
+          });
+        };
+        if (canPinCursor) {
+          const pinned = J.hasPinMarker(cursorRaw);
+          addRecordItem((item) =>
+            item
+              .setTitle(pinned ? t("取消 Pin（恢复常规折叠）") : t("Pin 为关键记录（折叠不隐藏 · Dreaming 优先）"))
+              .onClick(() => {
+                const file = this.app.workspace.getActiveFile();
+                if (file) this.toggleRecordPin(file.path, cursorLine, { editor });
+              }),
+          );
+        }
+        if (isRecord) {
+          const lines = editor.getValue().split("\n");
+          const parentLine = this.parentTimelineLine(lines, cursorLine);
+          const session = parentLine >= 0 ? this.recordSessionAt(lines, parentLine) : null;
+          addRecordItem((item) => {
+            item.setTitle(t("复制这一轮"));
+            if (typeof item.setSubmenu === "function") {
+              const sub = item.setSubmenu();
+              sub.addItem((entry) => entry.setTitle(t("复制任务与结论")).onClick(() => this.copyRecordLine(cursorRaw, "all")));
+              sub.addItem((entry) => entry.setTitle(t("只复制结论")).onClick(() => this.copyRecordLine(cursorRaw, "conclusion")));
+            } else {
+              item.onClick(() => this.copyRecordLine(cursorRaw, "all"));
+            }
+          });
+          if (session) addRecordItem((item) => item.setTitle(t("查看这一轮的原会话")).onClick(() => this.openConversation(session)));
+          if (parentLine >= 0) {
+            addRecordItem((item) => item.setTitle(t("跳到母任务")).onClick(() => {
+              editor.setCursor({ line: parentLine, ch: 0 });
+              editor.scrollIntoView({ from: { line: parentLine, ch: 0 }, to: { line: parentLine, ch: 0 } }, true);
+            }));
+          }
+          addRecordItem((item) => {
+            item.setTitle(t("删除这一轮记录…"));
+            const remove = () => this.deleteRecordBlock(editor, cursorLine);
+            if (typeof item.setSubmenu === "function") {
+              const sub = item.setSubmenu();
+              sub.addItem((entry) => entry.setTitle(t("确认删除这一轮记录")).onClick(remove));
+              sub.addItem((entry) => entry.setTitle(t("取消")));
+            } else {
+              item.onClick(remove);
+            }
+          });
+        }
         if (!selected.length) return;
         if (selected.length >= 2) {
           menu.addItem((item) => {
@@ -177,6 +283,18 @@ export default class AgentDeckPlugin extends Plugin {
         }
         menu.addItem((item) =>
           item.setTitle(t("合并成组（Group rows）")).setIcon("folder-plus").onClick(() => this.groupRows(cm)),
+        );
+      }));
+      this.registerEvent(this.app.workspace.on("file-menu", (menu, file) => {
+        if (!file?.path || file.path.startsWith(`${this.dreaming.dir}/`)) return;
+        const isMd = /\.(?:md|json)$/i.test(file.path);
+        const isFolder = Array.isArray(file.children);
+        if (!isMd && !isFolder) return;
+        menu.addItem((item) =>
+          item
+            .setTitle(t("导入到 Agent Deck 记忆库…"))
+            .setIcon("import")
+            .onClick(() => this.importVaultTargetToMemory(file)),
         );
       }));
     }
@@ -197,7 +315,7 @@ export default class AgentDeckPlugin extends Plugin {
       name: t("打开项目协作工作台：小队编排与拆解派发"),
       callback: () => {
         const view = this.app.workspace.getActiveViewOfType(MarkdownView);
-        const line = view?.file ? view.editor.getCursor().line : -1;
+        const line = view?.file && (!view.getMode || view.getMode() === "source") ? view.editor.getCursor().line : -1;
         this.openProjectWorkbench(view?.file && line >= 0 && blockAt(view.editor.getValue().split("\n"), line) ? { path: view.file.path, line } : {});
       },
     });
@@ -255,6 +373,11 @@ export default class AgentDeckPlugin extends Plugin {
       if (view.file) this.gripSend({ path: view.file.path, line: editor.getCursor().line, lineText: editor.getLine(editor.getCursor().line) });
     } });
     this.addCommand({ id: "task-actions-line", name: t("当前任务：续聊、停止、重新委派"), hotkeys: [{ modifiers: ["Ctrl", "Alt"], key: "A" }], editorCallback: (editor, view) => { if (view.file) this.taskActions(view.file.path, editor.getCursor().line); } });
+    this.addCommand({ id: "reply-question", name: t("回复当前任务的提问（写回 ✍️ 答）"), hotkeys: [{ modifiers: ["Ctrl", "Alt"], key: "R" }], editorCallback: (editor, view) => { if (view?.file) this.replyToQuestion(view.file.path, editor); } });
+    this.addCommand({ id: "reply-question-line", name: t("在提问下补一行「✍️ 答」（直接手写）"), editorCallback: (editor) => this.insertReplySlot(editor) });
+    this.addCommand({ id: "send-handwritten-reply", name: t("把已写好的「✍️ 答」发给会话继续"), editorCallback: (editor, view) => { if (view?.file) this.submitWrittenReply(view.file.path, editor); } });
+    this.addCommand({ id: "reply-inbox-open", name: t("打开回复信箱（非模态，不抢焦点）"), callback: () => this.openReplyInbox({ focus: true }) });
+    this.addCommand({ id: "reply-anchor-thread", name: t("给这一块的问答补块号（老数据，可被双链引用）"), editorCallback: (editor, view) => { if (view?.file) this.anchorThread(view.file.path, editor); } });
     this.addCommand({ id: "next-attention", name: t("处理下一条需要授权或确认的会话"), hotkeys: [{ modifiers: ["Ctrl", "Alt"], key: "N" }], callback: () => {
       const alert = this.attentionAlerts.values().next().value;
       if (alert) alert.open(); else this.notice(t("目前没有需要授权或确认的会话"));
@@ -275,18 +398,51 @@ export default class AgentDeckPlugin extends Plugin {
       editorCallback: (editor, view) => this.markDoneAndArchive(editor, view),
     });
     this.addCommand({ id: "group-active-journal", name: t("当前日记：整理日志版面"), hotkeys: [{ modifiers: ["Ctrl", "Alt"], key: "L" }], callback: () => this.organizeJournal() });
+    this.addCommand({
+      id: "toggle-pin-record",
+      name: t("Pin / 取消 Pin 当前关键记录（折叠保留 · Dreaming 优先）"),
+      editorCallback: (editor, view) => {
+        if (!view?.file) return;
+        const line = editor.getCursor().line;
+        const raw = editor.getLine(line) || "";
+        if (!J.CONTEXT_RECORD_RE.test(raw) && !/^\s*(?:[-*+]|\d+[.)])\s+TODO\s+🤖\s/.test(raw) && !J.kwLine(raw)?.kw) {
+          return this.notice(t("请把光标放在要 Pin 的 AI 记录或任务行上"));
+        }
+        this.toggleRecordPin(view.file.path, line, { editor });
+      },
+    });
     this.addCommand({ id: "group-done-journal", name: t("当前日记：归档已完成的日志到…"), callback: () => this.archiveCompletedJournal() });
-    this.addCommand({ id: "log-journal", name: t("整理 Agent 会话进今天的日记"), callback: () => this.autoLog.logNow() });
+    this.addCommand({ id: "log-journal", name: t("整理 Agent 会话进今天的日记"), callback: () => this.logNowWithMarkerGuard() });
     this.addCommand({ id: "dream-now", name: t("Dreaming：整理 AI 记录与用户日志为长期记忆"), callback: () => this.dreaming.run(true, { drain: true }) });
     this.addCommand({ id: "dream-share", name: t("Dreaming：同步共享长期记忆"), callback: () => this.dreaming.sharing.sync() });
     this.addCommand({ id: "dream-export", name: t("Dreaming：导出长期记忆 Markdown 副本"), callback: () => this.dreaming.exportMemory() });
+    this.addCommand({ id: "memory-migrate", name: t("记忆：把长期记忆迁移到记忆库（每条一个文件）"), callback: () => this.migrateMemoryToFiles() });
+    this.addCommand({ id: "memory-confirm", name: t("记忆：确认当前这条记忆"), callback: () => this.markMemory("有效") });
+    this.addCommand({ id: "memory-reject", name: t("记忆：拒绝当前这条记忆"), callback: () => this.markMemory("已拒绝") });
+    this.addCommand({ id: "memory-audit", name: t("记忆：体检（来源 / 待审 / 重复）"), callback: () => this.auditMemory() });
+    this.addCommand({ id: "memory-reanchor", name: t("记忆：按原文重新锚定来源（修正行号 / 升级块号）"), callback: () => this.reanchorMemory() });
+    this.addCommand({ id: "memory-anchor-source", name: t("记忆：给被提炼的原文加块号（可从原笔记跳回记忆）"), callback: () => this.anchorSourceLines() });
+    this.addCommand({ id: "memory-backlink-source", name: t("记忆：在原文列表项下加回链（原文 ↔ 记忆 双向）"), callback: () => this.backlinkSourceLines() });
+    this.addCommand({ id: "memory-review", name: t("记忆：逐条审阅（下拉框选状态）"), callback: () => this.reviewMemories() });
+    this.addCommand({ id: "memory-import", name: t("记忆：从 Markdown / JSON 导入到记忆库…"), callback: () => this.openMemoryImport() });
+    this.addCommand({ id: "memory-create", name: t("记忆：新建一条记忆"), callback: () => this.openMemoryCreate() });
+    this.addCommand({ id: "memory-delete", name: t("记忆：删除当前这条记忆"), callback: () => this.deleteCurrentMemory() });
+    this.addCommand({ id: "plan-task", name: t("规划：把当前这一条拆成 task.md（自带看板结构）"), callback: () => this.planTask() });
+    this.addCommand({ id: "board-file-toggle", name: t("看板：把当前笔记设为 / 取消看板文件"), callback: () => this.toggleBoardFile() });
+    this.addCommand({ id: "workbench-note", name: t("工作台：刷新总览（看板 / 记忆 / 规划）"), callback: () => this.refreshWorkbenchNote() });
+    this.addCommand({ id: "memory-board-open", name: t("记忆：打开记忆看板（按状态分列，可拖拽）"), callback: () => this.openMemoryBoard() });
+    this.addCommand({ id: "payload-archive", name: t("派发载荷：归档 30 天前的旧文件"), callback: () => this.archivePayloads() });
+    this.addCommand({ id: "payload-edited", name: t("派发载荷：列出被改过的载荷"), callback: () => this.listEditedPayloads() });
+    this.addCommand({ id: "draft-delegation", name: t("委派：先生成草稿（不发送，看完再点委派）"), callback: () => this.makeDispatchDraft() });
+    this.addCommand({ id: "skills-refresh", name: t("技能：刷新技能卡（外部 Skill → 库内笔记）"), callback: () => this.refreshSkillCards() });
     this.addCommand({ id: "import-nautilus", name: t("导入螺旋日程的历史用量"), callback: () => this.importNautilus(true) });
     this.addCommand({ id: "clean-jobs", name: t("清理已结束的委派记录"), callback: () => this.cleanJobs() });
+    this.addCommand({ id: "export-diagnostics", name: t("导出脱敏诊断报告（Trace / 版本 / 熔断状态）"), callback: () => this.exportDiagnostics() });
     this.addCommand({ id: "open-welcome-showcase", name: t("打开 1.10.0 新功能示例笔记"), callback: () => this.openWelcomeShowcase() });
 
     this.registerObsidianProtocolHandler("agent-deck", async (params) => {
       if (params && params.do === "scan") return this.scanNow();
-      if (params && params.do === "log") return this.autoLog.logNow();
+      if (params && params.do === "log") return this.logNowWithMarkerGuard();
       // 菜单栏里点命令行会话：交回插件，在终端里接着聊
       if (params && params.do === "open" && params.sid) { const m = this.usage.meta.get(params.sid) || {}; return this.openSession(params.agent || m.agent || "claude", params.sid, m.app || params.app || "", m); }
       if (params && params.do === "hide") {
@@ -320,8 +476,10 @@ export default class AgentDeckPlugin extends Plugin {
       if (this.settings.showMenuBar !== false) this.menubar.start().catch((e) => console.error("[agent-deck] menubar", e));
       if (this.settings.menuBarHideNautilus !== false) this.defer(() => this.hideNautilusAgentBar().catch(() => {}), 2500);
       this.scheduleScan();
+      this.startStewardWatch();
       this.watchCursorEvents();
       this.watchGrokBotPersistence();
+      this.watchMemoryFolder();
       this.registerInterval(window.setInterval(() => safeRun("autoLog:tick", () => this.autoLog.tick(), { breaker: this._faultBreakers?.autoLog }), 60 * 1000));
       this.registerInterval(window.setInterval(() => safeRun("dream:tick", () => this.dreaming.tick(), { breaker: this._faultBreakers?.dreaming }), 60 * 1000));
       this.registerInterval(window.setInterval(() => safeRun("externalState:poll", () => this.pollExternalState(), { breaker: this._faultBreakers?.externalState }), 10 * 1000));
@@ -334,8 +492,384 @@ export default class AgentDeckPlugin extends Plugin {
     });
   }
 
+  // 记忆库：迁移 / 确认 / 拒绝。写回都走 Dreaming 的同一套落盘逻辑。
+  async migrateMemoryToFiles() {
+    try {
+      const count = await this.dreaming.migrateToStore();
+      await this.dreaming.syncOverview();
+      const basePath = `${this.dreaming.dir}.base`;
+      if (!this.app.vault.getAbstractFileByPath(basePath)) await this.app.vault.create(basePath, memoryBase(this.dreaming.dir));
+      this.notice(t("已把 {count} 条记忆迁到记忆库：{dir}（每条约一个文件，可用 Base 视图查看）", { count, dir: this.dreaming.dir }), 9000);
+    } catch (e) { this.notice(t("迁移未完成：{error}", { error: e.message }), 9000); }
+  }
+
+  async auditMemory() {
+    if (!this.dreaming.storeMode) return this.notice(t("请先运行「记忆：把长期记忆迁移到记忆库」"));
+    try {
+      const text = await this.dreaming.healthReport();
+      const target = `${this.dreaming.dir}-体检.md`;
+      await this.writeVaultFile(target, text);
+      await this.app.workspace.openLinkText(target, "", false);
+      this.notice(t("记忆体检已生成：{path}", { path: target }), 8000);
+    } catch (e) { this.notice(t("体检没跑成：{error}", { error: e.message }), 8000); }
+  }
+
+  async reanchorMemory() {
+    if (!this.dreaming.storeMode) return this.notice(t("请先运行「记忆：把长期记忆迁移到记忆库」"));
+    try {
+      const dry = await this.dreaming.verifySources({ write: false });
+      if (!dry.drift.length && !dry.missing.length && !dry.changed.length) return this.notice(t("检查了 {n} 条记忆：来源全部对得上", { n: dry.checked }), 6000);
+      const done = await this.dreaming.verifySources({ write: true });
+      await this.dreaming.syncOverview();
+      this.notice(t("已重新锚定 {fixed} 条；{changed} 条原文被改过、{gap} 条找不到，都需人工核对", { fixed: done.fixedFiles.length, changed: done.edited.length, gap: done.missing.length }), 9000);
+    } catch (e) { this.notice(t("重新锚定没跑成：{error}", { error: e.message }), 9000); }
+  }
+
+  async anchorSourceLines() {
+    if (!this.dreaming.storeMode) return this.notice(t("请先运行「记忆：把长期记忆迁移到记忆库」"));
+    try {
+      const dry = await this.dreaming.ensureSourceAnchors({ write: false });
+      if (!dry.added && !dry.failed.length) return this.notice(t("检查了 {n} 处来源：都已经有块号", { n: dry.checked }), 6000);
+      const done = await this.dreaming.ensureSourceAnchors({ write: true });
+      await this.dreaming.syncOverview();
+      this.notice(t("已给 {added} 处原文补块号、改写 {rewritten} 条记忆；{gap} 处找不到原文需人工核对", { added: done.added, rewritten: done.rewritten, gap: done.failed.length }), 10000);
+    } catch (e) { this.notice(t("加块号没跑成：{error}", { error: e.message }), 9000); }
+  }
+
+  async backlinkSourceLines() {
+    if (!this.dreaming.storeMode) return this.notice(t("请先运行「记忆：把长期记忆迁移到记忆库」"));
+    try {
+      const dry = await this.dreaming.ensureReverseLinks({ write: false });
+      if (!dry.linked) return this.notice(t("检查了 {n} 处来源：{already} 处已有回链，{skipped} 处在段落里（跳过）", { n: dry.checked, already: dry.already, skipped: dry.skipped }), 7000);
+      const done = await this.dreaming.ensureReverseLinks({ write: true });
+      this.notice(t("已在 {linked} 个列表项下加回链；{skipped} 处原文是段落、未改动；{gap} 处找不到", { linked: done.linked, skipped: done.skipped, gap: done.failed.length }), 10000);
+    } catch (e) { this.notice(t("加回链没跑成：{error}", { error: e.message }), 9000); }
+  }
+
+  // 把光标所在那一条当作目标，拆成一份能被分形看板直接接住的 task.md。
+  async planTask() {
+    const file = this.app.workspace.getActiveFile();
+    const active = this.app.workspace.getActiveViewOfType(MarkdownView);
+    const view = file ? (active && active.file?.path === file.path ? ((!active.getMode || active.getMode() === "source") ? active : null) : this.sourceViewForPath(file.path)) : null;
+    if (!file || !view?.editor) return this.notice(t("请先打开要规划的笔记，把光标放在目标那一行"));
+    const lines = view.editor.getValue().split("\n");
+    const block = blockAt(lines, view.editor.getCursor().line);
+    const goal = String(block?.text || "").replace(/^\s*(?:[-*+]|\d+[.)])\s*/, "").trim();
+    if (!goal) return this.notice(t("光标那一行没有内容，先写上要拆解的目标"));
+    const notice = this.notice(t("正在拆解目标…"), 0);
+    try {
+      let answer = await runJournalModel(plannerPrompt(goal), this.settings, {});
+      let plan;
+      try { plan = parsePlan(answer); }
+      catch (e) {
+        // 模型偶尔会回散文：给一次机会，只让它把 JSON 补出来。
+        answer = await runJournalModel(plannerFixPrompt(answer), this.settings, {});
+        plan = parsePlan(answer);
+      }
+      const dir = "Agent Deck/任务";
+      const name = `${dayKeyToday(this.settings)}-${planSlug(plan.title)}.md`;
+      const target = `${dir}/${name}`;
+      const text = buildPlanMarkdown({ ...plan, goal, by: "agent-deck/planner" });
+      await this.writeVaultFile(target, text);
+      // 生成物直接当看板文件：打开就是看板，人可以在上面拖拽增删。
+      (this.settings.taskBoardFiles ||= {})[target] = true;
+      const [group] = extractTaskBoardGroups(text, { trackedIds: new Set(), trigger: mentionTrigger(this), fileBoard: true });
+      if (group) {
+        const views = (this.settings.taskBoardViews ||= {});
+        if (group.key) views[group.key] = "board";
+        if (group.stableKey) views[group.stableKey] = "board";
+      }
+      await this.saveSettings();
+      dispatchRefresh(this);
+      this.notice(t("已生成 {n} 步规划：{path}", { n: plan.steps.length, path: target }), 8000);
+      await this.app.workspace.openLinkText(target, "", false);
+    } catch (e) {
+      this.notice(t("规划没做成：{error}", { error: e.message }), 9000);
+    } finally {
+      notice?.hide?.();
+    }
+  }
+
+  // 文件级看板：整篇笔记直接以看板打开（没有母项结构时合成一个根）。
+  toggleBoardFile() {
+    const file = this.app.workspace.getActiveFile();
+    if (!file) return this.notice(t("请先打开一篇笔记"));
+    const map = (this.settings.taskBoardFiles ||= {});
+    if (map[file.path]) { delete map[file.path]; this.notice(t("已取消看板文件：{path}", { path: file.path })); }
+    else { map[file.path] = true; this.notice(t("已设为看板文件：{path}", { path: file.path })); }
+    this.saveSettings();
+    dispatchRefresh(this);
+  }
+
+  // 主入口用 Obsidian 原生 Base（只读表格：筛选/排序/统计）；看板作为"要改状态时"的可选增强。
+  async openMemoryBase() {
+    if (!this.dreaming.storeMode) return this.notice(t("请先运行「记忆：把长期记忆迁移到记忆库」"));
+    const path = `${this.dreaming.dir}.base`;
+    if (!this.app.vault.getAbstractFileByPath(path)) await this.app.vault.create(path, memoryBase(this.dreaming.dir));
+    await this.app.workspace.openLinkText(path, "", false);
+  }
+
+  async openMemoryBoard() {
+    const existing = this.app.workspace.getLeavesOfType(MEMORY_BOARD_TYPE)[0];
+    const leaf = existing || this.app.workspace.getRightLeaf(false);
+    if (!existing) await leaf.setViewState({ type: MEMORY_BOARD_TYPE, active: true });
+    this.app.workspace.revealLeaf(leaf);
+    return leaf.view?.refresh?.();
+  }
+
+  async refreshMemoryBoards() {
+    for (const leaf of this.app.workspace.getLeavesOfType(MEMORY_BOARD_TYPE)) {
+      await leaf.view?.refresh?.();
+    }
+  }
+
+  openMemoryCreate(onCreated) {
+    new MemoryCreateModal(this, {
+      onCreated: async (res) => {
+        await onCreated?.(res);
+        await this.refreshMemoryBoards();
+      },
+    }).open();
+  }
+
+  async deleteMemoryFile(path) {
+    if (!this.dreaming.isEntryPath(path)) return false;
+    const file = this.app.vault.getAbstractFileByPath(path);
+    if (!file) return false;
+    await this.app.vault.trash(file, true);
+    await this.dreaming.syncOverview();
+    if (this.dreaming.cfg?.backlinked?.length) {
+      await this.dreaming.ensureReverseLinks({ write: true });
+    }
+    await this.refreshMemoryBoards();
+    this.notice(t("已删除记忆：{path}", { path }));
+    return true;
+  }
+
+  async deleteCurrentMemory() {
+    const file = this.app.workspace.getActiveFile();
+    if (!file || !this.dreaming.isEntryPath(file.path)) return this.notice(t("请先打开要删除的记忆文件"));
+    return this.deleteMemoryFile(file.path);
+  }
+
+  watchMemoryFolder() {
+    if (this._watchingMemoryFolder || typeof this.app.vault?.on !== "function") return;
+    this._watchingMemoryFolder = true;
+    let syncTimer = null;
+    let deletedSeen = false;
+    this.register(() => clearTimeout(syncTimer));
+    const flushSync = () => {
+      clearTimeout(syncTimer);
+      syncTimer = setTimeout(async () => {
+        const cleanBacklinks = deletedSeen;
+        deletedSeen = false;
+        if (this._unloaded || !this.dreaming.storeMode) return;
+        try {
+          await this.dreaming.syncOverview();
+          if (cleanBacklinks && this.dreaming.cfg?.backlinked?.length) {
+            await this.dreaming.ensureReverseLinks({ write: true });
+          }
+          await this.refreshMemoryBoards();
+        } catch (e) { console.error("[agent-deck] 记忆库同步失败", e); }
+      }, 300);
+    };
+    const onTouch = async (file) => {
+      if (this._unloaded || !this.dreaming.storeMode || !this.dreaming.isEntryPath(file?.path)) return;
+      try { await this.dreaming.reconcileFile(file); } catch (e) { console.error("[agent-deck] 规范化记忆文件失败", e); }
+      flushSync();
+    };
+    this.registerEvent(this.app.vault.on("create", onTouch));
+    this.registerEvent(this.app.vault.on("modify", onTouch));
+    this.registerEvent(this.app.vault.on("delete", (file) => {
+      if (this._unloaded || !this.dreaming.storeMode || !this.dreaming.isEntryPath(file?.path)) return;
+      deletedSeen = true;
+      flushSync();
+    }));
+    this.registerEvent(this.app.vault.on("rename", (file, oldPath) => {
+      if (this._unloaded || !this.dreaming.storeMode) return;
+      if (this.dreaming.isEntryPath(file?.path) || this.dreaming.isEntryPath(oldPath)) {
+        if (this.dreaming.isEntryPath(oldPath) && !this.dreaming.isEntryPath(file?.path)) deletedSeen = true;
+        flushSync();
+      }
+    }));
+  }
+
+  openMemoryImport(initialDocs = [], opts = {}) {
+    new MemoryImportModal(this, initialDocs, {
+      ...opts,
+      onImported: async (res) => {
+        await opts.onImported?.(res);
+        await this.refreshMemoryBoards();
+      },
+    }).open();
+  }
+
+  async importVaultTargetToMemory(target) {
+    const docs = [];
+    const collect = async (node) => {
+      if (!node?.path || node.path.startsWith(`${this.dreaming.dir}/`)) return;
+      if (Array.isArray(node.children)) {
+        for (const child of node.children) await collect(child);
+        return;
+      }
+      if (!/\.(?:md|json)$/i.test(node.path)) return;
+      const content = await this.app.vault.read(node);
+      const date = node.stat?.mtime ? new Date(node.stat.mtime).toISOString().slice(0, 10) : "";
+      if (content && content.trim()) docs.push({ name: node.name || node.path.split("/").pop(), path: node.path, content, date });
+    };
+    await collect(target);
+    if (!docs.length) return this.notice(t("所选位置没有可导入的 Markdown / JSON 文件"));
+    this.openMemoryImport(docs);
+  }
+
+  // 工作台总览：把散落的生成物聚到一页，只做索引，不复制内容。
+  async refreshWorkbenchNote() {
+    const boardFiles = Object.keys(this.settings.taskBoardFiles || {}).filter((p) => this.app.vault.getAbstractFileByPath(p));
+    const audit = this.dreaming.storeMode ? await this.dreaming.audit() : { entries: [], unverified: [], noSource: [] };
+    const tasks = [];
+    const folder = this.app.vault.getAbstractFileByPath("Agent Deck/任务");
+    for (const child of folder?.children || []) if (String(child.path).endsWith(".md")) tasks.push(child.path);
+    tasks.sort().reverse();
+    const text = buildWorkbenchNote({
+      boardFiles,
+      memory: { total: audit.entries.length, pending: audit.unverified.length, noSource: audit.noSource.length },
+      tasks: tasks.slice(0, 8),
+    });
+    const target = "Agent Deck/工作台.md";
+    await this.writeVaultFile(target, text);
+    await this.app.workspace.openLinkText(target, "", false);
+    this.notice(t("工作台已刷新：{path}", { path: target }), 6000);
+  }
+
+  // 派发载荷会越积越多：超过 30 天且没有被任何笔记引用的，移到 派发/归档/YYYY-MM/。
+  async archivePayloads({ days = 30, write = true } = {}) {
+    const dir = "Agent Deck/派发";
+    const folder = this.app.vault.getAbstractFileByPath(dir);
+    if (!folder) return this.notice(t("还没有派发载荷"));
+    const cutoff = Date.now() - days * 86400000;
+    const linked = new Set();
+    for (const targets of Object.values(this.app.metadataCache.resolvedLinks || {})) {
+      for (const target of Object.keys(targets)) linked.add(String(target));
+    }
+    const moved = [];
+    let kept = 0;
+    for (const child of folder.children || []) {
+      if (!String(child.path).endsWith(".md") || String(child.path).includes("/归档/")) continue;
+      const raw = await this.app.vault.read(child);
+      const created = Date.parse((/^created: (.+)$/m.exec(raw) || [])[1] || "");
+      if (!Number.isFinite(created) || created >= cutoff) continue;
+      if (linked.has(String(child.path).replace(/\.md$/, ""))) { kept++; continue; }
+      const month = new Date(created).toISOString().slice(0, 7);
+      const target = `${dir}/归档/${month}/${String(child.path).split("/").pop()}`;
+      if (!write) { moved.push(target); continue; }
+      const parent = `${dir}/归档/${month}`;
+      if (!this.app.vault.getAbstractFileByPath(parent)) await this.app.vault.createFolder(parent);
+      await this.app.vault.rename(child, target);
+      moved.push(target);
+    }
+    this.notice(t("归档 {moved} 个载荷；{kept} 个仍被笔记引用，保留", { moved: moved.length, kept }), 8000);
+    return { moved, kept };
+  }
+
+  // 载荷在派发后被人改过 = 人的真实意图，可以单独取用（不进通用记忆）。
+  async listEditedPayloads() {
+    const crypto = await import("crypto");
+    const edited = [];
+    for (const job of Object.values(this.jobs || {})) {
+      if (!job.payloadPath) continue;
+      const file = this.app.vault.getAbstractFileByPath(job.payloadPath);
+      if (!file) continue;
+      const raw = await this.app.vault.read(file);
+      const hash = crypto.createHash("sha256").update(raw).digest("hex").slice(0, 16);
+      if (hash !== job.payloadHash) edited.push(job.payloadPath);
+    }
+    if (!edited.length) return this.notice(t("还没有被改过的载荷"));
+    const text = ["# 被改过的派发载荷", "", ...edited.map((p) => `- [[${p.replace(/\.md$/, "")}]]`)].join("\n");
+    const target = "Agent Deck/派发-已改动.md";
+    await this.writeVaultFile(target, text);
+    await this.app.workspace.openLinkText(target, "", false);
+    this.notice(t("有 {n} 个载荷被改过：{path}", { n: edited.length, path: target }), 8000);
+  }
+
+  // 只生成草稿：不发送。草稿以双链挂回任务块，用户改完再走委派按钮，届时优先用这份草稿。
+  async makeDispatchDraft() {
+    const file = this.app.workspace.getActiveFile();
+    const active = this.app.workspace.getActiveViewOfType(MarkdownView);
+    const view = file ? (active && active.file?.path === file.path ? ((!active.getMode || active.getMode() === "source") ? active : null) : this.sourceViewForPath(file.path)) : null;
+    if (!file || !view?.editor) return this.notice(t("请先打开笔记，把光标放在要派发的那一条上"));
+    try {
+      const lines = view.editor.getValue().split("\n");
+      const block = blockAt(lines, view.editor.getCursor().line);
+      if (!block) return this.notice(t("光标要放在一个列表项里"));
+      const opts = mentionOptions(this, { file, lines, block, line: block.start, destination: "background" });
+      const resolved = await this.delegator.resolveBlockContext(opts, t("光标要放在一个列表项里"));
+      await this.delegator.enrichPrompt(resolved);
+      const payload = await this.delegator.writeTaskPayload(resolved, opts.agent, {
+        draft: true,
+        model: opts.model || this.defaultModel(opts.agent),
+        effort: opts.effort || this.settings.delegate?.[opts.agent]?.effort || "",
+      });
+      if (!payload) return this.notice(t("草稿没写出来，看控制台"));
+      this.notice(t("草稿已生成：{path}。改完它，再用委派按钮发送", { path: payload.path }), 9000);
+    } catch (e) { this.notice(String(e.message || e), 8000); }
+  }
+
+  // 把外部 Skill 目录映射成库内笔记：不搬文件、不做软链，只在 frontmatter 记真实路径。
+  async refreshSkillCards() {
+    try {
+      const skills = scanSkills();
+      if (!skills.length) return this.notice(t("没扫到任何 Skill 目录"));
+      const vault = this.app.vault;
+      if (!vault.getAbstractFileByPath(SKILL_DIR)) await vault.createFolder(SKILL_DIR);
+      let created = 0, updated = 0, edited = 0;
+      const at = new Date().toISOString().slice(0, 10);
+      for (const skill of skills) {
+        const target = `${SKILL_DIR}/${skill.name}.md`;
+        const file = vault.getAbstractFileByPath(target);
+        if (!file) { await vault.create(target, nextCardContent(skill, "", at).content); created++; continue; }
+        const next = nextCardContent(skill, await vault.read(file), at);
+        if (next.edited) { edited++; await vault.modify(file, next.content); continue; }
+        await vault.modify(file, next.content); updated++;
+      }
+      const indexTarget = `${SKILL_DIR}/索引.md`;
+      const indexText = skillIndexMarkdown(skills);
+      const indexFile = vault.getAbstractFileByPath(indexTarget);
+      if (indexFile) await vault.modify(indexFile, indexText); else await vault.create(indexTarget, indexText);
+      this.notice(t("技能卡：新建 {created}、更新 {updated}、保留手改 {edited}；索引见 {path}", { created, updated, edited, path: indexTarget }), 9000);
+    } catch (e) { this.notice(t("刷新技能卡失败：{error}", { error: e.message }), 9000); }
+  }
+
+  async reviewMemories() {
+    if (!this.dreaming.storeMode) return this.notice(t("请先运行「记忆：把长期记忆迁移到记忆库」"));
+    const entries = await this.dreaming.loadEntries();
+    if (!entries.length) return this.notice(t("记忆库里还没有条目"));
+    // 从光标所在的那条开始审：在记忆文件里就是在那一篇，在日记里就是把光标放在回链行上。
+    const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+    const active = view?.file || this.app.workspace.getActiveFile();
+    const line = view?.editor ? view.editor.getLine(view.editor.getCursor().line) : "";
+    const sorted = entries.sort((a, b) => (a.state === "有效" ? 0 : 1) - (b.state === "有效" ? 0 : 1));
+    const queue = orderForReview(sorted, { path: active?.path || "", line: line || "", dir: this.dreaming.dir });
+    new MemoryReviewModal(
+      this.app,
+      queue,
+      async (entry, state) => { await this.dreaming.setEntryState(entry.path, state); entry.state = state; },
+      async () => { try { await this.dreaming.syncOverview(); } catch (e) { console.error("[agent-deck] 重建记忆概览失败", e); } },
+    ).open();
+  }
+
+  async markMemory(state) {
+    if (!this.dreaming.storeMode) return this.notice(t("请先运行「记忆：把长期记忆迁移到记忆库」"));
+    const file = this.app.workspace.getActiveFile();
+    if (!file || !file.path.startsWith(`${this.dreaming.dir}/`)) return this.notice(t("请先打开一条记忆文件"));
+    const ok = await this.dreaming.setEntryState(file.path, state);
+    if (!ok) return this.notice(t("这条记忆没有可写的状态字段"));
+    try { await this.dreaming.syncOverview(); } catch (e) { console.error("[agent-deck] 重建记忆概览失败", e); }
+    this.notice(state === "有效" ? t("已确认这条记忆") : t("已拒绝这条记忆"));
+  }
+
   onunload() {
     this._unloaded = true;
+    this._offMemoryContext?.();
     this.conversationModal?.close();
     this._cursorPromptNotice?.hide();
     this._cursorPromptNotice = null;
@@ -950,7 +1484,9 @@ export default class AgentDeckPlugin extends Plugin {
       const cur = bySid.get(sid);
       if (job.state === "bound") { if (cur) bySid.set(sid, { ...cur, job }); continue; }
       const row = {
-        ...(cur || {}), sid, agent: job.agent, title: job.name || (cur && cur.title) || "",
+        ...(cur || {}), sid, agent: job.agent,
+        title: cur?.clientTitle ? (cur.title || job.name || "") : (job.name || (cur && cur.title) || ""),
+        clientTitle: Boolean(cur?.clientTitle),
         text: (cur && cur.text) || job.blockText || "", cwd: job.cwd || (cur && cur.cwd) || this.vaultPath,
         app: (cur && cur.app) || "", state: job.state === "starting" || job.state === "running" ? "run" : job.state,
         step: job.step || (cur && cur.step) || "", lastAt: job.endedAt || job.startedAt || (cur && cur.lastAt) || 0,
@@ -994,11 +1530,43 @@ export default class AgentDeckPlugin extends Plugin {
   }
 
   requestAcpPermission(info, runner) {
-    return new Promise((resolve) => {
-      const modal = new AcpPermissionModal(this.app, info, resolve);
-      runner.permissionModal = modal;
-      modal.open();
-    });
+    const options = info?.options || [];
+    const runNow = () => {
+      if (runner?.finished) return Promise.resolve(undefined);
+      const autoApprove = !info?.escalated && this.settings.delegate?.[info.agent]?.autoApprove === true;
+      const policyAllowed = autoApprove && (typeof this.canAutoApproveToolCall !== "function" || this.canAutoApproveToolCall(info?.toolCall, runner));
+      if (policyAllowed) {
+        return Promise.resolve(pickPermissionOption(options, true)?.optionId);
+      }
+      return new Promise((resolve) => {
+        const modal = new AcpPermissionModal(this.app, {
+          ...info,
+          onAutoApprove: async () => {
+            const cfg = (this.settings.delegate ||= {})[info.agent] ||= {};
+            cfg.autoApprove = true;
+            await this.saveSettings();
+            this.notice(t("已开启 {agent} 自动允许工具调用（可在设置或委派弹窗中关闭）", { agent: AGENTS[info.agent]?.name || info.agent }), 5000);
+          },
+        }, (choice) => {
+          runner?.permissionModals?.delete(modal);
+          if (runner && runner.permissionModal === modal) runner.permissionModal = null;
+          resolve(choice);
+        });
+        if (runner) {
+          runner.permissionModals ||= new Set();
+          runner.permissionModals.add(modal);
+          runner.permissionModal = modal;
+        }
+        modal.open();
+      });
+    };
+    if (!runner) return runNow();
+    const promise = runner._permChain
+      ? Promise.resolve(runner._permChain).catch(() => {}).then(runNow)
+      : runNow();
+    const tail = promise.catch(() => {}).finally(() => { if (runner._permChain === tail) runner._permChain = null; });
+    runner._permChain = tail;
+    return promise;
   }
 
   openSession(agent, sid, app, session) {
@@ -1087,13 +1655,34 @@ export default class AgentDeckPlugin extends Plugin {
   }
 
   // ---------- note line map ----------
+  // doc 缓存仅保留静态文档结构（lines / links / linkByLine / blockIds），
+  // session / job / externalState 每次即时拼装，避免文档未改时读到过期状态。
   lineMap(path, doc) {
-    const cached = this._lineMaps[path];
-    if (cached && cached.doc === doc) return cached.map;
-    const lines = doc.toString().split("\n");
-    const owners = J.ownersOf(lines), fenced = J.fencedLines(lines);
+    let cached = this._lineMaps[path];
+    if (!cached || cached.doc !== doc) {
+      const lines = doc.toString().split("\n");
+      const owners = J.ownersOf(lines), fenced = J.fencedLines(lines);
+      const links = [];
+      const linkByLine = new Map();
+      const blockIds = new Map();
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        if (fenced.has(i)) continue;
+        const bid = J.blockIdOf(line);
+        if (bid && !blockIds.has(bid)) blockIds.set(bid, i);
+        if (!/^\s*(?:[-*+]|\d+[.)])\s+🔗/.test(line)) continue;
+        const parent = owners[i];
+        if (parent < 0) continue;
+        const parsed = parseLinkLine(line);
+        if (!parsed.sid) continue;
+        const entry = { ...parsed, parent };
+        linkByLine.set(i, entry);
+        links.push(entry);
+      }
+      cached = { doc, lines, links, linkByLine, blockIds };
+      this._lineMaps[path] = cached;
+    }
     const sessionByParent = new Map();
-    const linkByLine = new Map();
     let liveBySid;
     const liveFor = (sid) => {
       liveBySid ||= new Map(this.usage.liveSessions({ since: Date.now() - 86400000, limit: 200 }).map(x => [x.sid, x]));
@@ -1101,42 +1690,25 @@ export default class AgentDeckPlugin extends Plugin {
     };
     const jobsBySid = new Map();
     for (const job of Object.values(this.jobs)) if (!jobsBySid.has(job.sessionId)) jobsBySid.set(job.sessionId, job);
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      if (fenced.has(i) || !/^\s*(?:[-*+]|\d+[.)])\s+🔗/.test(line)) continue;
-      const parent = owners[i];
-      if (parent < 0) continue;
-      const parsed = parseLinkLine(line);
-      if (!parsed.sid) continue;
+    for (const parsed of cached.links) {
       const meta = this.usage.meta.get(parsed.sid) || { sid: parsed.sid, agent: parsed.agent, state: "idle", title: "", tokens: 0, lastAt: 0 };
       const live = liveFor(parsed.sid);
       const job = jobsBySid.get(parsed.sid);
       const rawSession = { ...meta, ...(live || {}), tokens: live?.tokens ?? meta.tokens ?? ((meta.out || 0) + (meta.fresh || 0)), agent: parsed.agent || meta.agent, job };
-      const session = this.applyExternalState ? this.applyExternalState(rawSession) : rawSession;
-      linkByLine.set(i, { ...parsed, parent });
-      sessionByParent.set(parent, session);
+      sessionByParent.set(parsed.parent, this.applyExternalState ? this.applyExternalState(rawSession) : rawSession);
     }
     const daySt = (this.settings.autoLogState && this.settings.autoLogState[dayKeyToday(this.settings)]) || {};
-    const byBlockId = new Map();
     for (const [sid, rec] of Object.entries(daySt)) {
-      if (rec && rec.blockId && !rec.skip && !rec.gone) byBlockId.set(rec.blockId, sid);
+      if (!rec || !rec.blockId || rec.skip || rec.gone) continue;
+      const i = cached.blockIds.get(rec.blockId);
+      if (i === undefined || sessionByParent.has(i)) continue;
+      const meta = this.usage.meta.get(sid);
+      if (!meta) continue;
+      const live = liveFor(sid);
+      const rawSession = { ...meta, ...(live || {}), tokens: live?.tokens ?? meta.tokens ?? ((meta.out || 0) + (meta.fresh || 0)), sid, agent: meta.agent || "claude" };
+      sessionByParent.set(i, this.applyExternalState ? this.applyExternalState(rawSession) : rawSession);
     }
-    if (byBlockId.size) {
-      for (let i = 0; i < lines.length; i++) {
-        if (sessionByParent.has(i)) continue;
-        const bid = J.blockIdOf(lines[i]);
-        const sid = bid && byBlockId.get(bid);
-        if (!sid) continue;
-        const meta = this.usage.meta.get(sid);
-        if (!meta) continue;
-        const live = liveFor(sid);
-        const rawSession = { ...meta, ...(live || {}), tokens: live?.tokens ?? meta.tokens ?? ((meta.out || 0) + (meta.fresh || 0)), sid, agent: meta.agent || "claude" };
-        sessionByParent.set(i, this.applyExternalState ? this.applyExternalState(rawSession) : rawSession);
-      }
-    }
-    const map = { doc, lines, sessionByParent, linkByLine };
-    this._lineMaps[path] = { doc, map };
-    return map;
+    return { doc, lines: cached.lines, sessionByParent, linkByLine: cached.linkByLine };
   }
 
   jobAtLine(path, line, text) {
@@ -1174,6 +1746,70 @@ export default class AgentDeckPlugin extends Plugin {
       if (!found && v instanceof MarkdownView && v.file && v.file.path === path && v.editor) found = v;
     });
     return found;
+  }
+
+  // Hidden editors in Obsidian Reading ("preview") view go stale after background
+  // vault writes; only use an open editor directly when it is in editing mode.
+  sourceViewForPath(path) {
+    const view = this.viewForPath(path);
+    return view && (!view.getMode || view.getMode() === "source") ? view : null;
+  }
+
+  async toggleRecordPin(path, lineIndex, { editor = null } = {}) {
+    if (!path || !Number.isInteger(lineIndex) || lineIndex < 0) return false;
+    let nowPinned = false;
+    if (editor?.cm?.state?.doc && lineIndex < editor.cm.state.doc.lines) {
+      const lineObj = editor.cm.state.doc.line(lineIndex + 1);
+      const next = J.togglePinMarker(lineObj.text);
+      nowPinned = J.hasPinMarker(next);
+      if (next !== lineObj.text) {
+        editor.cm.dispatch({ changes: { from: lineObj.from, to: lineObj.to, insert: next } });
+      }
+      this.notice(nowPinned ? t("已 Pin 关键记录") : t("已取消 Pin"), 3000);
+      return nowPinned;
+    }
+    await updateNote(this, path, (text) => {
+      const lines = text.split("\n");
+      if (lineIndex >= lines.length) return text;
+      const next = J.togglePinMarker(lines[lineIndex]);
+      nowPinned = J.hasPinMarker(next);
+      lines[lineIndex] = next;
+      return lines.join("\n");
+    });
+    this.notice(nowPinned ? t("已 Pin 关键记录") : t("已取消 Pin"), 3000);
+    return nowPinned;
+  }
+
+  parentTimelineLine(lines, line) {
+    return findParentTimelineLine(lines, line);
+  }
+
+  recordSessionAt(lines, parentLine) {
+    const bid = J.blockIdOf(lines[parentLine] || "");
+    if (!bid) return null;
+    const sids = blockSessionMap(this).get(bid);
+    if (!sids || !sids.size) return null;
+    return [...sids]
+      .map((sid) => this.usage.meta.get(sid))
+      .filter(Boolean)
+      .sort((a, b) => (b.lastAt || 0) - (a.lastAt || 0))[0] || null;
+  }
+
+  async copyRecordLine(line, mode = "all") {
+    const out = recordCopyText(line, mode);
+    let copied = false;
+    try { require("electron").clipboard.writeText(out); copied = true; } catch { /* not electron */ }
+    if (!copied) try { await navigator.clipboard.writeText(out); copied = true; } catch { /* clipboard */ }
+    this.notice(copied ? t("已复制这一轮记录") : t("复制失败，请手动选择文本"), 3000);
+  }
+
+  deleteRecordBlock(editor, line) {
+    const lines = editor.getValue().split("\n");
+    const range = recordDeleteRange(lines, line);
+    if (!range) return false;
+    editor.replaceRange("", range.from, range.to);
+    this.notice(t("已删除这一轮记录"), 3000);
+    return true;
   }
 
   taskBlockId(seed, agent, title) {
@@ -1335,7 +1971,7 @@ export default class AgentDeckPlugin extends Plugin {
     const file = this.app.vault.getAbstractFileByPath(item.path);
     if (!file) return { error: t("找不到这篇笔记") };
     const view = this.viewForPath(item.path);
-    const lines = view ? view.editor.getValue().split("\n") : (await this.app.vault.read(file)).split("\n");
+    const lines = (view && (!view.getMode || view.getMode() === "source") ? view.editor.getValue() : await this.app.vault.read(file)).split("\n");
     let line = lines[item.line] === item.lineText ? item.line : lines.indexOf(item.lineText);
     if (line < 0) return { error: t("这一行刚改过，重新来一次") };
     // 自动记录也可以作为任务；只有这一块自己的绑定才阻止重复发送。
@@ -1344,7 +1980,7 @@ export default class AgentDeckPlugin extends Plugin {
     return { file, lines, line, block };
   }
 
-  async delegateDrop(agent, item, fromEl, { cli = false, destination, newSession = false, confirmed = false, expectedText, boardContext = "" } = {}) {
+  async delegateDrop(agent, item, fromEl, { cli = false, destination, permission, cwd = "", projectName = "", fromDialog = false, newSession = false, confirmed = false, expectedText, boardContext = "" } = {}) {
     this._dragItem = null;
     if (AGENTS[agent]?.trackingOnly) return;
     const target = await this.delegateTarget(item, { newSession });
@@ -1355,23 +1991,54 @@ export default class AgentDeckPlugin extends Plugin {
       agent = opts.agent;
       destination ||= cli && hasAgentCapability(agent, "terminalHandoff") ? "terminal" : defaultDestination(this, agent);
       if (!confirmed) {
+        const mode = permission || defaultWorkMode(agent, this.settings);
+        const draftLink = findDraftLink(target.lines, target.block);
+        const draft = draftLink && this.delegator?.readDraft ? await this.delegator.readDraft(draftLink, null, { consume: false }) : null;
+        const projectState = resolveTaskProjectState(this, item.path, target.lines, target.block);
         new ConfirmSendModal(this.app, {
           agent, text: stripInternalIdentifiers(newSession ? freshTaskText(target.block.text) : target.block.text), path: item.path,
           context: ancestorLines(target.lines, target.block.start).map((l) => stripInternalIdentifiers(l)),
           where: `${opts.model || this.defaultModel(agent) || t("客户端模型")} · ${opts.effort || this.settings.delegate[agent]?.effort || t("客户端强度")}`,
-          destination, newSession,
-        }, chosen => this.delegateDrop(agent, item, null, { destination: chosen, newSession, confirmed: true, expectedText: delegationText(target.lines, target.block, { newSession }), boardContext })).open();
+          destination, permission: mode, newSession, draft, plugin: this, projectState,
+        }, (chosen, chosenMode, chosenProject) => this.delegateDrop(agent, item, null, {
+          destination: chosen,
+          permission: chosenMode,
+          cwd: chosenProject?.cwd || "",
+          projectName: chosenProject?.projectName || "",
+          fromDialog: !!chosenProject,
+          newSession,
+          confirmed: true,
+          expectedText: delegationText(target.lines, target.block, { newSession }),
+          boardContext,
+        })).open();
         return;
       }
-      await this.delegator.delegate({ ...opts, destination, newSession, ...(boardContext ? { boardContext } : {}) });
+      await this.delegator.delegate({
+        ...opts,
+        destination,
+        permission: permission || opts.permission || "",
+        ...(cwd ? { cwd } : {}),
+        ...(projectName ? { projectName } : {}),
+        ...(fromDialog ? { fromDialog: true } : {}),
+        newSession,
+        ...(boardContext ? { boardContext } : {}),
+      });
     } catch (e) { this.notice(String(e.message || e), 8000); }
     this.refreshUI();
   }
 
   async gripSend(item) {
-    const view = this.viewForPath(item.path);
-    if (view && this.sessionsAtTask(item.path, item.line, view.editor.getValue().split("\n")).length) return this.taskActions(item.path, item.line);
+    const file = item?.path ? this.app.vault.getAbstractFileByPath(item.path) : null;
+    if (file) {
+      const lines = (await this.readNote(item.path)).split("\n");
+      const line = lines[item.line] === item.lineText ? item.line : (item.lineText ? lines.indexOf(item.lineText) : item.line);
+      if (line >= 0 && this.sessionsAtTask(item.path, line, lines).length) return this.taskActions(item.path, line);
+    }
     return this.delegateDrop(this.defaultTarget(), item);
+  }
+
+  canContinueSession(session, opts) {
+    return canContinueSession(session, this.jobs, opts);
   }
 
   sessionsAtTask(path, line, lines) {
@@ -1386,7 +2053,8 @@ export default class AgentDeckPlugin extends Plugin {
       let owner = n - 1;
       while (owner > block.start && (!lines[owner].trim() || width(lines[owner]) >= width(lines[n]))) owner--;
       if (owner !== block.start) continue;
-      found.set(`${link.agent}:${link.sid}`, { ...this.usage.meta.get(link.sid), ...link });
+      const transport = link.agent === "antigravity" && /obsidian:\/\/agent-deck\?do=open&agent=antigravity&sid=/.test(lines[n]) ? "acp" : "";
+      found.set(`${link.agent}:${link.sid}`, { ...this.usage.meta.get(link.sid), ...link, ...(transport ? { transport } : {}) });
     }
     for (const job of Object.values(this.jobs)) {
       if (job.path !== path || !((bid && job.blockId === bid) || job.lineText === lines[block.start])) continue;
@@ -1398,23 +2066,294 @@ export default class AgentDeckPlugin extends Plugin {
   openClientSession(session) {
     const owned = Object.values(this.jobs).find(j => j.agent === session.agent && j.sessionId === session.sid);
     session = { ...owned, ...session, transport: owned?.transport || session.transport };
-    if (!canOpenClient(session)) return this.notice(t("此 Antigravity 会话可查看和归档正文，暂不支持转到桌面 IDE"));
+    if (!canOpenClient(session)) return this.notice(t("此 {agent} 会话可查看和归档正文，暂不支持转到桌面端", { agent: AGENTS[session.agent]?.name || session.agent }));
     if (!session.sid) return this.notice(t("正在建立会话，请稍后再打开"));
     const job = Object.values(this.jobs).find(j => j.agent === session.agent && j.sessionId === session.sid);
     if (hasAgentCapability(session.agent, "waitDesktopUntilDone") && activeJob(job)) return this.notice(t("首轮仍在执行，结束后再打开桌面中的同一会话"));
     return openSessionRaw(this, session.agent, session.sid, session.app, session);
   }
 
-  taskActions(path, line, event) {
-    const view = this.viewForPath(path);
-    if (!view) return;
-    const lines = view.editor.getValue().split("\n"), block = blockAt(lines, line);
+  // ----- 回复协议：❓ → ✍️ 答 → 下一轮 -----
+  // 光标那一块里的问答。没有 ❓ 就返回 null，不改笔记。
+  threadAt(lines, line) {
+    const block = blockAt(lines, line);
+    if (!block) return null;
+    const parsed = parseThread(lines, block);
+    return { block, parsed, question: pendingQuestion(parsed) || parsed.questions.at(-1) || null };
+  }
+
+  // 手写优先：直接补一行空的 `✍️ 答：`，把光标放进去，不弹任何东西。
+  insertReplySlot(editor) {
+    const lines = editor.getValue().split("\n");
+    const info = this.threadAt(lines, editor.getCursor().line);
+    if (!info?.question) return this.notice(t("这一块里还没有 ❓ 提问"));
+    const slot = answerSlot(lines, info.question.line);
+    if (!slot) return this.notice(t("没找到提问那一行"));
+    if (slot.exists) {
+      editor.setCursor({ line: slot.line, ch: (editor.getLine(slot.line) || "").length });
+      return;
+    }
+    editor.replaceRange(`${slot.indent}- ✍️ 答：\n`, { line: slot.line, ch: 0 });
+    editor.setCursor({ line: slot.line, ch: (slot.indent + "- ✍️ 答：").length });
+    this.notice(t("写完后可以「回答并继续」，或直接让 Agent 续跑"), 6000);
+  }
+
+  async replyToQuestion(path, editor, { line } = {}) {
+    let lines;
+    let atLine = Number.isInteger(line) ? line : -1;
+    if (atLine < 0) {
+      const sourceView = this.sourceViewForPath(path);
+      const ed = sourceView?.editor || editor;
+      if (!ed) return this.notice(t("请先打开这篇笔记"));
+      lines = ed.getValue().split("\n");
+      atLine = ed.getCursor().line;
+    } else {
+      lines = (await this.readNote(path)).split("\n");
+    }
+    const info = this.threadAt(lines, atLine);
+    if (!info) return this.notice(t("把光标放在要回复的那一条任务里"));
+    const { block, question } = info;
+    if (!question) return this.notice(t("这一块里还没有 ❓ 提问"));
+    new ReplyModal(this.app, {
+      question: question.text,
+      options: suggestOptions(question.text),
+      value: question.answer || "",
+      hint: t("只写进笔记里那行「✍️ 答：」，不新开会话"),
+      onSubmit: (answer, { continue: keepGoing } = {}) => this.applyReply(path, block.start, { questionText: question.text, answer, continueSession: keepGoing }),
+      canContinue: this.sessionsAtTask(path, block.start, lines).some((s) => this.canContinueSession(s)),
+    }).open();
+  }
+
+  // 老数据兼容：把已经写好的 ❓ / ✍️ 补上块号（幂等，可对有历史问答的笔记跑一遍）。
+  async anchorThread(path, editor) {
+    const lines = editor.getValue().split("\n");
+    const block = blockAt(lines, editor.getCursor().line);
+    if (!block) return this.notice(t("把光标放在要补块号的那一条任务里"));
+    const blockId = J.blockIdOf(lines[block.start]);
+    let changed = false;
+    await updateNote(this, path, (text) => {
+      const next = anchorThreadText(text, { blockId, atLine: block.start, seedPrefix: path });
+      changed = next !== text;
+      return next;
+    });
+    this.notice(changed ? t("已给这一块里的问答补上块号") : t("这一块的问答都有块号了"), 6000);
+  }
+
+  // 回复信箱：侧栏里的非模态列表。
+  // 第一次出现时把侧栏亮出来（否则用户看不见），但**键盘焦点还给原来那个元素**；
+  // 已经在侧栏里就不再 reveal，免得反复把你的侧栏标签抢回去。
+  async openReplyInbox({ focus = false } = {}) {
+    const existing = this.app.workspace.getLeavesOfType(REPLY_INBOX_TYPE)[0];
+    const leaf = existing || this.app.workspace.getRightLeaf(false);
+    if (!leaf) return;
+    const previous = document.activeElement;
+    if (!existing) await leaf.setViewState({ type: REPLY_INBOX_TYPE, active: false });
+    if (!existing || focus) this.app.workspace.revealLeaf(leaf);
+    if (!focus && previous && previous !== document.activeElement) {
+      try { previous.focus?.(); } catch { /* 焦点元素没了就算了，别强抢 */ }
+    }
+    const view = leaf.view;
+    if (view instanceof ReplyInboxView) {
+      this.replyInboxView = view;
+      await view.render({ force: true });
+    }
+    return view;
+  }
+
+  refreshReplyInbox() {
+    const view = this.app.workspace.getLeavesOfType(REPLY_INBOX_TYPE)[0]?.view;
+    if (view instanceof ReplyInboxView) { this.replyInboxView = view; view.render?.(); }
+  }
+
+  // 信箱里点「原文」：定位到那一行（这时抢焦点是用户自己点的，没问题）。
+  async openReplySource(item) {
+    const file = this.app.vault.getAbstractFileByPath(item.path);
+    if (!file) return this.notice(t("这篇笔记不在了"));
+    await this.app.workspace.openLinkText(item.path, "", false);
+    const lines = (await this.readNote(item.path)).split("\n");
+    const at = item.blockId ? lines.findIndex((l) => J.blockIdOf(l) === item.blockId) : -1;
+    if (at < 0) return;
+    const sourceView = this.sourceViewForPath(item.path);
+    if (sourceView?.editor) {
+      sourceView.editor.setCursor({ line: at, ch: (sourceView.editor.getLine(at) || "").length });
+      sourceView.editor.scrollIntoView({ from: { line: at, ch: 0 }, to: { line: at, ch: 0 } }, true);
+    } else {
+      this.viewForPath(item.path)?.setEphemeralState?.({ line: at, focus: true });
+    }
+  }
+
+  // 信箱里提交回答：和笔记里写 ✍️ 答 走同一条路。
+  async submitInboxReply(item, answer, { continueSession = false } = {}) {
+    const lines = (await this.readNote(item.path).catch(() => "")).split("\n");
+    const at = item.blockId ? lines.findIndex((l) => J.blockIdOf(l) === item.blockId) : -1;
+    if (at < 0) {
+      this.settings.replyInbox = inboxRemove(this.settings.replyInbox || [], item);
+      await this.saveSettings();
+      this.refreshReplyInbox();
+      return this.notice(t("找不到这一条任务了（可能已经答过或删了）"));
+    }
+    await this.applyReply(item.path, at, { questionText: item.question, answer, continueSession });
+    this.settings.replyInbox = inboxRemove(this.settings.replyInbox || [], item);
+    await this.saveSettings();
+    this.refreshReplyInbox();
+  }
+
+  // 复制 `[[笔记#^ad-q-…]]`：别的笔记、会话、Linear 里都能直接指到这一问。
+  async copyQuestionRef(path, thread) {
+    const lines = (await this.readNote(path)).split("\n");
+    const blockId = J.blockIdOf(lines[thread.block.start] || "");
+    const seed = `${path}|${blockId}|${thread.question.text}`;
+    const id = thread.question.id || makeQuestionId(seed);
+    if (!thread.question.id) await updateNote(this, path, (text) => ensureQuestionId(text, { blockId, questionText: thread.question.text, seed }));
+    const link = `[[${path.replace(/\.md$/, "")}#^${id}]]`;
+    try { await navigator.clipboard.writeText(link); } catch { /* 剪贴板不可用就把链接显示出来 */ }
+    this.notice(t("已复制块引用：{link}", { link }), 6000);
+  }
+
+  // 写回答（幂等）+ 可选续聊同一会话。抽成方法，方便真机验证直接调用。
+  async applyReply(path, atLine, { questionText = "", answer = "", continueSession = false } = {}) {
+    if (!String(answer || "").trim()) return false;
+    const before = await this.readNote(path);
+    const lines = before.split("\n");
+    const block = blockAt(lines, atLine);
+    const blockId = block ? J.blockIdOf(lines[block.start]) : "";
+    const seed = `${path}|${blockId}|${questionText}`;
+    const questionId = makeQuestionId(seed);
+    // 先给 ❓ 补上 `^ad-q-…`，回答行拿到稳定的 `^ad-a-…`：双链能指过来，定位也不靠正文。
+    await updateNote(this, path, (text) => ensureQuestionId(text, { blockId, questionText, seed }));
+    let changed = false;
+    await updateNote(this, path, (text) => {
+      const next = fillAnswer(text, { questionText, answer, blockId, questionId });
+      changed = next !== text;
+      return next;
+    });
+    if (Array.isArray(this.settings?.replyInbox) && this.settings.replyInbox.length) {
+      const beforeInbox = this.settings.replyInbox.length;
+      this.settings.replyInbox = inboxRemove(this.settings.replyInbox, {
+        path,
+        blockId,
+        questionId,
+        question: questionText,
+      }).filter((x) => !(x.path === path && blockId && x.blockId === blockId && questionText && x.question === questionText));
+      if (this.settings.replyInbox.length !== beforeInbox) {
+        await this.saveSettings();
+        this.refreshReplyInbox();
+      }
+    }
+    this.notice(changed ? t("已写回回答：{answer}", { answer: truncate(answer, 40) }) : t("回答已经是这样了，没有改动"), changed ? 6000 : 5000);
+    if (continueSession) await this.continueAfterReply(path, atLine, answer);
+    return changed;
+  }
+
+  // 续聊：回答当成下一轮的追问发给原来那个会话，不新开。
+  async continueAfterReply(path, atLine, answer) {
+    const lines = (await this.readNote(path)).split("\n");
+    const block = blockAt(lines, atLine);
+    const sessions = this.sessionsAtTask(path, atLine, lines);
+    const session = [...sessions].reverse().find((s) => this.canContinueSession(s)) || sessions.at(-1);
+    if (!session) return this.notice(t("这一块还没绑定会话；回答已写进笔记"), 6000);
+    const blockId = block ? J.blockIdOf(lines[block.start]) : "";
+    try {
+      const prompt = `${t("我对上一问的回答：{answer}", { answer })}\n${t("请按这个继续，不用再问同一件事。")}`;
+      await this.delegator.continueSession({
+        ...session,
+        path,
+        ...(blockId ? { blockId } : {}),
+        ...(session.destination ? {} : { destination: "background" }),
+      }, prompt);
+    } catch (e) {
+      this.notice(t("续聊没发出去：{error}（回答已写进笔记，可以重试）", { error: String(e.message || e) }), 8000);
+    }
+  }
+
+  // 原地手写完 `✍️ 答` 之后直接发给会话继续，不用重开 ReplyModal。
+  async submitWrittenReply(path, editor, { line } = {}) {
+    let lines;
+    let atLine = Number.isInteger(line) ? line : -1;
+    if (atLine < 0) {
+      const sourceView = this.sourceViewForPath(path);
+      const ed = sourceView?.editor || editor;
+      if (!ed) return this.notice(t("请先打开这篇笔记"));
+      lines = ed.getValue().split("\n");
+      atLine = ed.getCursor().line;
+    } else {
+      lines = (await this.readNote(path)).split("\n");
+    }
+    const block = blockAt(lines, atLine);
+    if (!block) return this.notice(t("把光标放在要续聊的那一条任务里"));
+    const written = latestWrittenAnswer(lines, block);
+    if (!written) return this.notice(t("这一块里还没有写好的「✍️ 答」"));
+    const sessions = this.sessionsAtTask(path, block.start, lines);
+    if (!sessions.length) return this.notice(t("这一块还没绑定会话"));
+    if (!sessions.some((s) => this.canContinueSession(s))) {
+      return this.notice(t("当前绑定的会话不支持在 Obsidian 内续聊，请在原客户端继续"));
+    }
+    const blockId = J.blockIdOf(lines[block.start]);
+    if (written.question?.id || blockId) {
+      const before = (this.settings.replyInbox || []).length;
+      const qid = written.question?.id || "";
+      const qtext = written.question?.text || "";
+      this.settings.replyInbox = inboxRemove(this.settings.replyInbox || [], {
+        path,
+        blockId,
+        questionId: qid,
+        question: qtext,
+      }).filter((x) => !(x.path === path && blockId && x.blockId === blockId && qtext && x.question === qtext));
+      if (this.settings.replyInbox.length !== before) {
+        await this.saveSettings();
+        this.refreshReplyInbox();
+      }
+    }
+    await this.continueAfterReply(path, block.start, written.answer);
+  }
+
+  openFollowUp(session, { path = "", line = -1, blockId = "", title = "" } = {}) {
+    new FollowUpModal(this.app, {
+      session,
+      title,
+      onSubmit: async (prompt) => {
+        const target = {
+          ...session,
+          ...(path ? { path } : {}),
+          ...(blockId ? { blockId } : {}),
+          ...(session.destination ? {} : { destination: "background" }),
+        };
+        await this.delegator.continueSession(target, prompt);
+        this.notice(t("已发送追问到 {agent}", { agent: AGENTS[session.agent]?.name || session.agent }), 4000);
+      },
+    }).open();
+  }
+
+  async taskActions(path, line, event) {
+    let text;
+    try { text = await this.readNote(path); } catch { return; }
+    const lines = text.split("\n"), block = blockAt(lines, line);
     if (!block) return;
+    const sourceView = this.sourceViewForPath(path);
+    const view = sourceView || this.viewForPath(path);
     const sessions = this.sessionsAtTask(path, line, lines);
     const menu = new Menu();
+    const thread = this.threadAt(lines, line);
+    const blockId = J.blockIdOf(lines[block.start]);
+    if (thread?.question && pendingQuestion(thread.parsed)) {
+      menu.addItem(mi => mi.setTitle(t("✍️ 回复这一问…")).onClick(() => {
+        if (sourceView?.editor) sourceView.editor.setCursor({ line: thread.question.line, ch: 0 });
+        this.replyToQuestion(path, sourceView?.editor, { line: thread.question.line });
+      }));
+      menu.addItem(mi => mi.setTitle(t("复制这一问的块引用（[[笔记#^块号]]）")).onClick(() => this.copyQuestionRef(path, thread)));
+      menu.addSeparator();
+    } else {
+      const written = latestWrittenAnswer(lines, block);
+      if (written && !written.hasResultAfter && sessions.some((s) => this.canContinueSession(s))) {
+        menu.addItem(mi => mi.setTitle(t("把已写好的 ✍️ 答 发给会话继续")).setIcon("send").onClick(() => this.submitWrittenReply(path, sourceView?.editor, { line: block.start })));
+        menu.addSeparator();
+      }
+    }
     for (const [index, session] of sessions.entries()) {
       const title = `${AGENTS[session.agent]?.name || session.agent} · ${t("会话 {n}", { n: index + 1 })}`;
-      if (canOpenClient(session)) menu.addItem(mi => mi.setTitle(t("继续对话 · {title}", { title })).setDisabled(!session.sid).onClick(() => this.openClientSession(session)));
+      if (this.canContinueSession(session, { requireSid: false })) {
+        menu.addItem(mi => mi.setTitle(t("继续对话（追问）· {title}", { title })).setIcon("message-square-plus").setDisabled(!session.sid || activeJob(session)).onClick(() => this.openFollowUp(session, { path, line: block.start, blockId, title: session.title || session.name || "" })));
+      }
       menu.addItem(mi => mi.setTitle(t("查看正文与保存对话 · {title}", { title })).setDisabled(!session.sid).onClick(() => this.openConversation(session)));
       if (canOpenClient(session)) menu.addItem(mi => mi.setTitle(t("在客户端打开 · {title}", { title })).setDisabled(!session.sid || (hasAgentCapability(session.agent, "waitDesktopUntilDone") && activeJob(session))).onClick(() => this.openClientSession(session)));
       if (activeJob(session) && this.delegator.runners.has(session.id)) menu.addItem(mi => mi.setTitle(t("停止执行 · {title}", { title })).onClick(() => this.cancelJob(session.id)));
@@ -1424,9 +2363,15 @@ export default class AgentDeckPlugin extends Plugin {
     for (const agent of AGENT_ORDER.filter(a => this.agentEnabled(a) && !AGENTS[a].trackingOnly)) menu.addItem(mi => mi.setTitle(t("重新委派（新会话）· {agent}", { agent: AGENTS[agent].name })).onClick(() => this.delegateDrop(agent, { path, line: block.start, lineText: lines[block.start] }, null, { newSession: true })));
     menu.addSeparator();
     menu.addItem(mi => mi.setTitle(t("在项目工作台拆解并分配小队")).setIcon("folder-kanban").onClick(() => this.openProjectWorkbench({ path, line: block.start })));
-    menu.addItem(mi => mi.setTitle(t("绑定或合并到其他任务")).onClick(() => { view.editor.setCursor({line:block.start,ch:0}); this.openMergeTaskForEditor(view.editor, view); }));
+    if (sourceView?.editor) {
+      menu.addItem(mi => mi.setTitle(t("绑定或合并到其他任务")).onClick(() => { sourceView.editor.setCursor({ line: block.start, ch: 0 }); this.openMergeTaskForEditor(sourceView.editor, sourceView); }));
+    }
     if (event) menu.showAtMouseEvent(event);
-    else menu.showAtPosition({ x: view.containerEl.getBoundingClientRect().left + 100, y: view.containerEl.getBoundingClientRect().top + 100 });
+    else {
+      const rect = view?.containerEl?.getBoundingClientRect?.();
+      if (rect) menu.showAtPosition({ x: rect.left + 100, y: rect.top + 100 });
+      else menu.showAtPosition({ x: window.innerWidth / 2, y: window.innerHeight / 3 });
+    }
     return menu;
   }
 
@@ -1534,9 +2479,12 @@ export default class AgentDeckPlugin extends Plugin {
   }
 
   // 把手双击：在把手旁边列出开着的 Agent，选哪个就发给哪个，和拖到那张卡片上一样；同时提供「合并到已有条目」
-  gripPick(item, e) {
-    const current = this.viewForPath(item.path);
-    if (current && this.sessionsAtTask(item.path, item.line, current.editor.getValue().split("\n")).length) return this.taskActions(item.path, item.line, e);
+  async gripPick(item, e) {
+    if (item?.path) {
+      const lines = (await this.readNote(item.path).catch(() => "")).split("\n");
+      const line = lines[item.line] === item.lineText ? item.line : (item.lineText ? lines.indexOf(item.lineText) : item.line);
+      if (line >= 0 && this.sessionsAtTask(item.path, line, lines).length) return this.taskActions(item.path, line, e);
+    }
     const main = this.defaultTarget();
     const menu = new Menu();
     for (const id of AGENT_ORDER.filter((x) => this.agentEnabled(x) && !AGENTS[x].trackingOnly)) {
@@ -1547,7 +2495,7 @@ export default class AgentDeckPlugin extends Plugin {
         mi.onClick(() => this.delegateDrop(id, item));
       });
     }
-    const view = item && item.path ? this.viewForPath(item.path) : null;
+    const view = item && item.path ? this.sourceViewForPath(item.path) : null;
     if (view) {
       const candidates = J.taskItems(view.editor.getValue()).filter((c) => c.line !== item.line);
       if (candidates.length) {
@@ -1569,7 +2517,7 @@ export default class AgentDeckPlugin extends Plugin {
   async bindItemToSession(item, data) {
     this._dragItem = null;
     if (!item || !item.path || !data || !data.sid) return;
-    const view = this.viewForPath(item.path);
+    const view = this.sourceViewForPath(item.path);
     if (view) {
       const lines = view.editor.getValue().split("\n");
       const line = lines[item.line] === item.lineText ? item.line : lines.indexOf(item.lineText);
@@ -1594,8 +2542,7 @@ export default class AgentDeckPlugin extends Plugin {
   async delegateAtLine(path, line, extraOpts = {}) {
     const file = this.app.vault.getAbstractFileByPath(path);
     if (!file) return this.notice(t("找不到这篇笔记"));
-    const view = this.app.workspace.getActiveViewOfType(MarkdownView);
-    const lines = view && view.file && view.file.path === path ? view.editor.getValue().split("\n") : (await this.app.vault.read(file)).split("\n");
+    const lines = (await this.readNote(path)).split("\n");
     return this.delegateDrop(this.defaultTarget(), { path, line, lineText: lines[line] }, null, extraOpts);
   }
 
@@ -1638,11 +2585,60 @@ export default class AgentDeckPlugin extends Plugin {
   async organizeJournal(file = this.journalTarget()) {
     if (!file) return this.notice(t("请先打开日记"));
     const base = await this.readNote(file.path);
-    const plan = await this.journalPlan(file, base);
+    let plan;
+    try {
+      plan = await this.journalPlan(file, base);
+    } catch (e) {
+      if (!/分区标记不完整/.test(String(e?.message || e))) throw e;
+      return this.repairJournalMarkers(file, base);
+    }
     const next = renderJournal(plan);
     if (next !== base && !await this.writeJournal(file, base, next)) return this.notice(t("日记刚有变化，请再整理一次"));
     this.refreshUI();
     this.notice(plan.count.total ? t("已整理 {count} 个任务", { count: plan.count.total }) : t("已建立日志分区，区外笔记保持原样"));
+  }
+
+  // 分区标记被删掉时先问一句：能补就补，补不回来就问要不要按任务重建分区。不点头就一个字都不动。
+  async repairJournalMarkers(file, base, { retry } = {}) {
+    const fixed = repairJournalLayout(base);
+    const mode = fixed ? "repair" : "rebuild";
+    const firstTime = !this.settings.journalMarkerIntroShown;
+    const go = await askJournalMarkerRepair(this.app, { mode, firstTime, notes: [file.path] });
+    if (firstTime) { this.settings.journalMarkerIntroShown = true; await this.saveSettings(); }
+    if (!go) return this.notice(t("分区标记没动；补上分区标记和 --- 分割线后再整理"));
+    const next = fixed || stripJournalLayout(base);
+    if (!await this.writeJournal(file, base, next)) return this.notice(t("日记刚有变化，请再整理一次"));
+    return retry ? retry() : this.organizeJournal(file);
+  }
+
+  // 「现在整理一次」遇到分区标记坏了：列出坏掉的日记，问一次，修好再重跑。
+  async logNowWithMarkerGuard() {
+    const r = await this.autoLog.logNow();
+    if (!r?.error || !/分区标记不完整/.test(r.error)) return r;
+    const broken = await this.brokenJournals();
+    if (!broken.length) return r;
+    const firstTime = !this.settings.journalMarkerIntroShown;
+    const go = await askJournalMarkerRepair(this.app, { mode: "rebuild", firstTime, notes: broken.map((x) => x.path) });
+    if (firstTime) { this.settings.journalMarkerIntroShown = true; await this.saveSettings(); }
+    if (!go) { this.notice(t("分区标记没动；补上分区标记和 --- 分割线后再整理")); return r; }
+    for (const { file, base } of broken) {
+      const next = repairJournalLayout(base) || stripJournalLayout(base);
+      await this.writeJournal(file, base, next);
+    }
+    return this.autoLog.logNow();
+  }
+
+  // 最近这些天的日记里，分区标记坏掉的那几篇。
+  async brokenJournals() {
+    const days = new Set([dayKeyToday(this.settings), ...Object.keys(this.settings.autoLogState || {})]);
+    const out = [];
+    for (const day of [...days].sort().slice(-14)) {
+      const file = this.autoLog.journalFile(day);
+      if (!file) continue;
+      const base = await this.readNote(file.path);
+      try { readJournalLayout(base); } catch { out.push({ file, base }); }
+    }
+    return out;
   }
 
   // Move finished AI blocks into an archive note the user picks.
@@ -1775,6 +2771,7 @@ export default class AgentDeckPlugin extends Plugin {
     const groups = extractTaskBoardGroups(text, {
       trackedIds: this.recordTrackedIds ? this.recordTrackedIds() : new Set(),
       trigger: mentionTrigger(this),
+      fileBoard: Boolean(this.settings?.taskBoardFiles?.[view.file.path]),
     });
     const hit = groups.find((g) => g.line === cursorLine)
       || groups.find((g) => cursorLine >= g.line && cursorLine <= g.endLine);
@@ -1840,6 +2837,15 @@ export default class AgentDeckPlugin extends Plugin {
     return openBatchStatusMenu(this, editor);
   }
 
+  async writeVaultFile(targetPath, content) {
+    const { path: pathStr, file } = await this.ensureNoteFile(targetPath, content);
+    if (file && this.app.vault.getAbstractFileByPath(pathStr)) {
+      const cur = await this.app.vault.read(file).catch(() => null);
+      if (cur !== content) await this.app.vault.modify(file, content);
+    }
+    return { path: pathStr, file };
+  }
+
   async ensureNoteFile(targetPath, content = "") {
     const pathStr = String(targetPath || "").trim() || journalPath(this.app, this.settings);
     let file = this.app.vault.getAbstractFileByPath(pathStr);
@@ -1870,7 +2876,7 @@ export default class AgentDeckPlugin extends Plugin {
       const lines = before ? before.split("\n") : [];
       const existingBlock = line >= 0 ? blockAt(lines, line) : null;
       if (existingBlock) {
-        const ensuredParent = J.ensureBlockId(lines[existingBlock.start], J.makeBlockId("", "ad", "wb"));
+        const ensuredParent = J.ensureBlockId(lines[existingBlock.start], J.makeBlockId("", "ad", J.readableSlug(parentTitle || lines[existingBlock.start] || "")));
         lines[existingBlock.start] = ensuredParent.line;
         parentBlockId = ensuredParent.blockId;
         const indent = (/^\s*/.exec(lines[existingBlock.start]) || [""])[0];
@@ -1992,6 +2998,7 @@ export default class AgentDeckPlugin extends Plugin {
           agent: item.agent,
           destination: item.destination,
           cwd: cwd || undefined,
+          projectName: projectName || undefined,
           ...(boardContext ? { boardContext } : {}),
         });
       }),
@@ -2062,12 +3069,13 @@ export default class AgentDeckPlugin extends Plugin {
     const groups = extractTaskBoardGroups(text, {
       trackedIds: this.recordTrackedIds ? this.recordTrackedIds() : new Set(),
       trigger: mentionTrigger(this),
+      fileBoard: Boolean(this.settings?.taskBoardFiles?.[view.file.path]),
     });
     const grp = groups.find((g) => g.line === parentLine);
     if (!grp) return;
     let parentBlockId = J.blockIdOf(lines[parentLine]);
     if (!parentBlockId) {
-      const generated = J.makeBlockId("", "ad", "wb");
+      const generated = J.makeBlockId("", "ad", J.readableSlug(grp?.title || ""));
       await updateNote(this, path, (cur) => {
         const curLines = cur.split("\n");
         if (!curLines[parentLine]) return cur;
@@ -2171,6 +3179,70 @@ export default class AgentDeckPlugin extends Plugin {
     for (const { wave, job } of toFinalize) await this.finalizeStewardWave(wave, job);
   }
 
+  // 管家：开着看护时每 5 分钟看一眼波次，谁长时间没输出就提醒一次并写回子卡。
+  // 只看「卡住」：出错由看板关键字写回、待授权由 attention 弹通知，这里再报一遍就是噪音。
+  startStewardWatch() {
+    this._timers?.clear?.(this._stewardTimer);
+    this._stewardTimer = null;
+    if (this._unloaded || !this.settings.stewardWatch) return;
+    const run = () => safeRun("steward:watch", () => this.stewardWatchTick());
+    this._stewardTimer = typeof this._timers?.setInterval === "function" ? this._timers.setInterval(run, STEWARD_WATCH_MS) : setInterval(run, STEWARD_WATCH_MS);
+  }
+
+  async stewardWatchTick() {
+    if (this._unloaded || !this.settings.stewardWatch) return { notified: 0 };
+    const waves = this.settings.workbenchWaves || {};
+    let dirty = false;
+    const done = [];
+    for (const wave of Object.values(waves)) {
+      if (!wave || !["waiting", "running"].includes(wave.state)) continue;
+      const findings = judgeWave(wave, { jobs: this.jobs, metaMap: this.usage?.meta, now: Date.now() });
+      const fresh = newFindings(wave, findings);
+      const before = JSON.stringify(wave.watchSeen || {});
+      syncSeen(wave, findings);
+      if (JSON.stringify(wave.watchSeen || {}) !== before) dirty = true;
+      for (const finding of fresh) {
+        if (finding.kind !== "stuck") continue; // 出错 / 等授权各自有主
+        await this.writeStewardStuckLine(wave, finding);
+        const title = truncate(finding.title || t("这一项"), 24);
+        this.notice(t("管家：{title} 已经 {minutes} 分钟没有输出，先看一眼再说", { title, minutes: String(finding.minutes) }), 8000);
+        done.push({ waveId: wave.id, jobId: finding.worker?.jobId || "", minutes: finding.minutes });
+      }
+    }
+    if (dirty) await this.saveSettings();
+    return { notified: done.length, findings: done };
+  }
+
+  // 写回子卡下面一行，只陈述事实；同一句在同一块里只写一次。
+  async writeStewardStuckLine(wave, finding) {
+    if (!wave?.path) return false;
+    const title = truncate(finding.title || finding.job?.name || t("这一项"), 40);
+    const text = t("⚠️ 管家：{title} 已经 {minutes} 分钟没有输出（最后动静：{at}）", {
+      title,
+      minutes: String(finding.minutes),
+      at: new Date(finding.lastAt).toLocaleString("zh-CN", { hour12: false }),
+    });
+    const blockId = finding.worker?.blockId || "";
+    const name = finding.job?.name || finding.title || "";
+    let wrote = false;
+    await updateNote(this, wave.path, (raw) => {
+      const lines = raw.split("\n");
+      const byId = blockId ? lines.findIndex((l) => J.blockIdOf(l) === blockId) : -1;
+      const idx = byId >= 0 ? byId : lines.findIndex((l) => {
+        const kw = J.kwLine(l);
+        return kw && name && kw.body.includes(name);
+      });
+      if (idx < 0) return raw;
+      const end = J.subtreeEnd(lines, idx);
+      if (lines.slice(idx, end + 1).some((l) => l.includes("⚠️ 管家：") && l.includes(title))) return raw;
+      const indent = (/^[ \t]*/.exec(lines[idx]) || [""])[0] + "\t";
+      lines.splice(idx + 1, 0, `${indent}- ${text}`);
+      wrote = true;
+      return lines.join("\n");
+    });
+    return wrote;
+  }
+
   async launchStewardForWave(waveId, { force = false } = {}) {
     if (this._unloaded) return;
     const wave = this.settings.workbenchWaves?.[waveId];
@@ -2212,7 +3284,7 @@ export default class AgentDeckPlugin extends Plugin {
       const stewardTitle = wave.round > 1
         ? t("🧭 管家汇总与推进（第 {n} 轮）", { n: wave.round })
         : t("🧭 管家汇总与推进");
-      const stewardBlockId = J.makeBlockId("", stewardAgent, "st");
+      const stewardBlockId = J.makeBlockId("", stewardAgent, J.readableSlug(wave.parentTitle || stewardTitle));
 
       let insertedInfo = null;
       await updateNote(this, wave.path, (text) => {
@@ -2460,7 +3532,7 @@ export default class AgentDeckPlugin extends Plugin {
             for (let m = block.start + 1; m <= block.end; m++) {
               if (!link) link = J.parseLink(lines[m]);
               if (/^\s*[-*+]\s+💬\s/.test(lines[m])) {
-                latestConclusion = lines[m].trim().replace(/^[-*+]\s+💬\s+(?:第\d+轮[：:])?\s*/, "").replace(J.RECORD_PROVENANCE_RE, "").trim();
+                latestConclusion = J.stripPinMarker(lines[m].trim().replace(/^[-*+]\s+💬\s+(?:第\d+轮[：:])?\s*/, "").replace(J.RECORD_PROVENANCE_RE, "")).trim();
               }
             }
           }
@@ -2494,6 +3566,13 @@ export default class AgentDeckPlugin extends Plugin {
     await leaf.openFile(file, { eState: { line: Math.max(0, line) } });
   }
 
+  projectFolderSuggestions(limit = 8) {
+    const vault = String(this.vaultPath || "").replace(/\/+$/, "");
+    return recentProjectFolders(this.usage?.meta, { limit: limit * 2 })
+      .filter((item) => item.path !== vault && !/^\/(private\/)?(tmp|var)(\/|$)/.test(item.path))
+      .slice(0, limit);
+  }
+
   openProjectFolder(dirPath) {
     if (!dirPath) return;
     try {
@@ -2504,74 +3583,164 @@ export default class AgentDeckPlugin extends Plugin {
   }
 
   // ---------- macOS menu bar ----------
+  menuBarSessionTitle(s) {
+    const native = s?.clientTitle ? s.title : (this.usage?.hasClientTitle?.(s?.sid) ? (this.usage.titles.get(s.sid) || s.title) : "");
+    const fallbackModel = this.sessionTitles?.cachedTitle(s?.sid) || this.settings?.menuBarAutoTitles?.[s?.sid]?.title || "";
+    const raw = native || fallbackModel || s?.title || (s?.text || "").split(" / ")[0] || s?.step || s?.sid || "";
+    return (s?.parentSid ? "↳ " : "") + truncate(String(raw).replace(/\s+/g, " ").trim(), 84);
+  }
+
+  setMenuBarSessionPinned(sid, pinned = null) {
+    const id = String(sid || "").trim();
+    if (!id) return false;
+    const list = Array.isArray(this.settings.menuBarPinnedSids) ? [...this.settings.menuBarPinnedSids] : [];
+    const idx = list.indexOf(id);
+    const want = pinned === null ? idx < 0 : Boolean(pinned);
+    if (want && idx >= 0) return false;
+    if (!want && idx < 0) return false;
+    if (want) list.unshift(id);
+    else list.splice(idx, 1);
+    this.settings.menuBarPinnedSids = list.slice(0, 24);
+    this.saveSettings().catch(() => {});
+    return true;
+  }
+
   buildMenuBarState() {
     const cfg = this.settings;
     const now = Date.now();
     const today = this.store.get(dayKeyToday(cfg));
     const live = this.liveSessions({ hours: 6 });
-    const recent = this.recentSessions({ days: 1, limit: 120 });
     const primaries = this.primaryAgents();
-    const out = [];
-    const seen = new Set();
-    const add = (s, primary, isLive) => {
-      if (!s || !s.sid || seen.has(s.sid)) return false;
+    const nowHidden = cfg.nowHidden || {};
+    const nowGroupBy = ["project", "status", "flat"].includes(cfg.ui?.nowGroupBy) ? cfg.ui.nowGroupBy : "project";
+    const pinnedList = Array.isArray(cfg.menuBarPinnedSids) ? cfg.menuBarPinnedSids : [];
+    const pinnedIndex = new Map(pinnedList.map((sid, idx) => [sid, idx]));
+    const agentEnabledFn = (id) => this.agentEnabled(id);
+    const titleCandidates = [];
+    const seenTitle = new Set();
+
+    const toMenuSession = (s, projectOverride = "") => {
       const agent = AGENTS[s.agent] ? s.agent : "claude";
       const a = AGENTS[agent];
-      const state = isLive ? (s.state || "idle") : "recent";
+      const state = s.state || "idle";
       const kw = menuKeyword(state);
-      const where = ["claude", "qoder", "workbuddy"].includes(agent) ? (s.app === "cli" ? t("终端") : t("桌面版")) : agent === "codex" ? (isCodexDesktop(s.app) ? t("桌面版") : "CLI") : ["opencode", "cursor", "grokbot"].includes(agent) ? t("桌面版") : agent === "antigravity" ? (s.job?.transport === "acp" ? t("后台执行") : "IDE") : "Harness";
       const acp = agent === "antigravity" && s.job?.transport === "acp";
-      const url = usesDeckSessionLink(agent) ? `obsidian://agent-deck?do=open&agent=${agent}&sid=${encodeURIComponent(s.sid)}` : sessionDeepLink(agent, s.sid);
-      const prog = this.sessionProgressText(s);
+      const whereByAgent = {
+        claude: s.app === "cli" ? t("终端") : t("桌面版"),
+        qoder: s.app === "cli" ? t("终端") : t("桌面版"),
+        workbuddy: s.app === "cli" ? t("终端") : t("桌面版"),
+        codex: isCodexDesktop(s.app) ? t("桌面版") : "CLI",
+        hermes: s.app === "acp" ? t("后台执行") : "CLI",
+        antigravity: acp ? t("后台执行") : "IDE",
+        dsh: "Harness",
+      };
+      const where = s.isPendingJob ? t("待认领") : (whereByAgent[agent] || t("桌面版"));
+      const openUrl = s.isPendingJob
+        ? (s.job?.path ? `obsidian://open?file=${encodeURIComponent(s.job.path)}` : "obsidian://agent-deck")
+        : (acp || usesDeckSessionLink(agent) || (isCliSession(agent, s.app) && cfg.cliOpen !== "desktop"))
+          ? J.deckSessionUrl(agent, s.sid)
+          : sessionDeepLink(agent, s.sid);
+      const copyByAgent = { codex: `codex resume ${s.sid}`, hermes: `hermes --resume ${s.sid}` };
+      const copy = s.isPendingJob ? "" : ((["dsh", "antigravity", "opencode", "qoder"].includes(agent) || AGENTS[agent].trackingOnly) ? s.sid : (copyByAgent[agent] || ""));
+      const prog = this.sessionProgressText(s, s.job);
       const stepStr = [prog, s.step ? truncate(s.step, 30) : ""].filter(Boolean).join(" · ");
-      seen.add(s.sid);
-      out.push({
+      const pinIdx = pinnedIndex.has(s.sid) ? pinnedIndex.get(s.sid) : -1;
+      const isPinned = pinIdx >= 0;
+      const projLabel = projectOverride || resolveSessionProject(s) || projectName(s.cwd);
+      if (!s.isPendingJob && s.sid && !seenTitle.has(s.sid)) {
+        seenTitle.add(s.sid);
+        titleCandidates.push({
+          sid: s.sid,
+          clientTitle: Boolean(s.clientTitle || this.usage?.hasClientTitle?.(s.sid)),
+          text: s.text || "",
+          lastText: s.lastText || "",
+          rounds: s.rounds || [],
+          project: projectName(s.cwd),
+        });
+      }
+      return {
         id: `${agent}:${s.sid}`,
+        sid: s.sid,
+        pinned: isPinned,
         agent, agentName: a.name, agentShort: a.short, color: a.color, glyph: a.glyph,
-        title: (s.parentSid ? "↳ " : "") + truncate(s.title || (s.text || "").split(" / ")[0] || s.step || s.sid, 64),
-        detail: `${a.short} ${where} · ${projectName(s.cwd)}${stepStr ? " · " + stepStr : ""}${s.sideChats ? " · side chat ×" + s.sideChats : ""} · ${timeAgo(s.lastAt)}`,
-        project: projectName(s.cwd),
+        title: s.isPendingJob ? truncate(String(s.title || a.name).replace(/\s+/g, " ").trim(), 84) : this.menuBarSessionTitle(s),
+        detail: `${a.short} ${where} · ${projLabel}${stepStr ? " · " + stepStr : ""}${s.sideChats ? " · side chat ×" + s.sideChats : ""} · ${timeAgo(s.lastAt)}`,
+        project: projLabel,
         step: stepStr ? truncate(stepStr, 42) : "",
         ago: timeAgo(s.lastAt),
         keyword: kw.id, keywordLabel: t(kw.zh),
-        state, stateLabel: menuStateLabel(state), primary: !!primary,
-        url: acp ? `obsidian://agent-deck?do=open&agent=antigravity&sid=${encodeURIComponent(s.sid)}` : agent === "dsh" ? "dsh://open" : agent === "antigravity" ? "antigravity://" : isCliSession(agent, s.app) && cfg.cliOpen !== "desktop" ? `obsidian://agent-deck?do=open&agent=${agent}&sid=${encodeURIComponent(s.sid)}` : url,
-        copy: (agent === "dsh" || agent === "antigravity" || ["opencode", "qoder"].includes(agent) || AGENTS[agent].trackingOnly) ? s.sid : (agent === "codex" ? `codex resume ${s.sid}` : ""),
-        _at: s.lastAt || 0,
-        _waiting: isLive && isWaitingSession({ ...s, state }, now),
-      });
-      return true;
+        state, stateLabel: menuStateLabel(state), primary: primaries.includes(agent),
+        url: openUrl,
+        copy,
+      };
     };
-    for (const agent of AGENT_ORDER) {
-      if (!this.agentEnabled(agent)) continue;
-      const primary = primaries.includes(agent);
-      const limit = Math.max(1, Number(primary ? cfg.menuBarPrimaryLimit : cfg.menuBarOtherLimit) || (primary ? 8 : 3));
-      let count = 0;
-      if (primary) {
-        const lives = live.filter((x) => x.agent === agent)
-          .sort((a, b) => menuRank(a.state) - menuRank(b.state) || (b.lastAt || 0) - (a.lastAt || 0));
-        for (const s of lives) if (add(s, true, true) && ++count >= limit) break;
-        if (count < limit) {
-          const cutoff = now - 6 * 3600e3;
-          const recs = recent.filter((x) => x.agent === agent && (x.lastAt || 0) >= cutoff).sort((a, b) => (b.lastAt || 0) - (a.lastAt || 0));
-          for (const s of recs) if (add(s, true, false) && ++count >= limit) break;
+
+    const activeLive = orderNowSessions(live.filter((x) => isActiveNowSession(x, now)), cfg);
+    const mergedNow = mergeSessionsWithJobs(activeLive, this.jobs || {}, agentEnabledFn).filter((s) => !nowHidden[s.sid]);
+    const pinnedBackfill = [];
+    if (pinnedList.length) {
+      const present = new Set(mergedNow.map((s) => s.sid));
+      const rec = typeof this.recentSessions === "function" ? this.recentSessions({ days: 7, limit: 300 }) : [];
+      const recBySid = new Map(rec.map((s) => [s.sid, s]));
+      for (const sid of pinnedList) {
+        if (present.has(sid) || nowHidden[sid] || this.usage?.hidden?.(sid)) continue;
+        const hit = recBySid.get(sid);
+        if (hit && agentEnabledFn(hit.agent)) {
+          pinnedBackfill.push(hit);
+          present.add(sid);
         }
-      } else {
-        // Other agents only contribute running sessions, except WorkBuddy:
-        // its waiting sessions are part of the daily loop and should be jumpable
-        // from the menu bar too.
-        const wbWaiting = (s) => cfg.menuBarAgentScope === "all" && agent === "workbuddy" && isWaitingSession(s, now);
-        const rows = [
-          ...live.filter((x) => x.agent === agent && (x.state === "run" || wbWaiting(x))),
-          ...recent.filter((x) => x.agent === agent && x.state === "run"),
-        ].sort((a, b) => menuRank(a.state) - menuRank(b.state) || (b.lastAt || 0) - (a.lastAt || 0));
-        for (const s of rows) if (add(s, false, true) && ++count >= limit) break;
       }
     }
-    out.sort((a, b) => (b.primary ? 1 : 0) - (a.primary ? 1 : 0) || menuRank(a.state) - menuRank(b.state) || (b._at || 0) - (a._at || 0));
-    const running = out.filter((x) => x.state === "run").length;
-    const waiting = out.filter((x) => x._waiting).length;
-    for (const row of out) { delete row._at; delete row._waiting; }
+
+    const projectGroups = buildProjectGroups(activeLive, {
+      jobs: this.jobs || {},
+      agentEnabled: agentEnabledFn,
+      now,
+    })
+      .map((g) => ({ ...g, sessions: g.sessions.filter((s) => !nowHidden[s.sid]) }))
+      .filter((g) => g.sessions.length > 0)
+      .map((g) => ({
+        id: g.id,
+        name: g.name,
+        tone: null,
+        attention: g.counts.attention > 0,
+        running: g.counts.running,
+        waiting: g.counts.waiting,
+        issue: g.counts.error + g.counts.limit,
+        agents: g.agents.slice(0, 4),
+        sessions: g.sessions.map((s) => toMenuSession(s, g.name)),
+      }));
+
+    const statusGroups = buildNowStatusGroups(activeLive, {
+      jobs: this.jobs || {},
+      agentEnabled: agentEnabledFn,
+      now,
+    })
+      .map((g) => ({ ...g, sessions: g.sessions.filter((s) => !nowHidden[s.sid]) }))
+      .filter((g) => g.sessions.length > 0)
+      .map((g) => ({
+        id: g.id,
+        name: t(g.label),
+        tone: g.tone,
+        attention: Boolean(g.attention),
+        running: 0,
+        waiting: 0,
+        issue: 0,
+        agents: [],
+        sessions: g.sessions.map((s) => toMenuSession(s)),
+      }));
+
+    const flatSessions = [...mergedNow, ...pinnedBackfill].sort((a, b) => {
+      const pa = pinnedIndex.has(a.sid) ? pinnedIndex.get(a.sid) : -1;
+      const pb = pinnedIndex.has(b.sid) ? pinnedIndex.get(b.sid) : -1;
+      if ((pb >= 0 ? 1 : 0) !== (pa >= 0 ? 1 : 0)) return (pb >= 0 ? 1 : 0) - (pa >= 0 ? 1 : 0);
+      if (pa >= 0 && pb >= 0 && pa !== pb) return pa - pb;
+      return menuRank(a.state) - menuRank(b.state) || (b.lastAt || 0) - (a.lastAt || 0);
+    }).map((s) => toMenuSession(s));
+
+    const running = mergedNow.filter((x) => ["run", "starting", "running", "busy"].includes(x.state)).length;
+    const waiting = mergedNow.filter((x) => isWaitingSession(x, now)).length;
+    this.sessionTitles?.maybeQueue(titleCandidates);
     const short = running && waiting
       ? t("{run} 跑 · {wait} 等", { run: running, wait: waiting })
       : running ? t("{n} 在跑", { n: running }) : waiting ? t("{n} 等你", { n: waiting }) : t("空闲");
@@ -2607,7 +3776,8 @@ export default class AgentDeckPlugin extends Plugin {
     return {
       updatedAt: Date.now(), short, summary: summary.join(" · "), usage,
       hotkey: cfg.menuBarHotkey || "control+option+command+D",
-      running, waiting, stats, agents: visibleMenuAgents(agents, cfg.menuBarAgentScope), sessions: out,
+      running, waiting, stats, agents: visibleMenuAgents(agents, cfg.menuBarAgentScope),
+      nowGroupBy, projectGroups, statusGroups, sessions: flatSessions,
     };
   }
 
@@ -2658,9 +3828,15 @@ export default class AgentDeckPlugin extends Plugin {
   }
 
   // ---------- ui refresh ----------
+  // 供外部宿主/测试即时同步重绘编辑器装饰（跳过 120ms 防抖），无需直接触碰内部 _lineMaps。
+  refreshEditorsNow() {
+    if (this._unloaded) return;
+    this._lineMaps = {};
+    try { dispatchRefresh(this); } catch { /* no editors */ }
+  }
+
   refreshUI() {
     if (this._unloaded) return;
-    this._lineMaps = {}; // Session status can change while the document stays identical.
     this.checkAttention();
     this._timers?.clear?.(this._refreshTimer);
     clearTimeout(this._refreshTimer);
@@ -2705,10 +3881,35 @@ export default class AgentDeckPlugin extends Plugin {
 
   // ---------- misc ----------
   notice(msg, ms) { try { new Notice(msg, ms); } catch { console.log("[agent-deck]", msg); } }
+
+  async confirmApiCall({ fallback = false } = {}) {
+    const message = fallback
+      ? t("主来源没答上来，Agent Deck 想改用 API 整理会话，会产生费用。允许后 30 分钟内不再问。")
+      : t("Agent Deck 想用 API 整理会话，会产生费用。允许后 30 分钟内不再问。");
+    if (process.platform === "darwin") {
+      const answer = await this.systemConfirm(message, t("允许"));
+      if (answer !== null) return answer;
+    }
+    return askApiConsentInApp(this.app, message);
+  }
+
+  // 系统级问询：带按钮的原生对话框；osascript 起不来或超时就返回 null，交给应用内兜底。
+  systemConfirm(message, allowLabel, seconds = 60) {
+    return new Promise((resolve) => {
+      // 默认按钮停在「这次不用」：回车误触不该把钱花掉。
+      const script = `display dialog ${JSON.stringify(message)} with title "Agent Deck" buttons {${JSON.stringify(t("这次不用"))}, ${JSON.stringify(allowLabel)}} default button ${JSON.stringify(t("这次不用"))} giving up after ${seconds}`;
+      execFile("/usr/bin/osascript", ["-e", script], { timeout: (seconds + 10) * 1000 }, (err, out) => {
+        if (err) return resolve(null);
+        const text = String(out || "");
+        resolve(!/gave up:\s*true/i.test(text) && text.includes(allowLabel));
+      });
+    });
+  }
+
   openExternal(url) { return openExternalRaw(url); }
 
   async readNote(path) {
-    const view = this.viewForPath(path);
+    const view = this.sourceViewForPath(path);
     if (view) return view.editor.getValue();
     const file = this.app.vault.getAbstractFileByPath(path);
     if (!file) throw new Error(t("找不到笔记：{path}", { path }));
@@ -2717,7 +3918,7 @@ export default class AgentDeckPlugin extends Plugin {
 
   async writeNote(path, text) {
     // 开着的笔记按行改一处，不整篇 setValue：光标、折叠、撤销记录都留着
-    const view = this.viewForPath(path);
+    const view = this.sourceViewForPath(path);
     if (view) {
       const change = J.diffLines(view.editor.getValue(), text);
       if (change) view.editor.transaction({ changes: [change] });
@@ -2739,8 +3940,7 @@ export default class AgentDeckPlugin extends Plugin {
   }
 
   openTerminalAt(cwd, cmd) {
-    const script = `tell application "Terminal"\nactivate\ndo script ${JSON.stringify(`cd ${JSON.stringify(cwd)} && ${cmd}`)}\nend tell`;
-    try { execFile("/usr/bin/osascript", ["-e", script], () => {}); } catch (e) { this.notice(String(e.message || e)); }
+    return openTerminal(cmd, cwd, this.settings?.terminal || "auto");
   }
 
   openPluginDir() {
@@ -2749,6 +3949,50 @@ export default class AgentDeckPlugin extends Plugin {
       if (shell && shell.openPath) return shell.openPath(this.pluginDir);
     } catch { /* fallback */ }
     openExternalRaw("file://" + this.pluginDir);
+  }
+
+  canAutoApproveToolCall(toolCall, runner) {
+    return evaluatePermissionPolicy(toolCall, {
+      cwd: runner?.cwd || runner?.job?.cwd || this.vaultPath,
+      vaultPath: this.vaultPath,
+      autoApprove: true,
+    }).allowAuto;
+  }
+
+  async exportDiagnostics() {
+    const traces = await readRecentTraces({ limit: 40 });
+    const assetCheck = checkExternalAssets(this.vaultPath, { expectedMemoryQueryVersion: MEMORY_QUERY_ASSET_VERSION });
+    const circuitBreakers = Object.fromEntries(
+      Object.entries(this._faultBreakers || {}).map(([k, b]) => [k, b.snapshot()]),
+    );
+    let providerSummary = [];
+    try {
+      providerSummary = detectJournalProviders({ cfg: this.settings }).providers.map(({ id, found, loggedIn, available }) => ({
+        id, found, loggedIn, available,
+      }));
+    } catch { /* optional */ }
+    const report = buildDiagnosticReport({
+      version: this.manifest?.version || "",
+      storeVersion: STORE_VERSION,
+      summaryVersion: SUMMARY_VERSION,
+      usageCacheVersion: USAGE_CACHE_VERSION,
+      circuitBreakers,
+      traces,
+      assetCheck,
+      providerSummary,
+    });
+    const outDir = path.join(os.homedir(), ".agent-deck");
+    const outPath = path.join(outDir, "diagnostics-latest.json");
+    try {
+      await fs.promises.mkdir(outDir, { recursive: true, mode: 0o700 });
+      await fs.promises.writeFile(outPath, JSON.stringify(report, null, 2) + "\n", { mode: 0o600 });
+      try { await navigator?.clipboard?.writeText?.(JSON.stringify(report, null, 2)); } catch { /* clipboard optional */ }
+      const driftWarn = assetCheck.ok ? "" : ` (${t("外围脚本版本异常")})`;
+      this.notice(t("已导出脱敏诊断报告：{path}{warn}", { path: outPath, warn: driftWarn }), 7000);
+    } catch (e) {
+      this.notice(t("导出诊断报告失败：{error}", { error: e?.message || String(e) }), 6000);
+    }
+    return report;
   }
 }
 

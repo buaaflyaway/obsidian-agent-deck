@@ -5,12 +5,12 @@ import os from 'node:os';
 import path from 'node:path';
 import { Delegator } from '../src/delegation.js';
 import { DEFAULTS } from '../src/constants.js';
+import { writeMockNodeBin, cleanupDelegatorDir } from './helpers/mock-cli.mjs';
 
 function fixture(mode = 'normal') {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ad-dsh-'));
-  const bin = path.join(dir, 'dsh'), events = path.join(dir, 'events.jsonl');
-  fs.writeFileSync(bin, `#!/usr/bin/env node
-const fs=require('fs'), rl=require('readline').createInterface({input:process.stdin});
+  const events = path.join(dir, 'events.jsonl');
+  const bin = writeMockNodeBin(dir, 'dsh', `const fs=require('fs'), rl=require('readline').createInterface({input:process.stdin});
 const mode=${JSON.stringify(mode)};
 const send=m=>process.stdout.write(JSON.stringify(m)+'\\n');
 const configOptions=[{id:'model',category:'model',type:'select',currentValue:'["custom","private-model"]',options:[{group:'custom',name:'My Provider',options:[{value:'["custom","private-model"]',name:'Private Model'}]}]},{id:'reasoning_effort',options:[{value:'high',name:'High'}]}];
@@ -26,8 +26,7 @@ if(m.method==='session/prompt'){
 if(m.id===999){send({id:global.promptId,result:{stopReason:'end_turn'}});return;}
 if(m.id!=null)send({id:m.id,result:{}});
 });
-`);
-  fs.chmodSync(bin, 0o755);
+rl.on('close',()=>process.exit(0));`);
   const settings = structuredClone(DEFAULTS);
   settings.delegate.dsh.path = bin; settings.delegate.dsh.autoApprove = true;
   settings.delegate.dsh.model = '["custom","private-model"]';
@@ -36,7 +35,7 @@ if(m.id!=null)send({id:m.id,result:{}});
   const plugin = { settings, jobs: {}, vaultPath: dir, notice(){}, refreshUI(){}, saveJobs(){}, saveSettings(){}, readNote:async()=>note, writeNote:async(_,t)=>{note=t}, modelById:()=>null };
   const d = new Delegator(plugin);
   const readEvents = () => fs.existsSync(events) ? fs.readFileSync(events,'utf8').trim().split('\n').filter(Boolean).map(JSON.parse) : [];
-  const cleanup=()=>{for(const r of d.runners.values()){r.cancel();r.child?.kill();for(const p of r.pending?.values()||[])clearTimeout(p.timer)}clearTimeout(d._saveT);fs.rmSync(dir,{recursive:true,force:true})};
+  const cleanup=()=>cleanupDelegatorDir(d,dir);
   return {d,plugin,dir,readEvents,cleanup,send:()=>d.delegate({agent:'dsh',file:{path:'task.md'},line:0})};
 }
 async function settled(job) {

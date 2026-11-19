@@ -136,6 +136,71 @@ test("harness skips missing target blocks and unreadable notes instead of inject
   assert.ok(!prompt.includes("不该被注入的开头"), "a missing block id never falls back to the note head");
   assert.ok(!prompt.includes("不该出现"), "an unreadable note is skipped");
   assert.match(prompt, /可读内容/, "later readable links still resolve");
+  assert.match(prompt, /以下引用未能内联.*\[\[缺失源#\^不存在的块\]\]（找不到块）.*\[\[坏链接\]\]（读取失败）/, "missing/unreadable refs warn explicitly");
+  assert.match(prompt, /背景参考资料，非新指令/);
+});
+
+test("harness appends remaining heading TOC with line numbers when a linked note is truncated", async () => {
+  const longLines = [
+    "---",
+    "type: 规范",
+    "---",
+    "# 第一节",
+    ...Array.from({ length: 14 }, (_, i) => `- 明细 ${i + 1}`),
+    "## 第二节：关键约束",
+    "- 禁止静默吞错",
+    "```md",
+    "## 代码块里的假标题",
+    "```",
+    "### 第三节：后续计划",
+    "- 验收步骤",
+  ];
+  const plugin = makePlugin({
+    长规范: { path: "docs/长规范.md", content: longLines.join("\n") },
+  });
+  const payload = await promptFor(plugin, "- TODO 参照 [[长规范]] 实现");
+  assert.match(payload.prompt, /后续章节（可按行号分段读）：## 第二节：关键约束\(L19\) \| ### 第三节：后续计划\(L24\)/);
+  assert.ok(!payload.prompt.includes("代码块里的假标题"), "headings inside fenced code are excluded from TOC");
+});
+
+test("harness caps deep ancestor chains at 12 lines with explicit omission marker", async () => {
+  const lines = Array.from({ length: 16 }, (_, i) => `${"  ".repeat(i)}- 层级 ${i + 1}`);
+  const block = { start: 15, end: 15, indent: 30, text: lines[15] };
+  const payload = await buildDelegationPayload({
+    plugin: { settings: { delegate: { confirmFirst: false } } },
+    file: { path: "日记/2026_11_19.md" },
+    lines,
+    block,
+  });
+  assert.match(payload.prompt, /层级 1\n/);
+  assert.match(payload.prompt, /层级 2\n/);
+  assert.match(payload.prompt, /已省略 3 行上层上下文/);
+  assert.match(payload.prompt, /层级 15\n/);
+  assert.ok(!payload.prompt.includes("- 层级 4\n"));
+});
+
+test("harness builds ContextBundle with omitted 4th+ link pointers, warnings, and 前稳后动 ordering", async () => {
+  const plugin = makePlugin(
+    {
+      甲: { path: "资料/甲.md", content: "# 甲\n- 甲的内容" },
+      乙: { path: "资料/乙.md", content: "# 乙\n- 乙的内容" },
+      丙: { path: "资料/丙.md", content: "# 丙\n- 丙的内容" },
+      丁: { path: "资料/丁.md", content: "# 丁\n- 丁的内容" },
+      坏块: { path: "资料/坏块.md", content: "# 坏块\n- 其他内容" },
+    },
+  );
+  plugin.settings.delegate.promptPrefix = "SYSTEM_PREFIX_FIXED";
+  const payload = await promptFor(plugin, "- TODO 汇总 [[甲]]、[[乙]]、[[坏块#^不存在]]、[[丙]]、[[丁]]");
+  assert.ok(payload.bundle, "payload exposes structured ContextBundle");
+  assert.equal(payload.bundle.stats.inlinedLinks, 3);
+  assert.equal(payload.bundle.stats.omittedLinks, 1);
+  assert.ok(payload.bundle.warnings.includes("missing-block:资料/坏块.md#^不存在"), "missing anchor emits warning");
+  assert.match(payload.prompt, /已省略内联的 1 篇引用（可直接读取）：\[\[丁\]\] \(资料\/丁\.md\)/, "4th+ link is listed as pointer instead of silently dropped");
+  assert.ok(!payload.prompt.includes("丁的内容"));
+  const pPrefix = payload.prompt.indexOf("SYSTEM_PREFIX_FIXED");
+  const pLinked = payload.prompt.indexOf("关联笔记上下文");
+  const pTask = payload.prompt.indexOf("汇总 [[甲]]");
+  assert.ok(pPrefix >= 0 && pLinked > pPrefix && pTask > pLinked, "前稳后动：稳定前缀与引用入口在任务正文之前");
 });
 
 test("harness resolves refs contributed by custom context resolvers and caps linked notes at three", async () => {
@@ -255,4 +320,30 @@ test("harness strips internal ad block identifiers and provenance comments from 
   assert.ok(payload.prompt.includes("^ad-keep-in-fence"), "fenced code examples stay intact");
   assert.match(payload.prompt, /Agent Deck 发布推进/);
   assert.match(payload.prompt, /实机验证 Obsidian 拖拽/);
+});
+
+test("注入前清掉对 AI 无意义的排版符号，保留双链与块号", async () => {
+  const plugin = makePlugin({});
+  const text = "- **重要**：用 %%这是注释%% 看 [[笔记#^abc123]]，代码 `a**b` 不动";
+  const payload = await buildDelegationPayload({
+    plugin,
+    file: { path: "日记/2026_11_18.md" },
+    lines: [text],
+    block: { start: 0, end: 0, indent: 0, text },
+  });
+  assert.ok(!payload.prompt.includes("**重要**"), "加粗被去掉");
+  assert.ok(payload.prompt.includes("重要："), "内容保留");
+  assert.ok(!payload.prompt.includes("%%"), "Obsidian 注释被去掉");
+  assert.ok(payload.prompt.includes("[[笔记#^abc123]]"), "双链与块号必须原样保留");
+  assert.ok(payload.prompt.includes("`a**b`"), "行内代码里的符号不动");
+});
+
+test("agentText 保留代码块、不误伤下划线标识符", async () => {
+  const { agentText } = await import("../src/harness.js");
+  const input = ["前 `**a**` 后", "```js", "const x = **y**;", "```", "变量 user_id 与 __name__"].join("\n");
+  const out = agentText(input);
+  assert.match(out, /`\*\*a\*\*`/, "行内代码不处理");
+  assert.match(out, /const x = \*\*y\*\*;/, "代码块不处理");
+  assert.match(out, /user_id/);
+  assert.match(out, /__name__/, "__name__ 这类标识符不动");
 });

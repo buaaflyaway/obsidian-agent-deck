@@ -5,11 +5,12 @@ import os from 'node:os';
 import path from 'node:path';
 import {
   runCodex, runJournalModel, detectJournalProviders, resolveJournalProvider, normalizeApiUrl, runOpenAiApi,
+  journalProviderChain, resetJournalFailoverState, setJournalApiConsent,
 } from '../src/llm.js';
+import { writeMockNodeBin } from './helpers/mock-cli.mjs';
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ad-llm-test-'));
-const bin = path.join(dir, 'fake-cli');
-fs.writeFileSync(bin, `#!${process.execPath}
+const bin = writeMockNodeBin(dir, 'fake-cli', `
 const fs = require('fs');
 const args = process.argv.slice(2);
 let input = '';
@@ -22,7 +23,6 @@ process.stdin.on('end', () => {
  else console.log(JSON.stringify({result: out}));
 });
 `);
-fs.chmodSync(bin, 0o755);
 try {
   await test('Codex journaling passes model, effort, isolation flags and stdin without a shell', async () => {
     const r = JSON.parse(await runJournalModel('正文 $(echo nope)', {autoLogProvider:'codex', autoLogPath:bin, autoLogModel:'custom model', autoLogEffort:'low'}));
@@ -56,21 +56,17 @@ try {
   await test('agy, qodercli, and codebuddy JSON outputs are parsed cleanly and avoid errors', async () => {
     const cliDir = path.join(dir, 'clis');
     fs.mkdirSync(cliDir, { recursive: true });
-    const fakeAgy = path.join(cliDir, 'agy');
-    const fakeQoder = path.join(cliDir, 'qodercli');
-    const fakeCb = path.join(cliDir, 'codebuddy');
-    fs.writeFileSync(fakeAgy, `#!${process.execPath}
+    const fakeAgy = writeMockNodeBin(cliDir, 'agy', `
       const args = process.argv.slice(2);
       if (args.some(a => a.includes('ERR_AGY'))) console.log(JSON.stringify({status:'ERROR', error:'quota hit'}));
       else console.log(JSON.stringify({status:'SUCCESS', response: JSON.stringify({args})}));
     `);
-    fs.writeFileSync(fakeQoder, `#!${process.execPath}
+    const fakeQoder = writeMockNodeBin(cliDir, 'qodercli', `
       console.log(JSON.stringify({is_error:false, result: JSON.stringify({args: process.argv.slice(2)})}));
     `);
-    fs.writeFileSync(fakeCb, `#!${process.execPath}
+    const fakeCb = writeMockNodeBin(cliDir, 'codebuddy', `
       console.log(JSON.stringify([{type:'message', role:'user'}, {type:'result', is_error:false, result: JSON.stringify({args: process.argv.slice(2)})}]));
     `);
-    for (const p of [fakeAgy, fakeQoder, fakeCb]) fs.chmodSync(p, 0o755);
 
     const agyRes = JSON.parse(await runJournalModel('总结内容', { autoLogProvider: 'agy', autoLogPath: fakeAgy, autoLogModel: 'gemini-3.8-flash-low' }));
     assert.ok(agyRes.args.includes('--output-format'));
@@ -85,6 +81,69 @@ try {
     const cbRes = JSON.parse(await runJournalModel('CodeBuddy', { autoLogProvider: 'codebuddy', autoLogPath: fakeCb }));
     assert.ok(cbRes.args.includes('--output-format'));
     assert.ok(cbRes.args.includes('json'));
+  });
+
+  await test('automatic API calls ask first, remember the grant and the refusal', async () => {
+    const http = await import('node:http');
+    const server = http.createServer((req, res) => {
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ choices: [{ message: { content: '整理好了' } }] }));
+    });
+    await new Promise((r) => server.listen(0, '127.0.0.1', r));
+    const apiCfg = {
+      autoLogProvider: 'api', autoLogApiConfirm: true, autoLogModel: 'test-model',
+      autoLogApiUrl: `http://127.0.0.1:${server.address().port}/v1`, autoLogApiKey: 'k',
+    };
+    let asked = 0;
+    try {
+      resetJournalFailoverState();
+      setJournalApiConsent(() => { asked += 1; return false; });
+      await assert.rejects(runJournalModel('整理', apiCfg, { automatic: true }), /没有授权调用 API/);
+      assert.equal(asked, 1);
+      await assert.rejects(runJournalModel('整理', apiCfg, { automatic: true }), /没有授权调用 API/);
+      assert.equal(asked, 1, 'a refusal is remembered, not re-asked every cycle');
+
+      resetJournalFailoverState();
+      setJournalApiConsent(() => { asked += 1; return true; });
+      assert.equal(await runJournalModel('整理', apiCfg, { automatic: true }), '整理好了');
+      assert.equal(asked, 2);
+      assert.equal(await runJournalModel('整理', apiCfg, { automatic: true }), '整理好了');
+      assert.equal(asked, 2, 'the grant covers the following 30 minutes');
+
+      resetJournalFailoverState();
+      setJournalApiConsent(() => { throw new Error('manual calls must not ask'); });
+      assert.equal(await runJournalModel('整理', apiCfg), '整理好了');
+    } finally {
+      setJournalApiConsent(null);
+      resetJournalFailoverState();
+      await new Promise((r) => server.close(r));
+    }
+  });
+
+  await test('a rate-limited source falls over to the configured backup and cools down', async () => {
+    const quotaBin = writeMockNodeBin(dir, 'quota-cli', `console.error('usage limit reached, retry later'); process.exit(1);\n`);
+    resetJournalFailoverState();
+    const cfg = {
+      autoLogProvider: 'codex', autoLogPath: quotaBin, autoLogFailover: true, autoLogBackupProvider: 'claude',
+      delegate: { claude: { path: bin } },
+    };
+    assert.deepEqual(journalProviderChain(cfg).map((x) => x.id), ['codex', 'claude']);
+    const answer = JSON.parse(await runJournalModel('正文', cfg));
+    assert.ok(answer.args.includes('--model'), 'the backup Claude CLI answered');
+    // 撞限额的那家在冷却期内被跳过，直接用上次成功的备用来源
+    assert.deepEqual(journalProviderChain(cfg).map((x) => x.id), ['claude']);
+    resetJournalFailoverState();
+    await assert.rejects(runJournalModel('正文', { ...cfg, autoLogFailover: false }), /usage limit/);
+    resetJournalFailoverState();
+  });
+
+  await test('DeepSeek CLI provider runs deepseek-ds and returns plain text', async () => {
+    const dsBin = writeMockNodeBin(dir, 'deepseek-ds', `console.log(JSON.stringify({args: process.argv.slice(2)}).slice(0));\n`);
+    const out = await runJournalModel('整理一下', { autoLogProvider: 'deepseek', autoLogPath: dsBin, autoLogModel: 'deepseek-chat' });
+    const parsed = JSON.parse(out);
+    assert.deepEqual(parsed.args.slice(0, 6), ['-p', '整理一下', '--output-format', 'text', '--skip-trust', '-m']);
+    assert.equal(parsed.args[6], 'deepseek-chat');
+    assert.ok(detectJournalProviders({ cfg: { autoLogProvider: 'deepseek' } }).providers.some((p) => p.id === 'deepseek'));
   });
 
   await test('detectJournalProviders finds installed+signed-in local CLIs and picks default cleanly', () => {

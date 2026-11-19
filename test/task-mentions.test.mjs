@@ -2,8 +2,9 @@ import assert from 'node:assert/strict';
 import { register, createRequire } from 'node:module';
 globalThis.require = createRequire(import.meta.url);
 register('data:text/javascript,' + encodeURIComponent(`export async function resolve(s,c,n){if(s==='obsidian')return {url:'data:text/javascript,export class EditorSuggest{constructor(app){this.app=app}close(){}};',shortCircuit:true};return n(s,c)}`));
+import { delegateAgents } from '../src/agent-registry.js';
 const { TaskAgentSuggest, registerTaskAgentSuggest } = await import('../src/mention-suggest.js');
-const { taskMention, mentionOptions, stripTaskMention, mentionSuggestions } = await import('../src/task-mentions.js');
+const { ROUTABLE_AGENTS, taskMention, mentionOptions, stripTaskMention, mentionSuggestions } = await import('../src/task-mentions.js');
 const { DEFAULTS, MODEL_CATALOG, deepMerge } = await import('../src/constants.js');
 const { Delegator, codexCliArgs } = await import('../src/delegation.js');
 const p = { app: {}, settings: deepMerge(DEFAULTS, {}), jobs: {}, agentEnabled: (id) => id !== 'antigravity', modelsFor: (id) => MODEL_CATALOG.filter(m => m.agent === id), modelEnabled: () => true, defaultModel: (id) => DEFAULTS.delegate[id]?.model || '' };
@@ -46,43 +47,46 @@ console.log('PASS task mentions: agent/model/effort, safe boundaries, completion
 const fs = await import('node:fs');
 const os = await import('node:os');
 const path = await import('node:path');
+const { writeMockNodeBin, mockNodeScriptPath, cleanupDelegatorDir } = await import('./helpers/mock-cli.mjs');
 const dir = fs.mkdtempSync(path.join(os.tmpdir(),'ad-mention-'));
+let actual1;
 try {
-  const bin = path.join(dir,'claude'), argvPath=path.join(dir,'argv.json');
-  fs.writeFileSync(bin, '#!/usr/bin/env node\nrequire("fs").writeFileSync('+JSON.stringify(argvPath)+',JSON.stringify(process.argv.slice(2)));\n');
-  fs.chmodSync(bin,0o755);
+  const argvPath=path.join(dir,'argv.json');
+  const bin = writeMockNodeBin(dir,'claude','require("fs").writeFileSync('+JSON.stringify(argvPath)+',JSON.stringify(process.argv.slice(2)));\n');
   p.vaultPath=dir;p.settings.delegate.claude.path=bin;p.settings.delegate.claude.cwd=dir;
   p.settings.delegate.claude.openDesktop=false;p.saveSettings=()=>{};p.saveJobs=()=>{};p.refreshUI=()=>{};p.notice=()=>{};
-  const actual = new Delegator(p);actual.onSession=()=>{};actual.onDone=()=>{};actual.onError=()=>{};
+  actual1 = new Delegator(p);actual1.onSession=()=>{};actual1.onDone=()=>{};actual1.onError=()=>{};
   const model = p.modelsFor('claude')[0].id;
-  const job=await actual.delegate({file:{path:'task.md'},lines:['- TODO fake @claude/'+model+'/max'],line:0,agent:'codex'});
+  const job=await actual1.delegate({file:{path:'task.md'},lines:['- TODO fake @claude/'+model+'/max'],line:0,agent:'codex'});
   for(let i=0;i<500 && job.state==='running';i++) await new Promise(r=>setTimeout(r,10));
   const argv=JSON.parse(fs.readFileSync(argvPath,'utf8'));
   assert.equal(job.agent,'claude');assert.equal(job.effort,'max');assert.equal(argv[argv.indexOf('--effort')+1],'max');
   assert.ok(!argv.at(-1).includes('@claude/'));assert.equal(job.state,'done');
-} finally {fs.rmSync(dir,{recursive:true,force:true});}
+} finally {cleanupDelegatorDir(actual1,dir);}
 console.log('PASS real runner subprocess receives the selected Claude model and effort');
 const acpDir=fs.mkdtempSync(path.join(os.tmpdir(),'ad-acp-'));
+let actual2;
 try {
-  const bin=path.join(acpDir,'dsh'), events=path.join(acpDir,'events.jsonl');
-  fs.writeFileSync(bin, `#!/usr/bin/env node
-const fs=require('fs'),rl=require('readline').createInterface({input:process.stdin});
-rl.on('line',line=>{const m=JSON.parse(line);fs.appendFileSync(${JSON.stringify(events)},line+'\\n');if(m.method==='session/close')process.exit(0);let result={};if(m.method==='session/new')result={sessionId:'fake-acp-session',configOptions:${JSON.stringify([{id:'model'},{id:'reasoning_effort'}])}};if(m.method==='session/prompt')result={stopReason:'end_turn'};process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n')});\n`);
-  fs.chmodSync(bin,0o755);p.settings.delegate.dsh.path=bin;p.settings.delegate.dsh.cwd=acpDir;
-  const actual=new Delegator(p);actual.onSession=()=>{};actual.onDone=()=>{};actual.onError=()=>{};
-  const job=await actual.delegate({file:{path:'task.md'},lines:['- TODO fake @dsh/deepseek-v4-pro/max'],line:0,agent:'claude'});
+  const events=path.join(acpDir,'events.jsonl');
+  const bin=writeMockNodeBin(acpDir,'dsh',`const fs=require('fs'),rl=require('readline').createInterface({input:process.stdin});
+const send=m=>process.stdout.write(JSON.stringify(m)+'\\n');
+rl.on('line',line=>{const m=JSON.parse(line);fs.appendFileSync(${JSON.stringify(events)},line+'\\n');if(m.method==='session/close')process.exit(0);let result={};if(m.method==='session/new')result={sessionId:'fake-acp-session',configOptions:${JSON.stringify([{id:'model'},{id:'reasoning_effort'}])}};if(m.method==='session/prompt')result={stopReason:'end_turn'};send({jsonrpc:'2.0',id:m.id,result})});rl.on('close',()=>process.exit(0));\n`);
+  p.settings.delegate.dsh.path=bin;p.settings.delegate.dsh.cwd=acpDir;
+  actual2=new Delegator(p);actual2.onSession=()=>{};actual2.onDone=()=>{};actual2.onError=()=>{};
+  const job=await actual2.delegate({file:{path:'task.md'},lines:['- TODO fake @dsh/deepseek-v4-pro/max'],line:0,agent:'claude'});
   for(let i=0;i<500 && job.state==='running';i++)await new Promise(r=>setTimeout(r,10));
   assert.equal(job.state,'done');
   const requests=fs.readFileSync(events,'utf8').trim().split('\n').map(x=>JSON.parse(x));
   assert.ok(requests.some(x=>x.method==='session/set_config_option'&&x.params.configId==='model'&&x.params.value.includes('deepseek-v4-pro')));
   assert.ok(requests.some(x=>x.method==='session/set_config_option'&&x.params.configId==='reasoning_effort'&&x.params.value==='max'));
   // An older ACP server that offers no model controls must fail before prompting.
-  fs.writeFileSync(bin,fs.readFileSync(bin,'utf8').replace('configOptions:[{"id":"model"},{"id":"reasoning_effort"}]','configOptions:[]'));
+  const scriptPath = mockNodeScriptPath(bin);
+  fs.writeFileSync(scriptPath,fs.readFileSync(scriptPath,'utf8').replace('configOptions:[{"id":"model"},{"id":"reasoning_effort"}]','configOptions:[]'));
   fs.writeFileSync(events,'');
-  const failed=await actual.delegate({file:{path:'task.md'},lines:['- TODO fake @dsh/deepseek-v4-pro/high'],line:0,agent:'claude'});
+  const failed=await actual2.delegate({file:{path:'task.md'},lines:['- TODO fake @dsh/deepseek-v4-pro/high'],line:0,agent:'claude'});
   assert.equal(failed.state,'error');assert.match(failed.error,/未提供模型/);
   assert.ok(!fs.readFileSync(events,'utf8').includes('session/prompt'));
-}finally{fs.rmSync(acpDir,{recursive:true,force:true})}
+}finally{cleanupDelegatorDir(actual2,acpDir);}
 console.log('PASS ACP applies the selected model/effort and rejects unsupported controls before dispatch');
 // Agent selection must automatically reopen the concrete model list.
 assert.equal(mentionSuggestions(p,'gpt')[0].value,'codex');
@@ -190,4 +194,13 @@ customSuggest.selectSuggestion(mentionSuggestions(customPlugin,'codex/').find(x=
 assert.equal(customContent,'- TODO ::codex/gpt-6.1-terra');
 assert.equal(mentionOptions(customPlugin,{lines:[customContent],line:0}).model,'gpt-6.1-terra');
 for(const trigger of ['@@','.*','\\','💡']) assert.equal(taskMention('- TODO '+trigger+'codex',trigger)?.agent,'codex');
+// Every delegatable agent must be routable and suggested via @ mentions.
+for (const id of delegateAgents()) assert.ok(ROUTABLE_AGENTS.includes(id), `delegatable agent ${id} is routable in @ mentions`);
+const allEnabledPlugin = { ...p, agentEnabled: () => true };
+assert.ok(mentionSuggestions(allEnabledPlugin, '').some((x) => x.value === 'hermes'), '@ mentions list includes Hermes Agent');
+assert.ok(mentionSuggestions(allEnabledPlugin, '').some((x) => x.value === 'antigravity'), '@ mentions list includes Antigravity');
+const hermesMention = mentionOptions(allEnabledPlugin, { lines: ['- TODO run @hermes/hermes-default/high'], line: 0, agent: 'claude' });
+assert.equal(hermesMention.agent, 'hermes');
+assert.equal(hermesMention.model, 'hermes-default');
+assert.equal(hermesMention.effort, 'high');
 console.log('PASS custom symbol chained selection, concrete model routing and regex escaping');

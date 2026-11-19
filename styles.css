@@ -1,4 +1,4 @@
-/* Agent Deck 1.10.7 — Apache-2.0 — https://github.com/MatsuriMW/obsidian-agent-deck */
+/* Agent Deck 1.13.3 — Apache-2.0 — https://github.com/MatsuriMW/obsidian-agent-deck */
 /* Generated from src/styles/ by `npm run build` — do not edit styles.css directly. */
 /* src/styles/base/tokens.css */
 .ad-view,
@@ -18,6 +18,7 @@
   --ad-warn: #a9845f;
   --ad-bad: #a86f6d;
   --ad-star: #b39a6a;
+  --ad-live: #c8635f;
   --ad-shadow: 0 10px 30px rgba(55, 48, 42, .08);
   --ad-figure:
     "SF Mono",
@@ -1361,7 +1362,7 @@ details[open] > :is(summary.ad-modelgroup__head, summary.ad-subdetails__head)::b
     var(--ad-surface);
 }
 .ad-view .ad-sess.is-child {
-  margin-left: 18px;
+  margin-left: calc(14px * var(--ad-tree-depth, 1));
 }
 .ad-view .ad-sess.is-child::before {
   opacity: .45;
@@ -1525,7 +1526,8 @@ body.ad-dragging-item :is(.ad-view .ad-sess) {
   gap: 3px;
 }
 .ad-view .ad-state.is-live {
-  --ad-state-tone: var(--ad-good);
+  --ad-state-tone: var(--ad-live);
+  --ad-state-alpha: 20%;
   animation: ad-pulse 1.8s ease-in-out infinite;
 }
 .ad-view .ad-state.is-wait {
@@ -1595,7 +1597,7 @@ body.ad-dragging-item :is(.ad-view .ad-sess) {
   border-color: color-mix(in srgb, var(--ad-agent) 38%, var(--ad-line));
 }
 .ad-view .ad-agentcard.is-running .ad-agentcard__where {
-  color: var(--ad-good);
+  color: var(--ad-live);
 }
 .ad-view .ad-agentcard.is-dragging {
   opacity: .4;
@@ -2058,8 +2060,8 @@ body.ad-dragging-item :is(.ad-view .ad-agentcard) {
   color: var(--ad-muted);
 }
 .ad-view .ad-projgroup .ad-projbadge.is-live {
-  color: var(--ad-good);
-  background: color-mix(in srgb, var(--ad-good) 14%, transparent);
+  color: var(--ad-live);
+  background: color-mix(in srgb, var(--ad-live) 14%, transparent);
 }
 .ad-view .ad-projgroup .ad-projbadge.is-wait {
   color: var(--ad-warn);
@@ -2446,6 +2448,12 @@ body.ad-dragging-session .markdown-source-view .cm-content {
 }
 .ad-prog[data-agent=antigravity] {
   --ad-prog: #558ce6;
+}
+.ad-prog[data-agent=hermes] {
+  --ad-prog: #b57536;
+}
+.ad-prog[data-agent=qwenwork] {
+  --ad-prog: #6b63d6;
 }
 .ad-prog.is-linked {
   cursor: pointer;
@@ -3047,6 +3055,41 @@ body.ad-dragging-session .markdown-source-view .cm-content {
 .ad-record-hidden,
 .ad-block-id-hidden {
   display: none !important;
+}
+.ad-record-pin-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 6px;
+  padding: 0 3px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  box-shadow: none;
+  font-size: 10.5px;
+  line-height: 1.3;
+  vertical-align: middle;
+  cursor: pointer;
+  opacity: .28;
+  filter: grayscale(1);
+  transition: opacity .12s ease, background-color .12s ease;
+}
+.ad-record-pin-btn:hover {
+  opacity: .85;
+  filter: none;
+  background: var(--background-modifier-hover);
+}
+.ad-record-pin-btn.is-on {
+  opacity: 1;
+  filter: none;
+  background: color-mix(in srgb, var(--interactive-accent) 12%, transparent);
+}
+.markdown-source-view.mod-cm6 .cm-line.ad-record-line--pinned,
+.markdown-rendered .ad-record-pinned {
+  color: var(--text-normal);
+}
+.ad-record-table-wrap .is-pinned {
+  background: color-mix(in srgb, var(--interactive-accent) 5%, transparent);
 }
 .cm-line.ad-said {
   cursor: default;
@@ -4241,7 +4284,9 @@ body.ad-dragging-session .markdown-source-view .cm-content {
   height: 32px;
   color: var(--ad-agent);
 }
-.ad-settings .ad-set-agent[data-agent=grokbot] .ad-set-agent__icon img {
+.ad-settings .ad-set-agent[data-agent=grokbot] .ad-set-agent__icon img,
+.ad-settings .ad-set-agent[data-agent=qwenwork] .ad-set-agent__icon img,
+.ad-settings .ad-set-agent[data-agent=hermes] .ad-set-agent__icon img {
   border-radius: 7px;
   border: 1px solid var(--ad-line);
 }
@@ -4846,6 +4891,15 @@ body.ad-dragging-session .markdown-source-view .cm-content {
   min-width: 0;
   overflow-wrap: anywhere;
 }
+.ad-send .ad-send__draft {
+  margin: 0;
+  font-family: var(--ad-figure);
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  color: var(--ad-ink);
+  overflow-wrap: anywhere;
+}
 .ad-send .ad-send__meta {
   display: flex;
   justify-content: space-between;
@@ -4873,6 +4927,11 @@ body.ad-dragging-session .markdown-source-view .cm-content {
 .ad-send .ad-send__btns {
   display: flex;
   gap: 8px;
+}
+.ad-send .ad-send__modes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 .ad-send .ad-btn.ad-send__go {
   background: var(--ad-agent);
@@ -5280,6 +5339,102 @@ body.ad-dragging-session .markdown-source-view .cm-content {
 .ad-workbench .ad-wb-task__detail {
   font-size: 11.5px;
   color: var(--ad-muted);
+}
+.ad-modal.ad-reply-modal .ad-reply-modal__question {
+  margin: 4px 0 10px;
+  padding: 8px 10px;
+  border-left: 2px solid var(--ad-accent, var(--ad-line));
+  background: var(--ad-surface);
+  border-radius: var(--ad-radius-sm);
+  white-space: pre-wrap;
+}
+.ad-modal.ad-reply-modal .ad-reply-modal__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.ad-modal.ad-reply-modal .ad-reply-modal__input {
+  width: 100%;
+  min-height: 64px;
+  resize: vertical;
+}
+.ad-inbox {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 4px 2px;
+}
+.ad-inbox .ad-inbox__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.ad-inbox .ad-inbox__title {
+  font-weight: 600;
+}
+.ad-inbox .ad-inbox__hint {
+  font-size: 11.5px;
+  color: var(--ad-muted);
+  flex: 1;
+  min-width: 0;
+}
+.ad-inbox .ad-inbox__empty {
+  color: var(--ad-muted);
+  font-size: 12px;
+  line-height: 1.6;
+  padding: 8px 2px;
+}
+.ad-inbox .ad-inbox__list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ad-inbox .ad-inbox__card {
+  border: 1px solid var(--ad-line);
+  border-radius: var(--ad-radius-sm);
+  background: var(--ad-surface);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ad-inbox .ad-inbox__top {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.ad-inbox .ad-inbox__meta {
+  flex: 1;
+  min-width: 0;
+  font-size: 11.5px;
+  color: var(--ad-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ad-inbox .ad-inbox__link {
+  font-size: 11.5px;
+}
+.ad-inbox .ad-inbox__question {
+  white-space: pre-wrap;
+  line-height: 1.55;
+}
+.ad-inbox .ad-inbox__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.ad-inbox .ad-inbox__input {
+  width: 100%;
+  min-height: 48px;
+  resize: vertical;
+}
+.ad-inbox .ad-inbox__actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
 }
 
 /* src/styles/views/review.css */
@@ -6009,3 +6164,187 @@ body:not(.is-focused) .ad-prog[data-mode=run] .ad-prog-tail {
 }
 
 /* src/styles/index.css */
+.ad-memory-board {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  height: 100%;
+}
+.ad-memory-board__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ad-memory-board__cols {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  overflow-x: auto;
+}
+.ad-memory-board__col {
+  flex: 1 1 0;
+  min-width: 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px;
+  border-radius: 8px;
+  background: var(--background-secondary);
+}
+.ad-memory-board__col.is-over {
+  outline: 2px dashed var(--interactive-accent);
+}
+.ad-memory-board__colhead {
+  font-size: 12px;
+  opacity: 0.7;
+}
+.ad-memory-board__card {
+  padding: 8px;
+  border-radius: 6px;
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  cursor: grab;
+}
+.ad-memory-board__title {
+  font-size: 13px;
+  line-height: 1.4;
+  margin-bottom: 4px;
+}
+.ad-memory-board__cardfoot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+.ad-memory-board__del {
+  font-size: 11px;
+  padding: 1px 6px;
+  opacity: 0.65;
+}
+.ad-memory-board__card:hover .ad-memory-board__del,
+.ad-memory-board__del:focus-visible {
+  opacity: 1;
+}
+.ad-memory-board__src {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 11px;
+  color: var(--text-muted);
+  background: var(--background-secondary-alt);
+  cursor: pointer;
+}
+.ad-memory-board__src:hover {
+  color: var(--text-normal);
+}
+.ad-mem-create {
+  --ad-modal-w: min(520px, 92vw);
+}
+.ad-mem-create__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+.ad-mem-create__verify {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-left: auto;
+}
+.ad-mem-create__input {
+  width: 100%;
+  margin-top: 10px;
+  resize: vertical;
+}
+.ad-mem-import {
+  --ad-modal-w: min(640px, 94vw);
+}
+.ad-mem-import__drop {
+  margin-top: 12px;
+  padding: 14px;
+  border: 1.5px dashed var(--background-modifier-border);
+  border-radius: 8px;
+  background: var(--background-secondary);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ad-mem-import__drop.is-over {
+  border-color: var(--interactive-accent);
+  background: var(--background-modifier-hover);
+}
+.ad-mem-import__droptext {
+  font-size: 12.5px;
+  color: var(--text-normal);
+}
+.ad-mem-import__dropbtns {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.ad-mem-import__modes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 10px;
+}
+.ad-mem-import__mode {
+  padding: 9px 11px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  background: var(--background-primary);
+  cursor: pointer;
+}
+.ad-mem-import__mode.is-active {
+  border-color: var(--interactive-accent);
+  box-shadow: 0 0 0 1px var(--interactive-accent);
+}
+.ad-mem-import__modetitle {
+  font-size: 12.5px;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+.ad-mem-import__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 10px;
+}
+.ad-mem-import__list {
+  margin-top: 8px;
+  max-height: 300px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-right: 2px;
+}
+.ad-mem-import__item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 7px 9px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  background: var(--background-primary);
+}
+.ad-mem-import__kind {
+  flex: 0 0 auto;
+  font-size: 11.5px;
+  height: 26px;
+}
+.ad-mem-import__body {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.ad-mem-import__text {
+  font-size: 12.5px;
+  line-height: 1.45;
+  word-break: break-word;
+}

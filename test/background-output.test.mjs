@@ -4,6 +4,7 @@ import { register } from 'node:module';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { writeMockNodeBin, cleanupDelegatorDir } from './helpers/mock-cli.mjs';
 register('data:text/javascript,' + encodeURIComponent(`export async function resolve(spec,ctx,next){if(spec==='obsidian')return {url:'data:text/javascript,export class MarkdownView{}',shortCircuit:true};return next(spec,ctx);}`));
 const J = await import('../src/journal.js');
 const { Delegator, isCliSession } = await import('../src/delegation.js');
@@ -89,9 +90,8 @@ test('scans use the same file policy and avoid the polish/merge paths', async ()
 });
 test('Claude background subprocess drains complete UTF-8 output and automatically saves a full transcript', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ad-output-'));
-  const bin = path.join(dir, 'claude');
-  const script = `#!/usr/bin/env node\nconst bytes=Buffer.from(${JSON.stringify(longReply)});let n=0;function send(){if(n===bytes.length)return;process.stdout.write(bytes.subarray(n,n+101));n=Math.min(n+101,bytes.length);setImmediate(send)}send();`;
-  fs.writeFileSync(bin, script); fs.chmodSync(bin, 0o755);
+  const jsBody = `const bytes=Buffer.from(${JSON.stringify(longReply)});let n=0;function send(){if(n===bytes.length)return;process.stdout.write(bytes.subarray(n,n+101));n=Math.min(n+101,bytes.length);setImmediate(send)}send();`;
+  const bin = writeMockNodeBin(dir, 'claude', jsBody);
   const p = fixture('- TODO 原文测试 ^ad-stream\n'); p.vaultPath = dir;
   Object.assign(p.settings.delegate.claude, { path: bin, cwd: dir, autoTrustedCwd: false });
   const d = new Delegator(p);
@@ -100,7 +100,7 @@ test('Claude background subprocess drains complete UTF-8 output and automaticall
     for (let n = 0; n < 300 && !job.resultWritten; n++) await new Promise(r => setTimeout(r, 10));
     assert.equal(job.result, longReply); assert.equal(job.state, 'done'); assert.equal(job.resultWritten, true);
     assert.ok(p.files.get(job.backgroundFiles[1].path).text.includes(longReply)); assert.ok(p.note().length < 1000);
-  } finally { for (const runner of d.runners.values()) runner.cancel(); clearTimeout(d._saveT); fs.rmSync(dir, { recursive: true, force: true }); }
+  } finally { cleanupDelegatorDir(d, dir); }
 });
 test('WorkBuddy terminal sessions are recognized separately from desktop sessions', () => {
   assert.equal(isCliSession('workbuddy', 'cli'), true);
@@ -148,4 +148,31 @@ test('scanned follow-up files recover the full question and answer from conversa
   await new Delegator(p).writeResult(job, { rounds: [{ n: 2, ask: question.slice(0,1000), said: answer.slice(0,100) }] });
   const file = p.files.get(job.backgroundFiles[2].path).text;
   assert.ok(file.includes(question) && file.includes(answer), 'file uses full source messages, not truncated scanner previews');
+});
+
+test('background follow-up turn writes round 2 conclusion without scannedRounds', async () => {
+  const p = fixture('- DELEGATED @antigravity 测试追问 ^ad-follow\n');
+  const d = new Delegator(p);
+  const job = {
+    id: 'follow', agent: 'antigravity', name: '测试追问', blockId: 'ad-follow',
+    path: 'journal.md', sessionId: 'follow-session', destination: 'background',
+    state: 'done', result: '第1轮答复：请选择方案 A 或 B？',
+    conversation: [
+      { role: 'user', text: '第1轮提问' },
+      { role: 'assistant', text: '第1轮答复：请选择方案 A 或 B？' },
+    ],
+  };
+  p.jobs.follow = job;
+  await d.writeResult(job);
+  assert.ok(J.hasRecordedTurn(p.note(), job.sessionId, 1));
+
+  // Simulate continueSession Turn 2 completion without scanner metadata or scannedRounds.
+  job.resultWritten = false;
+  job.result = '采用方案 A：保留严格阈值拒答。';
+  job.conversation.push({ role: 'user', text: '我对上一问的回答：选 A' });
+  job.conversation.push({ role: 'assistant', text: job.result });
+  await d.writeResult(job);
+
+  assert.ok(J.hasRecordedTurn(p.note(), job.sessionId, 2), 'round 2 marker is recorded');
+  assert.ok(p.note().includes('💬 第2轮：采用方案 A：保留严格阈值拒答。'), 'round 2 reply is appended to note');
 });

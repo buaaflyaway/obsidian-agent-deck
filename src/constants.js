@@ -6,6 +6,7 @@ import { t } from "./i18n.js";
 export const CONFIRM_FIRST = "先阅读任务及相关上下文。只有影响需求、范围或验收的问题尚不明确时，才集中向我提问；已明确或已确认的信息不要重复询问。信息充分时，简要说明执行计划并继续完成任务，运行必要检查后汇报结果。超出已授权范围的操作，先征求确认。";
 
 export const STORE_VERSION = 1;
+export const MEMORY_QUERY_ASSET_VERSION = 1;
 
 export const DEFAULT_RECORD_RULES = {
   boldTitle: true,        // 自动记录母块标题自动加粗 **...**
@@ -110,6 +111,31 @@ export const AGENTS = {
     deep: "qoder",
     desktopOnly: true,
   },
+  hermes: {
+    id: "hermes",
+    name: "Hermes Agent",
+    short: "Hermes",
+    glyph: "☿",
+    color: "#b57536",
+    soft: "rgba(181,117,54,.13)",
+    kind: "hermes",
+    where: ["~/.hermes/state.db · $HERMES_HOME", t("Hermes Agent 会话与 ACP / CLI")],
+    deep: "hermes",
+    desktopOnly: false,
+  },
+  qwenwork: {
+    id: "qwenwork",
+    name: "千问办公",
+    short: "千问办公",
+    glyph: "✦",
+    color: "#6b63d6",
+    soft: "rgba(107,99,214,.13)",
+    kind: "qwenwork",
+    where: ["~/.qwenworkcn/.harness/*/qwenwork · ~/.qwenworkcn/projects", t("千问办公（QwenWork）桌面版")],
+    deep: "qwenwork",
+    desktopOnly: true,
+    trackingOnly: true,
+  },
   cursor: {
     id: "cursor",
     name: "Cursor",
@@ -138,7 +164,7 @@ export const AGENTS = {
   },
 };
 
-export const AGENT_ORDER = ["claude", "codex", "workbuddy", "dsh", "antigravity", "opencode", "qoder", "cursor", "grokbot"];
+export const AGENT_ORDER = ["claude", "codex", "workbuddy", "dsh", "antigravity", "opencode", "qoder", "hermes", "qwenwork", "cursor", "grokbot"];
 
 export const AGENT_SHORT = (id) => (AGENTS[id] ? AGENTS[id].short : id || "Agent");
 
@@ -147,6 +173,7 @@ export const AGENT_SHORT = (id) => (AGENTS[id] ? AGENTS[id].short : id || "Agent
 export const MODEL_CATALOG = [
   { id: "antigravity-default", agent: "antigravity", name: t("CLI 当前默认模型"), value: "", provider: "Antigravity", context: "—", tags: [], note: t("使用服务端的默认模型；读取可用模型后可指定模型。") },
   { id: "opencode-default", agent: "opencode", name: t("CLI 当前默认模型"), value: "", provider: "OpenCode", context: "—", tags: [], note: t("使用服务端的默认模型；读取可用模型后可指定模型。") },
+  { id: "hermes-default", agent: "hermes", name: t("CLI 当前默认模型"), value: "", provider: "Hermes", context: "—", tags: [], note: t("使用 Hermes 当前配置的默认模型；读取可用模型后可指定模型。") },
   {
     id: "qoder-ultimate",
     agent: "qoder",
@@ -332,6 +359,7 @@ export const MODEL_CATALOG = [
 export const EFFORTS = {
   antigravity: ["low", "medium", "high", "xhigh"].map((id) => ({ id, label: id, hint: t("实际可用强度由 ACP 服务端校验") })),
   opencode: ["low", "medium", "high"].map((id) => ({ id, label: id, hint: t("实际可用强度由 ACP 服务端校验") })),
+  hermes: ["low", "medium", "high"].map((id) => ({ id, label: id, hint: t("实际可用强度由 ACP 服务端校验") })),
   qoder: ["low", "medium", "high"].map((id) => ({ id, label: id, hint: t("传给 qodercli --reasoning-effort") })),
   codex: ["low", "medium", "high", "xhigh", "max"].map((id) => ({ id, label: id, hint: t("由所选 Codex 模型支持的强度决定") })),
   claude: [
@@ -349,6 +377,27 @@ export const EFFORTS = {
   ],
 };
 
+// 派发时可以临时覆盖沙箱：Claude 那套权限词也能映射过来（plan/manual → 只读，auto/acceptEdits → 工作区）。
+export const SANDBOX_ALIAS = {
+  plan: "read-only",
+  manual: "read-only",
+  auto: "workspace-write",
+  acceptEdits: "workspace-write",
+  "read-only": "read-only",
+  "workspace-write": "workspace-write",
+  "danger-full-access": "danger-full-access",
+};
+export const sandboxFor = (permission = "", fallback = "workspace-write") =>
+  SANDBOX_ALIAS[String(permission || "").trim()] || fallback;
+
+// Codex 的"工作模式"其实是沙箱：只读 / 只改工作区 / 完全不设防。
+export const CODEX_SANDBOXES = [
+  { id: "read-only", label: "Read-only", hint: "只读：可以看，不能改" },
+  { id: "workspace-write", label: "Workspace", hint: "只能改工作目录里的文件" },
+  { id: "danger-full-access", label: "Full access", hint: "完全权限：整机可写（慎用）" },
+];
+
+// 一次派发时能选的工作模式：按 Agent 各自的口径列。
 export const CLAUDE_PERMISSIONS = [
   { id: "plan", label: "Plan", hint: "Think, propose, do not edit" },
   { id: "auto", label: "Auto", hint: "Let Claude choose and act" },
@@ -359,12 +408,14 @@ export const CLAUDE_PERMISSIONS = [
 export const DEFAULTS = {
   version: STORE_VERSION,
   // Which agents are read. Primary agents are always on.
-  agents: { claude: true, codex: true, workbuddy: true, dsh: true, antigravity: true, opencode: true, qoder: true, cursor: true, grokbot: true },
+  agents: { claude: true, codex: true, workbuddy: true, dsh: true, antigravity: true, opencode: true, qoder: true, hermes: true, qwenwork: true, cursor: true, grokbot: true },
   primaryAgents: ["claude", "dsh"],
   // 0 = midnight (00:00); otherwise the hour at which a new journal day begins.
   dayCutoff: 0,
   experimentalDashboard: true,
   dashboardProjects: {},    // 会话 → 项目页面路径；缺省自动识别，空字符串手动未归类
+  projectFolders: {},       // 项目名 → 工作目录；派活时按项目选目录，派发后按项目名记住
+  autoProjectFolder: true,  // 派活时从笔记的双链 / 路径 / 标题前缀认出项目，自动换成项目文件夹
   pollSeconds: 30,
   fullHistoryDays: 14,
   // Claude desktop session list: identifies side chats (spawnedFrom) and archive state.
@@ -394,6 +445,7 @@ export const DEFAULTS = {
   aiRecordClosed: {},
   aiRecordViews: {},
   taskBoardViews: {},
+  taskBoardFiles: {},
   taskBoardPins: {},
   projectTeams: { presets: {}, byProject: {}, stewards: {} },
   workbenchWaves: {},
@@ -417,6 +469,10 @@ export const DEFAULTS = {
   autoLogGrokBotDoneMinutes: 120, // Grok Bot 多久无新对话自动标为 DONE（0 关闭）
   autoLogFirstRounds: 10,  // 第一次接入某个会话 / Bot 时只补最近几轮，之后只跟当天的新轮次
   autoLogSeen: {},         // 会话号 → 第一次记进日记的时间；按 180 天懒清理，用来区分「第一次接入」
+  noteDispatchJournal: false, // 非日记笔记里的派发也写当天日记；默认只写回原笔记
+  stewardWatch: false, // 管家中途干预：波次里有会话长时间没输出就提醒一次；默认关
+  replyInbox: [], // 回复信箱：还没回答的 ❓（渲染前会回笔记核对一遍）
+  noteDispatchSessions: {},   // 会话号 → 从非日记笔记派发的时间；默认 autoLog 跳过这些会话
   keywordStyle: true,      // 关键词配色与 tsq-ico 图标；TODOseq 自己在格式化时让位
   recordRules: { ...DEFAULT_RECORD_RULES },
   autoLogBatch: 8,         // 一轮最多问模型几个会话
@@ -428,6 +484,13 @@ export const DEFAULTS = {
   autoLogApiKey: "",
   autoLogTimeout: 120,     // 整理时等模型几秒
   autoLogFallback: true,   // 模型问不到时（自动整理也一样）用会话标题先记上
+  autoLogFailover: false,  // 主来源撞限额/超时/起不来时换下一个来源
+  autoLogBackupProvider: "", // 备用来源：留空=自动挑下一个已登录 CLI；也可指定 CLI 或 api
+  autoLogCooldownMin: 30,  // 撞限额的来源冷却多少分钟（冷却期内直接用备用来源）
+  autoLogApiConfirm: true, // 自动调用 API 前先问人（API 会算钱）；同意后 30 分钟内不再问
+  conclusionMaxCode: 65,   // 💬 编码类结论字数（做了什么、情况怎么样）
+  conclusionMaxQA: 160,    // 💬 知识问答类结论字数（可以长一点，讲清判断）
+  journalMarkerIntroShown: false, // 第一次遇到分区标记不全时解释过标记规则没有
   autoLogKw: true,         // 自动建的条目也跟着会话在 DOING / TOREVIEW / NEEDOK / ERRORED 之间切
   autoLogPath: "",
   autoLogArchiveDone: true,
@@ -444,6 +507,8 @@ export const DEFAULTS = {
   menuBarHotkey: "control+option+command+D",
   menuBarHideNautilus: true,
   menuBarMigrated: false,
+  menuBarPinnedSids: [],
+  menuBarAutoTitles: {},
   showEditorPills: true,
   lineProgress: true,
   showRibbonIcon: true,
@@ -451,7 +516,7 @@ export const DEFAULTS = {
   autoWriteResult: true,
   resultMax: 350,
   importNautilus: true,
-  dream: { enabled: false, scope: "all", path: "Agent Deck/长期记忆.md", provider: "", model: "", effort: "", apiUrl: "", apiKey: "", syncProfile: false, lastRun: 0, lastAttempt: 0, states: {}, coverage: null, lastError: "", share: { enabled: false, path: "", intervalHours: 24, gitPush: false, lastAttempt: 0, lastSuccess: 0, lastError: "" } },
+  dream: { enabled: false, inject: true, store: "text", dir: "Agent Deck/记忆", backlinked: [], scope: "all", path: "Agent Deck/长期记忆.md", provider: "", model: "", effort: "", apiUrl: "", apiKey: "", syncProfile: false, lastRun: 0, lastAttempt: 0, states: {}, coverage: null, lastError: "", share: { enabled: false, path: "", intervalHours: 24, gitPush: false, lastAttempt: 0, lastSuccess: 0, lastError: "" } },
   // Delegation
   delegate: {
     target: "claude",
@@ -467,9 +532,10 @@ export const DEFAULTS = {
       autoTrustedCwd: true,
       extraArgs: "",
     },
-    codex: { transport: "desktop", model: "gpt-6.1-sol", effort: "low", cwd: "", path: "", sandbox: "workspace-write" },
+    codex: { transport: "desktop", model: "gpt-6.1-sol", effort: "low", cwd: "", path: "", sandbox: "workspace-write", project: true },
     antigravity: { model: "antigravity-default", effort: "medium", path: "", cwd: "", autoApprove: false },
     opencode: { model: "opencode-default", effort: "medium", path: "", cwd: "", autoApprove: false, extraArgs: "" },
+    hermes: { model: "hermes-default", effort: "medium", path: "", cwd: "", autoApprove: false, extraArgs: "" },
     qoder: { model: "qoder-ultimate", effort: "high", permission: "auto", path: "", cwd: "", addVault: true, openDesktop: false, extraArgs: "" },
     dsh: {
       model: "deepseek-v4-pro",
@@ -483,6 +549,7 @@ export const DEFAULTS = {
     mentionTrigger: "@",
     promptPrefix: "",
     promptSuffix: "",
+    excludedDirs: [],
     markStatus: true,
     confirmFirst: true,   // 委派消息末尾追加可自定义的附加要求
     confirmFirstPrompt: CONFIRM_FIRST,
@@ -495,7 +562,7 @@ export const DEFAULTS = {
     pinned: ["claude-opus-5-5", "claude-sonnet-5", "deepseek-v4-pro"],
     order: MODEL_CATALOG.map((m) => m.id),
     custom: [],
-    defaultByAgent: { claude: "claude-opus-5-5", codex: "gpt-6.1-sol", dsh: "deepseek-v4-pro", antigravity: "antigravity-default", opencode: "opencode-default", qoder: "qoder-ultimate" },
+    defaultByAgent: { claude: "claude-opus-5-5", codex: "gpt-6.1-sol", dsh: "deepseek-v4-pro", antigravity: "antigravity-default", opencode: "opencode-default", hermes: "hermes-default", qoder: "qoder-ultimate" },
     effort: "high",
     effortByAgent: {},
   },
@@ -533,8 +600,12 @@ export function syncDelegationSettings(settings, raw = null) {
   m.defaultByAgent ||= {};
   m.effortByAgent ||= {};
   m.enabled = Array.isArray(m.enabled) ? m.enabled : [];
-  if (!["claude", "codex", "dsh", "antigravity", "opencode", "qoder"].includes(d.target)) d.target = "claude";
-  for (const agent of ["claude", "codex", "dsh", "antigravity", "opencode", "qoder"]) {
+  const delegateAgents = Object.keys(DEFAULTS.delegate).filter((k) => {
+    const entry = DEFAULTS.delegate[k];
+    return Boolean(entry && typeof entry === "object" && !Array.isArray(entry));
+  });
+  if (!delegateAgents.includes(d.target)) d.target = "claude";
+  for (const agent of delegateAgents) {
     const cfg = (d[agent] ||= {});
     const rawDelModel = raw?.delegate?.[agent]?.model;
     const rawModModel = raw?.models?.defaultByAgent?.[agent];

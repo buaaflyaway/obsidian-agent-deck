@@ -1,13 +1,15 @@
 // Agent Deck — the sidebar dashboard.
 
 import { workspaceLabel } from "./workflow.js";
+import { cliHandoffAgents } from "./agent-registry.js";
 import { ItemView, Menu, Modal } from "obsidian";
 import { AGENTS, AGENT_ORDER, fmtMin, fmtTok, timeAgo, truncate, dayKey, dayKeyToday, dayMinute, startOfDay } from "./constants.js";
 import { agentIcon, setLucide, stateIcon } from "./icons.js";
 import { lattice } from "./lattice.js";
 import { SESSION_MIME } from "./editor.js";
 import { t } from "./i18n.js";
-import { buildProjectGroups, planRecentProjectDisplay, isWaitingSession, isActiveNowSession, STANDALONE_PROJECT_ID } from "./project-workbench.js";
+import { buildProjectGroups, buildNowStatusGroups, planRecentProjectDisplay, isWaitingSession, isActiveNowSession, orderNowSessions, STANDALONE_PROJECT_ID } from "./project-workbench.js";
+import { treePlan, treeOrder } from "./session-tree.js";
 
 export const VIEW_TYPE = "agent-deck-view";
 export const RECENT_DAY_OPTIONS = [7, 30, 120];
@@ -77,6 +79,7 @@ export class AgentDeckView extends ItemView {
     this.expandedAgents = new Set();
     this.expandedProjects = new Set();
     this.collapsedNowProjects = new Set();
+    this.collapsedNowStatus = new Set();
     this._scroll = 0;
     this._bottomSlack = 0;
   }
@@ -87,7 +90,8 @@ export class AgentDeckView extends ItemView {
   }
 
   nowGroupBy() {
-    return this.plugin.settings?.ui?.nowGroupBy === "flat" ? "flat" : "project";
+    const v = this.plugin.settings?.ui?.nowGroupBy;
+    return v === "flat" || v === "status" ? v : "project";
   }
 
   recentGroupBy() {
@@ -232,12 +236,13 @@ export class AgentDeckView extends ItemView {
     const nowGroupBy = this.nowGroupBy();
     const nowHead = this.secHead(nowSec, t("现在"), t("{run} 个在跑 · {wait} 个等你", { run: running.length, wait: waiting.length }));
     const nowSwitch = nowHead.createDiv({ cls: "ad-range" });
-    for (const [id, label] of [["project", t("按项目")], ["flat", t("列表")]]) {
+    for (const [id, label] of [["project", t("按项目")], ["status", t("按状态")], ["flat", t("列表")]]) {
       const b = nowSwitch.createEl("button", { cls: "ad-chip ad-nowgroup__btn" + (nowGroupBy === id ? " is-on" : ""), text: label });
       b.onclick = () => {
         if (this.nowGroupBy() === id) return;
         (p.settings.ui ||= {}).nowGroupBy = id;
         p.saveSettings();
+        p.menubar?.update?.(true);
         this.render();
       };
     }
@@ -245,6 +250,9 @@ export class AgentDeckView extends ItemView {
     if (nowGroupBy === "project") {
       const nowActive = live.filter((x) => isActiveNowSession(x, now));
       this.renderNowProjects(nowList, nowActive);
+    } else if (nowGroupBy === "status") {
+      const nowActive = live.filter((x) => isActiveNowSession(x, now));
+      this.renderNowStatus(nowList, nowActive, now);
     } else {
       const nowItems = this.nowOrdered([...running, ...waiting]).slice(0, 6);
       if (!nowItems.length) this.empty(nowList, t("现在没有在跑的会话"));
@@ -288,7 +296,7 @@ export class AgentDeckView extends ItemView {
       };
     }
     const filters = recHead.createDiv({ cls: "ad-filters" });
-    for (const [id, label] of [["all", t("全部")], ["live", t("在跑")], ["wait", t("等你")], ["claude", "Claude"], ["codex", "Codex"], ["workbuddy", "WorkBuddy"], ["dsh", "DSH"], ["antigravity", "Antigravity"], ["opencode", "OpenCode"], ["qoder", "Qoder"], ["cursor", "Cursor"], ["grokbot", "Grok Bot"]]) {
+    for (const [id, label] of [["all", t("全部")], ["live", t("在跑")], ["wait", t("等你")], ["claude", "Claude"], ["codex", "Codex"], ["workbuddy", "WorkBuddy"], ["dsh", "DSH"], ["antigravity", "Antigravity"], ["opencode", "OpenCode"], ["qoder", "Qoder"], ["hermes", "Hermes"], ["qwenwork", t("千问办公")], ["cursor", "Cursor"], ["grokbot", "Grok Bot"]]) {
       const b = filters.createEl("button", { cls: "ad-chip" + (this.filter === id ? " is-on" : ""), text: label });
       b.onclick = () => { this._bottomSlack = 0; this.filter = id; this.render(); };
     }
@@ -380,19 +388,7 @@ export class AgentDeckView extends ItemView {
 
   // 「现在」：去掉移除过的，按拖出来的顺序排；没排过的（新来的）放最上面
   nowOrdered(items) {
-    const st = this.plugin.settings;
-    const hidden = st.nowHidden || {};
-    const order = st.nowOrder || [];
-    return items
-      .filter((x) => !hidden[x.sid])
-      .map((x, i) => ({ x, i, k: order.indexOf(x.sid) }))
-      .sort((a, b) => {
-        if (a.k < 0 && b.k < 0) return a.i - b.i;
-        if (a.k < 0) return -1;
-        if (b.k < 0) return 1;
-        return a.k - b.k;
-      })
-      .map((o) => o.x);
+    return orderNowSessions(items, this.plugin.settings);
   }
 
   nowReorder(list) {
@@ -493,6 +489,40 @@ export class AgentDeckView extends ItemView {
     }
   }
 
+  renderNowStatus(nowList, liveRows, now = Date.now()) {
+    const p = this.plugin;
+    const hidden = p.settings?.nowHidden || {};
+    const groups = buildNowStatusGroups(this.nowOrdered(liveRows), {
+      jobs: p.jobs || {},
+      agentEnabled: (id) => p.agentEnabled(id),
+      now,
+    }).map((g) => ({
+      ...g,
+      sessions: g.sessions.filter((s) => !hidden[s.sid]),
+    })).filter((g) => g.sessions.length > 0);
+    if (!groups.length) return this.empty(nowList, t("现在没有在跑的会话"));
+    for (const g of groups) {
+      const collapsed = this.collapsedNowStatus.has(g.id);
+      const card = nowList.createDiv({ cls: `ad-projgroup ${collapsed ? "is-collapsed" : "is-open"}${g.attention ? " has-attention" : ""}` });
+      card.dataset.status = g.id;
+      const head = card.createDiv({ cls: "ad-projgroup__head" });
+      const toggle = head.createEl("button", { cls: "ad-projgroup__toggle", attr: { type: "button" } });
+      toggle.createSpan({ cls: "ad-projgroup__chev", text: collapsed ? "▸" : "▾" });
+      toggle.createSpan({ cls: "ad-projgroup__name", text: t(g.label) });
+      const badges = toggle.createSpan({ cls: "ad-projgroup__badges" });
+      badges.createSpan({ cls: `ad-projbadge is-${g.tone}`, text: String(g.sessions.length) });
+      toggle.onclick = () => {
+        if (this.collapsedNowStatus.has(g.id)) this.collapsedNowStatus.delete(g.id);
+        else this.collapsedNowStatus.add(g.id);
+        this.render();
+      };
+      if (!collapsed) {
+        const body = card.createDiv({ cls: "ad-projgroup__list" });
+        for (const s of g.sessions) this.sessionCard(body, s, true);
+      }
+    }
+  }
+
   renderSessions(sec) {
     const list = sec._list || sec.querySelector(".ad-sessionlist");
     if (!list) return;
@@ -502,6 +532,10 @@ export class AgentDeckView extends ItemView {
     const rows = sec._rows || filterRecentRows(p.recentSessions({ days, limit: 1000 }), this.filter);
     sec._rows = rows;
     if (!rows.length) return this.empty(list, t("没有符合条件的会话"));
+    // 父子树：父在同一份列表里就排在父后面并缩进；父不在就留在顶层（分过组也算不在）。
+    const tree = treePlan(rows);
+    const ordered = (items) => treeOrder(items, tree);
+    const depthOf = (s) => tree.depth.get(s.sid) || 0;
     if (this.recentGroupBy() === "project" && !AGENTS[this.filter]) {
       const plan = planRecentProjectDisplay(rows, {
         expanded: this.expandedProjects,
@@ -511,7 +545,7 @@ export class AgentDeckView extends ItemView {
       });
       for (const g of plan.groups) {
         if (g.items.length === 1) {
-          this.sessionCard(list, g.visibleItems[0], false);
+          this.sessionCard(list, g.visibleItems[0], false, depthOf(g.visibleItems[0]));
           continue;
         }
         const leadAgent = AGENTS[g.agents[0]] || AGENTS.claude;
@@ -522,7 +556,7 @@ export class AgentDeckView extends ItemView {
         if (g.stacked) {
           const expand = () => this.toggleStackGroup(sec, stack, g.id, true, "project");
           const topWrap = stack.createDiv({ cls: "ad-stack__top" });
-          this.sessionCard(topWrap, g.visibleItems[0], false);
+          this.sessionCard(topWrap, g.visibleItems[0], false, depthOf(g.visibleItems[0]));
           const topCard = topWrap.firstElementChild;
           if (topCard) topCard.onclick = expand;
           const bar = stack.createEl("button", { cls: "ad-stack__bar", attr: { type: "button" } });
@@ -537,7 +571,7 @@ export class AgentDeckView extends ItemView {
           head.createSpan({ cls: "ad-stack__toggle", text: `${t("收起")} ▴` });
           head.onclick = () => this.toggleStackGroup(sec, stack, g.id, false, "project");
           const body = stack.createDiv({ cls: "ad-stack__list" });
-          for (const s of g.visibleItems) this.sessionCard(body, s, false);
+          for (const s of ordered(g.visibleItems)) this.sessionCard(body, s, false, depthOf(s));
           if (g.unshownCount > 0) {
             stack.createDiv({ cls: "ad-stack__foot", text: t("已达单页 {max} 张卡片上限，另有 {n} 条较早会话未显示", { max: MAX_RECENT_CARDS, n: g.unshownCount }) });
           }
@@ -547,7 +581,7 @@ export class AgentDeckView extends ItemView {
     }
     const plan = planRecentDisplay(rows, { filter: this.filter, expanded: this.expandedAgents, maxCards: MAX_RECENT_CARDS });
     if (plan.mode === "flat") {
-      for (const s of plan.cards) this.sessionCard(list, s, false);
+      for (const s of ordered(plan.cards)) this.sessionCard(list, s, false, depthOf(s));
       if (plan.hiddenCount > 0) {
         list.createDiv({ cls: "ad-recent-more", text: t("已显示最新 {shown} / 共 {total} 张卡片，更多请用顶部搜索", { shown: plan.renderedCount, total: plan.total }) });
       }
@@ -556,7 +590,7 @@ export class AgentDeckView extends ItemView {
     for (const g of plan.groups) {
       const a = AGENTS[g.agent] || AGENTS.claude;
       if (g.items.length === 1) {
-        this.sessionCard(list, g.visibleItems[0], false);
+        this.sessionCard(list, g.visibleItems[0], false, depthOf(g.visibleItems[0]));
         continue;
       }
       const stack = list.createDiv({ cls: `ad-stack ${g.stacked ? "is-collapsed" : "is-expanded"}` });
@@ -566,7 +600,7 @@ export class AgentDeckView extends ItemView {
       if (g.stacked) {
         const expand = () => this.toggleStackGroup(sec, stack, g.agent, true, "agent");
         const topWrap = stack.createDiv({ cls: "ad-stack__top" });
-        this.sessionCard(topWrap, g.visibleItems[0], false);
+        this.sessionCard(topWrap, g.visibleItems[0], false, depthOf(g.visibleItems[0]));
         const topCard = topWrap.firstElementChild;
         if (topCard) topCard.onclick = expand;
         const bar = stack.createEl("button", { cls: "ad-stack__bar", attr: { type: "button" } });
@@ -581,7 +615,7 @@ export class AgentDeckView extends ItemView {
         head.createSpan({ cls: "ad-stack__toggle", text: `${t("收起")} ▴` });
         head.onclick = () => this.toggleStackGroup(sec, stack, g.agent, false, "agent");
         const body = stack.createDiv({ cls: "ad-stack__list" });
-        for (const s of g.visibleItems) this.sessionCard(body, s, false);
+        for (const s of ordered(g.visibleItems)) this.sessionCard(body, s, false, depthOf(s));
         if (g.unshownCount > 0) {
           stack.createDiv({ cls: "ad-stack__foot", text: t("已达单页 {max} 张卡片上限，另有 {n} 条较早会话未显示", { max: MAX_RECENT_CARDS, n: g.unshownCount }) });
         }
@@ -757,7 +791,7 @@ export class AgentDeckView extends ItemView {
     // 笔记里的一项拖上来 = 委派给它
     // 按住 ⌘：Claude Code / Codex 改在终端里开交互式会话
     const handoff = id === "codex" || id === "workbuddy";
-    const cliCapable = ["claude", "codex", "opencode", "qoder", "workbuddy"].includes(id);
+    const cliCapable = cliHandoffAgents().includes(id);
     const hint = handoff ? t("交给 {name}", { name: a.short }) : t("委派给 {name}", { name: a.short });
     // 设置里「默认在终端里委派」开着时反过来：不按 ⌘ 在终端里开，按住 ⌘ 走原来的后台 / 客户端
     const toTerm = (meta) => cliCapable && (!!meta !== !!p.settings.delegateInTerminal);
@@ -914,7 +948,7 @@ export class AgentDeckView extends ItemView {
     }
   }
 
-  sessionCard(parent, s, compact) {
+  sessionCard(parent, s, compact, depth = 0) {
     const p = this.plugin;
     const a = AGENTS[s.agent] || AGENTS.claude;
     const card = parent.createDiv({ cls: `ad-sess ${compact ? "is-now" : ""}` });
@@ -947,8 +981,12 @@ export class AgentDeckView extends ItemView {
     });
     card.style.setProperty("--ad-agent", a.color);
     card.style.setProperty("--ad-agent-soft", a.soft);
-    const child = !!s.parentSid;
-    if (child) card.addClass("is-child");
+    // 只有父会话就在这份列表里（depth > 0）时才缩进；父不在列表就留在顶层，缩进不能凭空捏造层级。
+    const child = depth > 0;
+    if (child) {
+      card.addClass("is-child");
+      card.style.setProperty("--ad-tree-depth", String(depth));
+    }
     const live = ["run", "starting", "running"].includes(s.state);
     const wait = ["wait", "quiet", "needs-approval"].includes(s.state);
     if (live) card.addClass("is-live");
@@ -990,7 +1028,8 @@ export class AgentDeckView extends ItemView {
     sub.createSpan({ text: "·" });
     sub.createSpan({ text: timeAgo(s.lastAt) });
     if (s.tokens) { sub.createSpan({ text: "·" }); sub.createSpan({ cls: "ad-sess__tok", text: fmtTok(s.tokens) + " tok" }); }
-    if (child) {
+    // 父子关系这一行照旧：父在不在列表里都写出来（缩进只表示"父就在眼前"）。
+    if (s.parentSid) {
       const kin = body.createDiv({ cls: "ad-sess__kin" });
       kin.createSpan({ cls: "ad-sess__kinmark", text: "↳" });
       kin.createSpan({ cls: "ad-sess__kintitle", text: t("从「{title}」开出", { title: truncate(s.parentTitle || t("母会话"), 24) }) });
