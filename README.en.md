@@ -121,7 +121,7 @@ Watch every agent in the sidebar, delegate from your notes, and flip one AI reco
 | **Qoder** | Yes | Yes | Copies the task and opens the app | Yes |
 | **Hermes Agent** | Yes | Yes | No (no desktop UI) | Yes |
 | **QwenWork (千问办公)** | Yes | No | No (tracking only) | — |
-| **TeleAgent (星辰超级智能体)** | Yes | No | No (tracking only) | — |
+| **TeleAgent (星辰超级智能体)** | Yes | No | Copies the task and opens the app | — |
 | **WorkBuddy** | Yes | No | Copies the task and opens the app | Yes |
 | **Cursor** | Yes (Hooks required) | No | No (tracking only) | — |
 | **Grok Bot** | Yes (per-Bot selection) | No | No (tracking only) | — |

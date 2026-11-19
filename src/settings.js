@@ -445,10 +445,10 @@ export class AgentDeckSettingsTab extends PluginSettingTab {
     // 1. 委派 → 默认目标
     const destinations = this.card(body, t("默认委派到"), t("追踪主力与默认委派分别设置"));
     const targetRow = destinations.createDiv({ cls: "ad-targetpick" });
-    const targetHints = { workbuddy: t("客户端交接"), claude: t("桌面版 / 后台"), codex: t("桌面版 / 终端"), qoder: t("桌面版 / CLI") };
+    const targetHints = { workbuddy: t("客户端交接"), teleagent: t("客户端交接"), claude: t("桌面版 / 后台"), codex: t("桌面版 / 终端"), qoder: t("桌面版 / CLI") };
     for (const id of settingsAgentOrder(s, "delegation", id => p.agentEnabled(id))) {
       const a = AGENTS[id];
-      const available = id !== "workbuddy" && !a.trackingOnly;
+      const available = id !== "workbuddy" && id !== "teleagent" && !a.trackingOnly;
       const item = targetRow.createDiv({ cls: "ad-settings-target" });
       item.dataset.agent = id;
       this.sortHandle(item, targetRow, "delegation", id);
@@ -774,7 +774,7 @@ export class AgentDeckSettingsTab extends PluginSettingTab {
     const rest = visible.filter((m) => !d.pinned.includes(m.id));
     for (const agent of AGENT_ORDER) {
       const rows = [...pinned, ...rest].filter((m) => m.agent === agent);
-      const clientModels = agent === "workbuddy" || AGENTS[agent].trackingOnly;
+      const clientModels = agent === "workbuddy" || agent === "teleagent" || AGENTS[agent].trackingOnly;
       if (!rows.length && (!clientModels || q || this.filter !== "all")) continue;
       const state = p.settings.ui.modelGroups[agent];
       const g = list.createEl(clientModels ? "div" : "details", { cls: "ad-modelgroup" });

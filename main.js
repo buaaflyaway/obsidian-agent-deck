@@ -2193,8 +2193,7 @@ var AGENTS = {
     kind: "teleagent",
     where: ["~/.local/share/TeleAgent/users/*/teleagent.db", t("TeleAgent\uFF08\u661F\u8FB0\u8D85\u7EA7\u667A\u80FD\u4F53\uFF09\u684C\u9762\u7248\uFF08\u672C\u5730\u4F1A\u8BDD\u5E93\u8FFD\u8E2A\uFF09")],
     deep: "teleagent",
-    desktopOnly: true,
-    trackingOnly: true
+    desktopOnly: true
   }
 };
 var AGENT_ORDER = ["claude", "codex", "workbuddy", "dsh", "antigravity", "opencode", "qoder", "hermes", "qwenwork", "teleagent", "cursor", "grokbot"];
@@ -5830,11 +5829,11 @@ var AttentionTracker = class {
 var activeJob = (job) => ["starting", "running", "needs-approval"].includes(job?.state);
 function destinations(agent) {
   const modes = {
-    desktop: { id: "desktop", label: t("\u5728\u684C\u9762\u5BA2\u6237\u7AEF\u4E2D\u804A"), hint: ["workbuddy", "qoder"].includes(agent) ? t("\u590D\u5236\u4EFB\u52A1\u5E76\u6253\u5F00\u5BA2\u6237\u7AEF\uFF0C\u7B49\u5F85\u4F60\u7C98\u8D34\u53D1\u9001\u3002") : agent === "dsh" ? t("\u5EFA\u7ACB\u4F1A\u8BDD\u540E\u6253\u5F00 Harness\uFF1B\u5F53\u524D\u8F6E\u7ED3\u675F\u540E\u5728\u4FA7\u680F\u9009\u62E9\u540C\u4E00\u4F1A\u8BDD\u7EE7\u7EED\u3002") : t("\u5148\u6267\u884C\u9996\u8F6E\uFF0C\u7ED3\u675F\u540E\u6253\u5F00\u684C\u9762\u4E2D\u7684\u540C\u4E00\u4F1A\u8BDD\uFF1B\u9996\u8F6E\u671F\u95F4\u907F\u514D\u4E24\u8FB9\u540C\u65F6\u53D1\u9001\u3002") },
+    desktop: { id: "desktop", label: t("\u5728\u684C\u9762\u5BA2\u6237\u7AEF\u4E2D\u804A"), hint: ["workbuddy", "qoder", "teleagent"].includes(agent) ? t("\u590D\u5236\u4EFB\u52A1\u5E76\u6253\u5F00\u5BA2\u6237\u7AEF\uFF0C\u7B49\u5F85\u4F60\u7C98\u8D34\u53D1\u9001\u3002") : agent === "dsh" ? t("\u5EFA\u7ACB\u4F1A\u8BDD\u540E\u6253\u5F00 Harness\uFF1B\u5F53\u524D\u8F6E\u7ED3\u675F\u540E\u5728\u4FA7\u680F\u9009\u62E9\u540C\u4E00\u4F1A\u8BDD\u7EE7\u7EED\u3002") : t("\u5148\u6267\u884C\u9996\u8F6E\uFF0C\u7ED3\u675F\u540E\u6253\u5F00\u684C\u9762\u4E2D\u7684\u540C\u4E00\u4F1A\u8BDD\uFF1B\u9996\u8F6E\u671F\u95F4\u907F\u514D\u4E24\u8FB9\u540C\u65F6\u53D1\u9001\u3002") },
     background: { id: "background", label: t("\u540E\u53F0\u6267\u884C"), hint: t("\u7559\u5728\u5F53\u524D\u7B14\u8BB0\uFF0C\u5B8C\u6210\u6216\u9700\u8981\u5904\u7406\u65F6\u63D0\u9192\u3002") },
     terminal: { id: "terminal", label: t("\u5728\u7EC8\u7AEF\u4E2D\u804A"), hint: t("\u6253\u5F00\u4EA4\u4E92\u7EC8\u7AEF\uFF0C\u540E\u7EED\u5728\u7EC8\u7AEF\u7EE7\u7EED\u3002") }
   };
-  const ids = { claude: ["desktop", "background", "terminal"], codex: ["desktop", "background", "terminal"], dsh: ["desktop", "background"], antigravity: ["background"], opencode: ["desktop", "background", "terminal"], qoder: ["desktop", "background", "terminal"], hermes: ["background", "terminal"], workbuddy: ["desktop", "terminal"] };
+  const ids = { claude: ["desktop", "background", "terminal"], codex: ["desktop", "background", "terminal"], dsh: ["desktop", "background"], antigravity: ["background"], opencode: ["desktop", "background", "terminal"], qoder: ["desktop", "background", "terminal"], hermes: ["background", "terminal"], workbuddy: ["desktop", "terminal"], teleagent: ["desktop"] };
   return (ids[agent] || []).map((id) => modes[id]);
 }
 function defaultDestination(plugin, agent) {
@@ -11492,6 +11491,20 @@ var CAPABILITIES = /* @__PURE__ */ new Map([
     modelCatalog: false,
     sessionLinkScheme: "workbuddy"
   }],
+  // TeleAgent 没有 CLI / ACP：拖任务过去只做「复制 + 唤起客户端」，会话靠文本前缀认领。
+  // 会话深链用 Deck 自己的 obsidian:// 协议（`teleai-cowork://` 的会话定位没核验到）。
+  ["teleagent", {
+    delegate: false,
+    runnerKind: "handoff",
+    acp: false,
+    desktopHandoffOnly: true,
+    terminalHandoff: false,
+    continueInApp: false,
+    permissionControl: false,
+    archiveDetection: false,
+    modelCatalog: false,
+    sessionLinkScheme: "obsidian"
+  }],
   ["dsh", {
     delegate: true,
     runnerKind: "acp",
@@ -14621,6 +14634,7 @@ ${source}`;
         job.state = "cancelled";
         job.error = t("\u534A\u5C0F\u65F6\u91CC\u6CA1\u5728\u5BA2\u6237\u7AEF\u770B\u5230\u8FD9\u4E2A\u4EFB\u52A1\u7684\u65B0\u4F1A\u8BDD");
         job.endedAt = Date.now();
+        this.plugin.notice?.(job.error);
         this.saveJobs();
         continue;
       }
@@ -21133,7 +21147,7 @@ var AgentDeckView = class extends import_obsidian5.ItemView {
     const pinned = this.agentLayout().pinned.includes(id);
     card.style.setProperty("--ad-agent", a.color);
     card.style.setProperty("--ad-agent-soft", a.soft);
-    const handoff = id === "codex" || id === "workbuddy";
+    const handoff = id === "codex" || id === "workbuddy" || id === "teleagent";
     const cliCapable = cliHandoffAgents().includes(id);
     const hint = handoff ? t("\u4EA4\u7ED9 {name}", { name: a.short }) : t("\u59D4\u6D3E\u7ED9 {name}", { name: a.short });
     const toTerm = (meta) => cliCapable && !!meta !== !!p2.settings.delegateInTerminal;
@@ -24877,10 +24891,10 @@ var AgentDeckSettingsTab = class extends import_obsidian7.PluginSettingTab {
     if (syncModelGroups(s, (id) => p2.agentEnabled(id))) p2.saveSettings();
     const destinations2 = this.card(body, t("\u9ED8\u8BA4\u59D4\u6D3E\u5230"), t("\u8FFD\u8E2A\u4E3B\u529B\u4E0E\u9ED8\u8BA4\u59D4\u6D3E\u5206\u522B\u8BBE\u7F6E"));
     const targetRow = destinations2.createDiv({ cls: "ad-targetpick" });
-    const targetHints = { workbuddy: t("\u5BA2\u6237\u7AEF\u4EA4\u63A5"), claude: t("\u684C\u9762\u7248 / \u540E\u53F0"), codex: t("\u684C\u9762\u7248 / \u7EC8\u7AEF"), qoder: t("\u684C\u9762\u7248 / CLI") };
+    const targetHints = { workbuddy: t("\u5BA2\u6237\u7AEF\u4EA4\u63A5"), teleagent: t("\u5BA2\u6237\u7AEF\u4EA4\u63A5"), claude: t("\u684C\u9762\u7248 / \u540E\u53F0"), codex: t("\u684C\u9762\u7248 / \u7EC8\u7AEF"), qoder: t("\u684C\u9762\u7248 / CLI") };
     for (const id of settingsAgentOrder(s, "delegation", (id2) => p2.agentEnabled(id2))) {
       const a = AGENTS[id];
-      const available = id !== "workbuddy" && !a.trackingOnly;
+      const available = id !== "workbuddy" && id !== "teleagent" && !a.trackingOnly;
       const item = targetRow.createDiv({ cls: "ad-settings-target" });
       item.dataset.agent = id;
       this.sortHandle(item, targetRow, "delegation", id);
@@ -25303,7 +25317,7 @@ var AgentDeckSettingsTab = class extends import_obsidian7.PluginSettingTab {
     const rest = visible.filter((m) => !d.pinned.includes(m.id));
     for (const agent of AGENT_ORDER) {
       const rows = [...pinned, ...rest].filter((m) => m.agent === agent);
-      const clientModels = agent === "workbuddy" || AGENTS[agent].trackingOnly;
+      const clientModels = agent === "workbuddy" || agent === "teleagent" || AGENTS[agent].trackingOnly;
       if (!rows.length && (!clientModels || q || this.filter !== "all")) continue;
       const state = p2.settings.ui.modelGroups[agent];
       const g = list.createEl(clientModels ? "div" : "details", { cls: "ad-modelgroup" });
@@ -38303,7 +38317,7 @@ ${t("\u8BF7\u6309\u8FD9\u4E2A\u7EE7\u7EED\uFF0C\u4E0D\u7528\u518D\u95EE\u540C\u4
       const where = s.isPendingJob ? t("\u5F85\u8BA4\u9886") : whereByAgent[agent] || t("\u684C\u9762\u7248");
       const openUrl = s.isPendingJob ? s.job?.path ? `obsidian://open?file=${encodeURIComponent(s.job.path)}` : "obsidian://agent-deck" : acp || usesDeckSessionLink(agent) || isCliSession(agent, s.app) && cfg.cliOpen !== "desktop" ? deckSessionUrl(agent, s.sid) : sessionDeepLink(agent, s.sid);
       const copyByAgent = { codex: `codex resume ${s.sid}`, hermes: `hermes --resume ${s.sid}` };
-      const copy = s.isPendingJob ? "" : ["dsh", "antigravity", "opencode", "qoder"].includes(agent) || AGENTS[agent].trackingOnly ? s.sid : copyByAgent[agent] || "";
+      const copy = s.isPendingJob ? "" : ["dsh", "antigravity", "opencode", "qoder", "teleagent"].includes(agent) || AGENTS[agent].trackingOnly ? s.sid : copyByAgent[agent] || "";
       const prog = this.sessionProgressText(s, s.job);
       const stepStr = [prog, s.step ? truncate(s.step, 30) : ""].filter(Boolean).join(" \xB7 ");
       const pinIdx = pinnedIndex.has(s.sid) ? pinnedIndex.get(s.sid) : -1;

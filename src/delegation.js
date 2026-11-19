@@ -1088,6 +1088,7 @@ export class Delegator {
         job.state = "cancelled";
         job.error = t("半小时里没在客户端看到这个任务的新会话");
         job.endedAt = Date.now();
+        this.plugin.notice?.(job.error);
         this.saveJobs();
         continue;
       }

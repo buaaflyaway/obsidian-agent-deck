@@ -3641,7 +3641,7 @@ export default class AgentDeckPlugin extends Plugin {
           ? J.deckSessionUrl(agent, s.sid)
           : sessionDeepLink(agent, s.sid);
       const copyByAgent = { codex: `codex resume ${s.sid}`, hermes: `hermes --resume ${s.sid}` };
-      const copy = s.isPendingJob ? "" : ((["dsh", "antigravity", "opencode", "qoder"].includes(agent) || AGENTS[agent].trackingOnly) ? s.sid : (copyByAgent[agent] || ""));
+      const copy = s.isPendingJob ? "" : ((["dsh", "antigravity", "opencode", "qoder", "teleagent"].includes(agent) || AGENTS[agent].trackingOnly) ? s.sid : (copyByAgent[agent] || ""));
       const prog = this.sessionProgressText(s, s.job);
       const stepStr = [prog, s.step ? truncate(s.step, 30) : ""].filter(Boolean).join(" · ");
       const pinIdx = pinnedIndex.has(s.sid) ? pinnedIndex.get(s.sid) : -1;

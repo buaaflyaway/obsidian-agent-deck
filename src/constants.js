@@ -173,7 +173,6 @@ export const AGENTS = {
     where: ["~/.local/share/TeleAgent/users/*/teleagent.db", t("TeleAgent（星辰超级智能体）桌面版（本地会话库追踪）")],
     deep: "teleagent",
     desktopOnly: true,
-    trackingOnly: true,
   },
 };
 

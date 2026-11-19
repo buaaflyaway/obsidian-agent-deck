@@ -11,6 +11,10 @@ import { desktopMessages, desktopSessions } from '../src/desktop-sessions.js';
 import { AgentUsage } from '../src/readers.js';
 import { AGENTS, DEFAULTS, deepMerge } from '../src/constants.js';
 import * as J from '../src/journal.js';
+import { Delegator } from '../src/delegation.js';
+import { hasAgentCapability, usesDeckSessionLink } from '../src/agent-registry.js';
+import { destinations, executionStatus } from '../src/workflow.js';
+import { createRequire } from 'node:module';
 
 const quote = (x) => "'" + String(typeof x === 'object' ? JSON.stringify(x) : x).replaceAll("'", "''") + "'";
 const sql = (db, s) => execFileSync(resolveSqliteBinary(), [db, s], { stdio: 'pipe' });
@@ -117,9 +121,9 @@ test('stripTeleAgentContext keeps the visible attachment name and drops absolute
   assert.equal(stripTeleAgentContext('普通提问'), '普通提问');
 });
 
-test('TeleAgent is registered as a desktop-only tracking agent', () => {
+test('TeleAgent is registered as a desktop-only agent with copy handoff', () => {
   assert.equal(AGENTS.teleagent.desktopOnly, true);
-  assert.equal(AGENTS.teleagent.trackingOnly, true);
+  assert.equal(AGENTS.teleagent.trackingOnly, undefined, 'handoff agents are not trackingOnly; that flag blocks drops');
   assert.equal(DEFAULTS.agents.teleagent, true);
 });
 
@@ -130,4 +134,54 @@ test('TeleAgent journal links round-trip through the deck scheme and get the ta 
   const blockId = J.makeBlockId('ses_tele_demo_001', 'teleagent', 'demo');
   assert.ok(blockId.startsWith('ta-demo-'), blockId);
   assert.equal(J.isDeckBlockId(blockId), true);
+});
+
+test('TeleAgent is handoff-only: it accepts desktop drops but never claims background delegation', () => {
+  assert.equal(hasAgentCapability('teleagent', 'delegate'), false);
+  assert.equal(hasAgentCapability('teleagent', 'desktopHandoffOnly'), true);
+  assert.equal(hasAgentCapability('teleagent', 'terminalHandoff'), false);
+  assert.equal(usesDeckSessionLink('teleagent'), true, 'no client deep link, so the deck scheme carries the session');
+  assert.deepEqual(destinations('teleagent').map((d) => d.id), ['desktop']);
+  assert.equal(executionStatus({ agent: 'teleagent', handoff: true, state: 'starting' }), '等待你在客户端粘贴发送');
+});
+
+test('dragging a task to TeleAgent copies it, opens the client and claims the new session', async () => {
+  const req = createRequire(import.meta.url);
+  const opened = [];
+  globalThis.require = (s) => (s === 'electron' ? { shell: { openExternal: (u) => opened.push(u) } } : req(s));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ad-teleagent-handoff-'));
+  const note = '- TODO 核对培训材料 ^ta-demo\n';
+  const plugin = {
+    settings: deepMerge(DEFAULTS, {}),
+    jobs: {},
+    vaultPath: dir,
+    usage: { meta: new Map() },
+    saveSettings() {},
+    saveJobs() {},
+    refreshUI() {},
+    notice() {},
+    readNote: async () => note,
+    writeNote: async () => {},
+    agentEnabled: () => true,
+    modelsFor: () => [],
+    defaultModel: () => '',
+    markBound() {},
+  };
+  try {
+    const d = new Delegator(plugin);
+    const job = await d.delegate({ agent: 'teleagent', file: { path: 'note.md' }, line: 0 });
+    assert.equal(job.agent, 'teleagent');
+    assert.equal(job.handoff, true, 'no delegate capability, so the job is a copy handoff');
+    assert.ok(opened.includes('teleai-cowork://'), 'the client is opened through its URL scheme');
+    assert.ok(plugin.jobs[job.id], 'the job is persisted so a later scan can claim it');
+
+    // 下一轮扫描里出现的新会话：文本开头对得上，就绑回这一行
+    plugin.usage.meta.set('ses_claimed', { agent: 'teleagent', sid: 'ses_claimed', lastAt: Date.now(), text: job.prompt.slice(0, 40) });
+    d.resolveHandoffs(plugin.usage);
+    assert.equal(job.sessionId, 'ses_claimed');
+    assert.equal(job.state, 'bound');
+  } finally {
+    delete globalThis.require;
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
