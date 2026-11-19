@@ -14,8 +14,10 @@ import hermes from "../assets/agents/hermes.png";
 import qwenwork from "../assets/agents/qwenwork.png";
 import cursor from "../assets/agents/cursor.png";
 import grokbot from "../assets/agents/grokbot.png";
+// TeleAgent 的图标取自它自己的安装目录（resources/icon.png，256×256），等比缩到 128×128 与其它图标一致。
+import teleagent from "../assets/agents/teleagent.png";
 
-export const AGENT_IMAGES = { claude, codex, workbuddy, dsh, antigravity, opencode, qoder, hermes, qwenwork, cursor, grokbot };
+export const AGENT_IMAGES = { claude, codex, workbuddy, dsh, antigravity, opencode, qoder, hermes, qwenwork, cursor, grokbot, teleagent };
 
 export function agentImageBuffer(id) {
   const uri = AGENT_IMAGES[id];
