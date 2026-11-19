@@ -504,7 +504,7 @@ export class AgentUsage {
       if (!this.enabled(agent) || onlyAgent && agent !== onlyAgent || !fs.existsSync(db)) continue;
       try {
         const sessions = await desktopSessions(db, agent, !strictSince && this.isPrimary(agent) ? 0 : floor);
-        const scope = this.isPrimary(agent) ? -1 : Number(dayKeyToday(this.cfg).replaceAll("-", ""));
+        const scope = this.isPrimary(agent) ? -1 : Number(dayKeyToday(this.cfg).replace(/\D/g, "")) || 0;
         for (const row of sessions) {
           const key = `${db}#${row.sid}`;
           if (row.archived || row.deletedAt) this.archived.add(row.sid); else this.archived.delete(row.sid);
@@ -840,7 +840,7 @@ export class AgentUsage {
         : { homeDir: home() },
     );
     const activeTracked = new Set();
-    const scope = this.isPrimary("grokbot") ? -1 : Number(dayKeyToday(this.cfg).replaceAll("-", ""));
+    const scope = this.isPrimary("grokbot") ? -1 : Number(dayKeyToday(this.cfg).replace(/\D/g, "")) || 0;
 
     for (const bot of storage.bots) {
       if (!tracked.has(bot.id) || !bot.transcriptPath) continue;

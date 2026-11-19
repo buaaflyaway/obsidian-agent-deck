@@ -9103,7 +9103,7 @@ var AgentUsage = class {
       if (!this.enabled(agent) || onlyAgent && agent !== onlyAgent || !import_fs8.default.existsSync(db)) continue;
       try {
         const sessions = await desktopSessions(db, agent, !strictSince && this.isPrimary(agent) ? 0 : floor);
-        const scope = this.isPrimary(agent) ? -1 : Number(dayKeyToday(this.cfg).replaceAll("-", ""));
+        const scope = this.isPrimary(agent) ? -1 : Number(dayKeyToday(this.cfg).replace(/\D/g, "")) || 0;
         for (const row of sessions) {
           const key = `${db}#${row.sid}`;
           if (row.archived || row.deletedAt) this.archived.add(row.sid);
@@ -9466,7 +9466,7 @@ var AgentUsage = class {
       this.settings.grokBotPersistenceDir ? { persistenceDir: this.settings.grokBotPersistenceDir } : { homeDir: home2() }
     );
     const activeTracked = /* @__PURE__ */ new Set();
-    const scope = this.isPrimary("grokbot") ? -1 : Number(dayKeyToday(this.cfg).replaceAll("-", ""));
+    const scope = this.isPrimary("grokbot") ? -1 : Number(dayKeyToday(this.cfg).replace(/\D/g, "")) || 0;
     for (const bot of storage.bots) {
       if (!tracked.has(bot.id) || !bot.transcriptPath) continue;
       let st;
