@@ -27,4 +27,5 @@
 ## `docs/research/` 调研索引
 | 文档 | 覆盖范围 |
 | --- | --- |
+| [`research/teleagent-linux-probe.zh-CN.md`](research/teleagent-linux-probe.zh-CN.md) | TeleAgent Linux 派发通道实测（2026-11-19，treeland Wayland + XWayland）：AT-SPI 依赖/无 root 结论、`windowactivate` 在 treeland 失效与 `windowfocus` 校验、字母键被输入法吞掉→必须剪贴板粘贴、端口/深链画像、一次获批端到端提交的 SQL 证据 |
 | [`research/teleagent-ecosystem.zh-CN.md`](research/teleagent-ecosystem.zh-CN.md) | TeleAgent（星辰超级智能体）开源生态调研（2026-11-17）：33 个社区仓库的功能与实现方式、三条接入路线、本地内核接口画像、对 Agent Deck 的可借鉴/有条件/禁止三档取舍与封号风险 |

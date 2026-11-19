@@ -1,6 +1,6 @@
 # TeleAgent 界面自动化（Windows UI Automation）可行性与实测
 
-> 状态：**探测层与完整动作流程均已实测通过**（2026-11-19，分支 `feat/teleagent-adapter`）——§6 记录了一次真实的「新建任务 → 选项目 → 输入 → 运行」端到端执行。核验环境：Windows 11 + TeleAgent 桌面版 **3.1.0**（Electron **43.1.0**，`appUserModelId=com.teleai.superagent`，安装于 `D:\Program Files\TeleClaw\TeleAgent`）。**macOS / Linux 未实测**，按 AGENTS.md 口径不外推。
+> 状态：**Windows 探测层与完整动作流程均已实测通过**（2026-11-19，分支 `feat/teleagent-adapter`）——§6 记录了一次真实的「新建任务 → 选项目 → 输入 → 运行」端到端执行。核验环境：Windows 11 + TeleAgent 桌面版 **3.1.0**（Electron **43.1.0**，`appUserModelId=com.teleai.superagent`，安装于 `D:\Program Files\TeleClaw\TeleAgent`）。**Linux 通道已在本机 Wayland/XWayland 实测并落地（§11，2026-11-19）**；**macOS 未实测**，按 AGENTS.md 口径不外推。
 >
 > 与 [`teleagent-adapter.zh-CN.md`](teleagent-adapter.zh-CN.md) 的分工：那份定义**只读数据契约**（直接读 `users/<owner>/teleagent.db`，客户端关着也能追踪）；本文定义**界面操作通道**（驱动正在运行的桌面客户端）。两者互不替代：数据面负责“看历史”，界面面负责“点按钮、发消息”。
 
@@ -242,8 +242,8 @@ Group '任务列表'  (372,392) 205×1529
 - **幂等**：派发前用 SQLite 查最近会话是否已有同文本，避免重复建同名任务（标题是客户端自动生成的，会撞车）。
 - **失败口径**：任何一步失败都返回结构化结果（`stage` + `error`），不静默降级成“剪贴板交接”，避免用户以为发出去了实际没有。
 - **已落地并真机验证**（2026-11-19 18:26）：模块 `src/teleagent-dispatch.js` + 测试 `test/teleagent-dispatch.test.mjs`（10 个契约用例，已加入 `npm test`）。对真实客户端跑通一次派发，**11.7 秒**完成，SQLite 回读得到会话 `ses_e0ca84e5bffeqDRrt6LJnFZk4y`：标题「Agent Deck派发链路自检」、`directory=E:\Project_test\jifang_data_analysis`、正文与注入文本逐字一致、assistant 2 秒后回复「收到」、`finish=stop`。
-- **接线（2026-11-19）**：在 Obsidian 的**任务行右键菜单**加「派发到 TeleAgent（自动填写并发送）」，仅 Windows 且 TeleAgent 启用时出现。点击后走 `dispatchToTeleagent`：先借 `delegateTarget` 把笔记文件对象、整篇行数组与块结构补齐（`handoff` 里的 `resolveBlockContext` 要的是 `file/lines/block`，只给 `path/line` 会报“没有当前笔记”——这是接线时真实踩到的坑），再用 `resolveProjectForTask` 从任务上下文（`[[wikilink]]` / 标题前缀 / 笔记路径）解析项目名，**解析不到就拒绝并提示去设置里登记项目文件夹**——猜错项目会把任务派进别的代码库。解析成功后仍**保留剪贴板兜底**（照旧复制全文），再调用 UIA 派发，并按结果提示成功或失败阶段。
-- **派发闸门收敛到一处**：`runHandoffDispatch`（`src/teleagent-dispatch.js`）集中判断“用户点了自动发送 + 目标是 TeleAgent + Windows + 有项目名”四条是否同时成立，只有四条都满足才真正调 `dispatchTeleagentTask`；四条都有单元测试（含“没项目名时绝不猜目录”这条），避免以后改接线时把闸门改漏。
+- **接线（2026-11-19）**：在 Obsidian 的**任务行右键菜单**加「派发到 TeleAgent（自动填写并发送）」；Windows/Linux 且 TeleAgent 启用时出现（Linux 文案为「自动填写，需手动点运行」，见 §11）。点击后走 `dispatchToTeleagent`：先借 `delegateTarget` 把笔记文件对象、整篇行数组与块结构补齐（`handoff` 里的 `resolveBlockContext` 要的是 `file/lines/block`，只给 `path/line` 会报“没有当前笔记”——这是接线时真实踩到的坑），再用 `resolveProjectForTask` 从任务上下文（`[[wikilink]]` / 标题前缀 / 笔记路径）解析项目名，**解析不到就拒绝并提示去设置里登记项目文件夹**——猜错项目会把任务派进别的代码库。解析成功后仍**保留剪贴板兜底**（照旧复制全文），再调用 UIA 派发，并按结果提示成功或失败阶段。
+- **派发闸门收敛到一处**：`runHandoffDispatch`（`src/teleagent-dispatch.js`）集中判断“用户点了自动发送 + 目标是 TeleAgent + Windows/Linux + 有项目名”四条是否同时成立，只有四条都满足才真正调 `dispatchTeleagentTask`；四条都有单元测试（含“没项目名时绝不猜目录”这条），避免以后改接线时把闸门改漏。
 - **提交后回读校验**：点「运行」只是界面动作，不代表任务真落库。`verifyDispatchedSession` 用只读 SQL 再查一次客户端会话库，要求「新出现的会话 + `directory` 命中该项目 + 正文包含这次文本前 40 字」三者同时成立才算 `verified=true`；刚写完可能没落盘，带三次 700ms 重试。提示文案据此分成「已派发并确认落库」与「已发送，但本地库里还没查到」两种，不把“点了按钮”说成“任务已建”。
 - **已知缺口**：PowerShell 侧的错误文案仍是中文（`Fail 'project' '找不到「运行环境」选择器'`），英文界面下会显示中文详情；阶段名（`stage`）已统一，下一步可做 stage → 本地化文案的映射。
 
@@ -257,5 +257,46 @@ Group '任务列表'  (372,392) 205×1529
 
 ## 10. 交付边界
 
-- 本文只覆盖 Windows。macOS（`AXUIElement`）与 Linux（`AT-SPI`）是**另一套接口**，Electron 在两端都能暴露无障碍树，但实现与 selector 都要重写，**未实测不外推**。
-- 未经用户明确同意，自动化脚本**不得**执行会改变用户会话状态的动作（发送消息、删除任务、授权确认）。
+- Windows 部分见 §1–§9；Linux 部分见 §11（实现与实测均以本机 Wayland/XWayland 为准）。macOS（`AXUIElement`）是**另一套接口**，**未实测不外推**；Linux 的 AT-SPI 通道**依赖 root 装包，未实测**（见 §11.5），不能把 Windows UIA 的结论外推到 AT-SPI。
+- 未经用户明确同意，自动化脚本**不得**执行会改变用户会话状态的动作（发送消息、删除任务、授权确认）。Linux 后端默认只做到“填入 + 提示用户手动点运行”；提交原语必须显式 `confirm:true` 且未接入 UI。
+
+## 11. Linux 通道（xdotool + 剪贴板，2026-11-19 本机实测）
+
+### 11.1 环境与实测边界
+
+- 平台：Deepin 25，**treeland Wayland** 会话 + XWayland（`DISPLAY=:1`，1920×1080）。
+- 客户端：TeleAgent 桌面版 **3.1.1-rc.1**（Electron **43.1.0** / Chromium 150.0.7871.47），内置 super-agent-code 运行时 3.1.1-dev-3-1-1-20261118111515，运行中的 Go 后端报 `dev-3.1.1-785b86`。
+- 证据与原始输出见 [`research/teleagent-linux-probe.zh-CN.md`](../research/teleagent-linux-probe.zh-CN.md)（本机探测报告）。
+
+### 11.2 窗口与焦点
+
+- 启动器 `/usr/bin/teleagent` 在 Wayland 会话下强制 `--ozone-platform=x11`，客户端是 XWayland 客户端；主窗 `WM_CLASS=("teleagent","teleagent")`、标题 `TeleAgent 星辰超级智能体`，另有 `TeleAgent Screenshot` / 10×10 / 200×200 辅助窗，**必须按标题+几何排除**。
+- **`windowactivate` 在 treeland 下对主窗无效**（`_NET_ACTIVE_WINDOW` 不变、焦点回 PointerRoot）；需要合成器级激活（`treeland_foreign_toplevel_manager_v1` 的 `activate(handle, seat)`），之后用 `xdotool getwindowfocus` 交叉校验。生产实现不内置 native helper 时，退化为“请用户先把 TeleAgent 切到前台”。
+
+### 11.3 文本注入
+
+- 键盘逐字符打字**不可行**：字母会被输入法组合（数字/ Tab 正常，字母 `zz` 不出字，`a`+空格会提交中文）。文本必须写入剪贴板再 `Ctrl+V`；中文粘贴已实测成功。
+- 剪贴板优先 Obsidian 自带 Electron `clipboard`（无外部依赖）；不可用时回退 `xclip` 并明确报缺。工作区的 `xclip 0.13` 是 `dpkg -x` 解出的取证副本，**生产不依赖**。
+
+### 11.4 「运行」提交与端到端实测（一次，负责人批准）
+
+- 提交坐标用**窗口相对比例**：发送按钮 `(0.8976, 0.8925)`（本机窗口 1513×1005 上实测 `(1358, 897)`，由发送图标蓝色像素质心测得）。
+- 点击前校验：`getwindowfocus == 主窗 id`；发送按钮区域蓝色像素 ≥ 50（本机实测 614）；输入框截图非空。任一不满足即中止。
+- 2026-11-19 22:29 端到端一次成功：`session` 116 → **117**；新会话 `ses_e0bc97898ffe3NfF3EYllOYSgv`，标题 `Agent Deck端到端测试`，`directory=/persistent/home/hly/TeleAgent`；用户 part 正文 `Agent Deck 端到端测试：回复收到`；assistant 回复「收到！主人，端到端链路通畅…」；`verifyDispatchedSession` 返回 `found=true`。该会话按负责人要求**保留在账号里**，可自行删除。
+- 生产默认**不自动提交**：`dispatchTeleagentLinux` 成功只返回 `stage:"filled"` + `manualSubmit:true`；`submitTeleAgentDispatch` 是独立原语，必须显式 `confirm:true`，未接入 UI。只有负责人明确批准时才做真实提交。
+
+### 11.5 实现与测试
+
+- 模块：`src/teleagent-dispatch-linux.js`（窗口定位 / 焦点校验 / 相对坐标点击 / Electron-first 剪贴板 / 可选 PPM 截图校验 / 结构化 stage）。
+- 平台分流：`runHandoffDispatch` 增加 linux 分支（Windows 路径不变），`dispatchLinux` 由 `src/delegation.js` 注入，保持模块图无环；非 win32/linux 继续返回 `skipped:"platform"`。
+- 入口：右键菜单 gating 扩到 `win32/linux`；Linux 文案为「派发到 TeleAgent（自动填写，需手动点运行）」。
+- 测试：`test/teleagent-dispatch-linux.test.mjs`（平台分流 / 依赖缺失 / 窗口选择 / 焦点失败 / 粘贴失败 / 填入后不自动提交 / 提交原语必须 confirm / PPM 16-bit 采样）。
+- 成功判据：提交后统一用 `verifyDispatchedSession` 的**只读** SQL 回读；填入阶段返回 `verified:false, reason:"not-submitted"`，不把“已填入”说成“已发送”。
+
+### 11.6 未验证项（Linux）
+
+- **AT-SPI**：需要 root 安装 `at-spi2-core` + 客户端带 `--force-renderer-accessibility` 重启；本机 `/usr` 只读，**未实测，不外推**。
+- `xclip` 回退的生产可用性（Electron clipboard 优先，未做真实 Obsidian 内测试）。
+- 窗口最大化/缩放/多屏/DPI 变化下的相对坐标稳定性（实现有几何 sanity 与焦点/像素校验，但未逐一实测）。
+- 深链 `teleai-cowork://` 的唤起与带参行为（注册已确认，未实测）。
+- macOS / Windows 不外推。

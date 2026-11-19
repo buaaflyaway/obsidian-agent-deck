@@ -1,6 +1,6 @@
 # TeleAgent（星辰超级智能体）接入方案
 
-> 状态：**P0（只读追踪）与 P1（复制交接）已实现**（2026-11-19，分支 `feat/teleagent-adapter`）。核验平台：**Windows 11**（TeleAgent 桌面版 1.2.27；真实库 810 MB / 4365 会话 / 48609 消息 / 173493 part）+ 2026-11-17 的 **Linux** 桌面版 3.x 样本。**macOS 未实机核验**，按 AGENTS.md 口径不外推。P1（复制交接）、P2（深链与状态增强）仍未实现。
+> 状态：**P0（只读追踪）、P1（复制交接）与 Linux「填入式」派发已实现**（2026-11-19，分支 `feat/teleagent-adapter`）。核验平台：**Windows 11**（TeleAgent 桌面版 1.2.27；真实库 810 MB / 4365 会话 / 48609 消息 / 173493 part）+ **Linux**（Deepin 25 / treeland Wayland + XWayland，客户端 3.1.1-rc.1；Linux 派发后端见 §5 与 [`teleagent-uia-automation.zh-CN.md`](teleagent-uia-automation.zh-CN.md) §11）。**macOS 未实机核验**，按 AGENTS.md 口径不外推。P2（深链与状态增强）仍未实现。
 > 本文只定义数据契约、委派设计与改动面，不含实现代码。
 
 ## 0. 结论
@@ -157,7 +157,7 @@ TeleAgent 的 `session` 表没有 `time_busy` / `idle_outcome`，无法像新版
 
 | 平台 | 数据路径 | 启动方式 | 状态 |
 |---|---|---|---|
-| Linux | `~/.local/share/TeleAgent/users/<owner>/teleagent.db` | `/usr/bin/teleagent` | **已实测** |
+| Linux | `~/.local/share/TeleAgent/users/<owner>/teleagent.db` | `/usr/bin/teleagent` | **已实测**（数据面 + 填入式派发；默认不自动提交，见 §5.1） |
 | Windows | `%USERPROFILE%\.local\share\TeleAgent\users\<owner>\teleagent.db` | 安装目录 exe / `start` | 待实机 |
 | macOS | `~/.local/share/TeleAgent/users/<owner>/teleagent.db` | `open -a TeleAgent` | 待实机 |
 
@@ -165,6 +165,13 @@ TeleAgent 的 `session` 表没有 `time_busy` / `idle_outcome`，无法像新版
 
 1. **`sqlite3` CLI**：**已解决**。1.13.1 起 `src/sqlite.js` 的 `resolveSqliteBinary()` 跨平台探测 `sqlite3` / `sqlite3.exe`（PATH、`/usr/bin`、Homebrew、chocolatey、scoop、WinGet Links），`readers.js` / `desktop-sessions.js` / `cursor-sessions.js` 与测试夹具都改走它；找不到时回退裸名，由调用方按失败处理。
 2. **WAL 并发读**：客户端运行时库处于 WAL，读取需 `-readonly` + 失败重试；现有 OpenCode 读取路径可参考。
+
+### 5.1 Linux 派发的实现范围（2026-11-19）
+
+- 模块 `src/teleagent-dispatch-linux.js`：xdotool 定位 XWayland 主窗 → `windowfocus` + `getwindowfocus` 校验 → 按窗口相对比例点输入框 → 剪贴板写入（优先 Obsidian Electron clipboard，回退 xclip）→ `Ctrl+V`；
+- **默认只做到“填入 + 提示用户手动点运行”**；`submitTeleAgentDispatch` 必须显式 `confirm:true`，未接入 UI。2026-11-19 22:29 在负责人批准下用一次真实提交完成端到端验证（会话 `ses_e0bc97898ffe3NfF3EYllOYSgv`，详见 [`teleagent-uia-automation.zh-CN.md`](teleagent-uia-automation.zh-CN.md) §11.4）；
+- 成功判据统一走 `verifyDispatchedSession` 的只读 SQL；填入阶段返回 `verified:false, reason:"not-submitted"`；
+- **未验证**：AT-SPI（依赖 root 装包 + 客户端重启，不外推）、多屏/DPI/窗口缩放下的坐标稳定性、深链唤起。
 
 建议顺序：跨平台移植（阶段 A/B）已在 1.13.1 完成（`src/sqlite.js` 探测 + `.cmd`/`.bat` 拉起 + 进程树清理），可以直接接 TeleAgent；接入时注意 Windows 下 `.cmd` 包装脚本经 `cmd.exe` 传参会截断换行，提示词需压成单行（`src/llm.js` 的 `flattenForCmd` 是现成写法）。
 
