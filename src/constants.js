@@ -488,7 +488,9 @@ export const DEFAULTS = {
   keywordStyle: true,      // 关键词配色与 tsq-ico 图标；TODOseq 自己在格式化时让位
   recordRules: { ...DEFAULT_RECORD_RULES },
   autoLogBatch: 8,         // 一轮最多问模型几个会话
-  autoLogAgents: { claude: true, codex: true, workbuddy: true, dsh: true, antigravity: true, opencode: true, qoder: true, cursor: true, grokbot: true },
+  // 没写不等于关：设置页用 `agOn[id] !== false` 判定，缺省值等于「开」。TeleAgent 的历史库有上千个会话，
+  // 首次接入会把最近若干轮一次性补进当天日记，所以这里显式关掉，需要时在设置里手动打开。
+  autoLogAgents: { claude: true, codex: true, workbuddy: true, dsh: true, antigravity: true, opencode: true, qoder: true, cursor: true, grokbot: true, teleagent: false },
   autoLogProvider: "auto",
   autoLogEffort: "low",
   autoLogModel: "",
