@@ -412,11 +412,15 @@ export const AGENT_APPS = {
   qwenwork: { bundle: "cn.qwenwork.desktop.mac", url: "qwenwork-cn://" },
   cursor: { bundle: "com.todesktop.230313mzl4w4u92", url: "cursor://" },
   grokbot: { bundle: "com.anysphere.sand", url: "grokbot://" },
+  // TeleAgent 的 macOS bundle id 没有核验到（本机只有 Windows 安装），留空直接走 URL scheme；
+  // 桌面版注册的 scheme 是 teleai-cowork（Linux 上实测，见 docs/specs/teleagent-adapter.zh-CN.md）。
+  teleagent: { bundle: "", url: "teleai-cowork://" },
 };
 
 export function openAgentApp(agent) {
   const app = AGENT_APPS[agent];
   if (!app) return Promise.resolve(false);
+  if (!app.bundle) return Promise.resolve(openExternal(app.url));
   return new Promise((resolve) => {
     execFile("/usr/bin/open", ["-b", app.bundle], (err) => {
       if (!err) return resolve(true);
@@ -445,7 +449,7 @@ export function openSession(plugin, agent, sid, app = "", session = null) {
     const cwd = (session && session.cwd) || (plugin.usage && plugin.usage.meta.get(sid) || {}).cwd || "";
     return focusOrResume(plugin, agent, sid, `${shellQuote(findHermesCliBinary(plugin.settings?.delegate?.hermes?.path || ""))} --resume ${shellQuote(sid)}`, cwd);
   }
-  if (["opencode", "qoder", "qwenwork", "cursor", "grokbot"].includes(agent)) {
+  if (["opencode", "qoder", "qwenwork", "cursor", "grokbot", "teleagent"].includes(agent)) {
     if (agent === "qoder" && app === "cli") {
       const cwd = (session && session.cwd) || (plugin.usage && plugin.usage.meta.get(sid) || {}).cwd || "";
       return focusOrResume(plugin, agent, sid, `${shellQuote(findQoderBinary(plugin.settings.delegate?.qoder?.path || ""))} -r ${shellQuote(sid)}`, cwd);

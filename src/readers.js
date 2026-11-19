@@ -9,6 +9,7 @@ import { cleanUserPrompt, isPromptText } from "./prompt-text.js";
 export { cleanUserPrompt, isPromptText } from "./prompt-text.js";
 import { desktopSessions, desktopMessages } from "./desktop-sessions.js";
 import { resolveSqliteBinary } from "./sqlite.js";
+import { teleAgentDatabases } from "./teleagent.js";
 import {
   stepText,
   todoOf,
@@ -492,6 +493,9 @@ export class AgentUsage {
         if (fs.existsSync(db)) dbs.push([db, "qwenwork"]);
       }
     } catch { /* older version has no .harness directory */ }
+    // TeleAgent 把会话写在内核的 SQLite 库里（OpenCode 老版 session/message/part 结构），
+    // 一个账号一个库；路径由 src/teleagent.js 按真实环境变量与平台默认值探测。
+    for (const db of teleAgentDatabases()) dbs.push([db, "teleagent"]);
     return dbs;
   }
 

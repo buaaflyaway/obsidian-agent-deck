@@ -52,7 +52,7 @@ Watch every agent in the sidebar, delegate from your notes, and flip one AI reco
 
 ### 1. Multi-agent session tracking
 
-- **11 local agents in one place**: Claude Code, Codex, WorkBuddy, DeepSeek Harness, Antigravity, OpenCode, Qoder, Hermes Agent, QwenWork (千问办公), Cursor and Grok Bot.
+- **12 local agents in one place**: Claude Code, Codex, WorkBuddy, DeepSeek Harness, Antigravity, OpenCode, Qoder, Hermes Agent, QwenWork (千问办公), TeleAgent (星辰超级智能体), Cursor and Grok Bot.
 - **See Now by project**: the sidebar groups active sessions by workspace project; switch to a status view (waiting / unclaimed / running / error) or a flat list. Recent sessions can be filtered to 7 / 30 / 120 days and stacked by agent or project.
 - **States at a glance**: running, waiting for a reply, needs confirmation, limit reached, paused, error and done; subagent sessions are indented under their parent, and clicking a card switches back to that client or terminal tab.
 - **Primaries and search**: mark up to two agents as primary (full history; the rest only read today), and search every scanned session by title, project, model or body text.
@@ -121,6 +121,7 @@ Watch every agent in the sidebar, delegate from your notes, and flip one AI reco
 | **Qoder** | Yes | Yes | Copies the task and opens the app | Yes |
 | **Hermes Agent** | Yes | Yes | No (no desktop UI) | Yes |
 | **QwenWork (千问办公)** | Yes | No | No (tracking only) | — |
+| **TeleAgent (星辰超级智能体)** | Yes | No | No (tracking only) | — |
 | **WorkBuddy** | Yes | No | Copies the task and opens the app | Yes |
 | **Cursor** | Yes (Hooks required) | No | No (tracking only) | — |
 | **Grok Bot** | Yes (per-Bot selection) | No | No (tracking only) | — |

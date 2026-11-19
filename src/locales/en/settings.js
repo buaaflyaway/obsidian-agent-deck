@@ -662,6 +662,7 @@ export default {
   "例如：私密日记（每行一个路径）": "e.g. Private Journal (one folder per line)",
   "Hermes Agent 会话与 ACP / CLI": "Hermes Agent sessions and ACP / CLI",
   "千问办公（QwenWork）桌面版": "QwenWork Desktop",
+  "TeleAgent（星辰超级智能体）桌面版（本地会话库追踪）": "TeleAgent Desktop (local session database tracking)",
   "使用 Hermes 当前配置的默认模型；读取可用模型后可指定模型。": "Use Hermes' currently configured default model; refresh models to pick another.",
   "通过 hermes-acp 后台委派，也可在终端用 hermes chat / --resume 续聊": "Delegate in the background via hermes-acp, or continue in terminal with hermes chat / --resume",
   "留空自动查找 hermes-acp（或填 hermes）": "Leave blank to auto-detect hermes-acp (or enter hermes)",

@@ -87,8 +87,8 @@ export function stripBlockId(s) {
   return String(s || "").replace(BLOCK_ID_RE, "").trimEnd();
 }
 
-const AGENT_ID_PREFIX = { antigravity: "agy", claude: "claude", codex: "codex", dsh: "dsh", workbuddy: "wb", opencode: "oc", qoder: "qoder", cursor: "cursor", grokbot: "grokbot" };
-export const isDeckBlockId = id => /^(?:ad-[a-z0-9-]+|(?:agy|claude|codex|dsh|wb|oc|qoder|cursor|grokbot)-(?:[a-z][a-z0-9]{0,15}-){0,2}[a-z0-9]{10})$/i.test(id || "");
+const AGENT_ID_PREFIX = { antigravity: "agy", claude: "claude", codex: "codex", dsh: "dsh", workbuddy: "wb", opencode: "oc", qoder: "qoder", cursor: "cursor", grokbot: "grokbot", teleagent: "ta" };
+export const isDeckBlockId = id => /^(?:ad-[a-z0-9-]+|(?:agy|claude|codex|dsh|wb|oc|qoder|cursor|grokbot|ta)-(?:[a-z][a-z0-9]{0,15}-){0,2}[a-z0-9]{10})$/i.test(id || "");
 export function normalizeTaskSlug(value) {
   const slug = String(value || "").trim().toLowerCase().replace(/\s+/g, "-");
   return /^[a-z][a-z0-9]{0,15}(?:-[a-z][a-z0-9]{0,15})?$/.test(slug) ? slug : "";
@@ -417,8 +417,8 @@ export function kwLine(raw) {
 }
 
 export function parseLink(line) {
-  const tracked = /^\s*[-*+]\s+🔗\s*\[([^\]]*)\]\(obsidian:\/\/agent-deck\?do=open&agent=(antigravity|opencode|qoder|hermes|qwenwork|workbuddy|cursor|grokbot)&sid=([^)]*)\)/.exec(line);
-  if (tracked) return { agent: tracked[2], sid: decodeURIComponent(tracked[3]), title: tracked[1].replace(/^(Antigravity|OpenCode|Qoder|Hermes|千问办公|QwenWork|WorkBuddy|Cursor|Grok Bot)：/, "") };
+  const tracked = /^\s*[-*+]\s+🔗\s*\[([^\]]*)\]\(obsidian:\/\/agent-deck\?do=open&agent=(antigravity|opencode|qoder|hermes|qwenwork|teleagent|workbuddy|cursor|grokbot)&sid=([^)]*)\)/.exec(line);
+  if (tracked) return { agent: tracked[2], sid: decodeURIComponent(tracked[3]), title: tracked[1].replace(/^(Antigravity|OpenCode|Qoder|Hermes|千问办公|QwenWork|TeleAgent|WorkBuddy|Cursor|Grok Bot)：/, "") };
   const m = /^\s*[-*+]\s+🔗\s*(?:\[([^\]]+)\])?\(?(claude|codex|workbuddy|dsh|antigravity):\/\/[^)]*?session=([0-9a-f-]{36})/.exec(line);
   if (m) return { agent: m[2], sid: m[3], title: m[1] || "" };
   const d = /^\s*[-*+]\s+🔗\s*(?:\[([^\]]+)\])?\(?(codex):\/\/threads\/([0-9a-f-]{36})|^\s*[-*+]\s+🔗\s*(?:\[([^\]]+)\])?\(?(workbuddy):\/\/chat\/([0-9A-Za-z_-]{8,})/.exec(line);
@@ -433,7 +433,7 @@ export const deckSessionUrl = (agent, sid) => `obsidian://agent-deck?do=open&age
 
 export function linkLine(indent, agent, title, sid) {
   const safe = String(title || "").replace(/[\[\]()`]+/g, " ").trim();
-  const obsidianLabels = { opencode: "OpenCode", qoder: "Qoder", hermes: "Hermes", qwenwork: "千问办公", cursor: "Cursor", grokbot: "Grok Bot" };
+  const obsidianLabels = { opencode: "OpenCode", qoder: "Qoder", hermes: "Hermes", qwenwork: "千问办公", teleagent: "TeleAgent", cursor: "Cursor", grokbot: "Grok Bot" };
   if (obsidianLabels[agent]) {
     return `${indent}- 🔗 [${obsidianLabels[agent]}：${safe}](${deckSessionUrl(agent, sid)})`;
   }

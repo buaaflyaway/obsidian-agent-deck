@@ -162,9 +162,22 @@ export const AGENTS = {
     desktopOnly: true,
     trackingOnly: true,
   },
+  teleagent: {
+    id: "teleagent",
+    name: "TeleAgent",
+    short: "TeleAgent",
+    glyph: "✳",
+    color: "#2f7d6d",
+    soft: "rgba(47,125,109,.13)",
+    kind: "teleagent",
+    where: ["~/.local/share/TeleAgent/users/*/teleagent.db", t("TeleAgent（星辰超级智能体）桌面版（本地会话库追踪）")],
+    deep: "teleagent",
+    desktopOnly: true,
+    trackingOnly: true,
+  },
 };
 
-export const AGENT_ORDER = ["claude", "codex", "workbuddy", "dsh", "antigravity", "opencode", "qoder", "hermes", "qwenwork", "cursor", "grokbot"];
+export const AGENT_ORDER = ["claude", "codex", "workbuddy", "dsh", "antigravity", "opencode", "qoder", "hermes", "qwenwork", "teleagent", "cursor", "grokbot"];
 
 export const AGENT_SHORT = (id) => (AGENTS[id] ? AGENTS[id].short : id || "Agent");
 
@@ -408,7 +421,7 @@ export const CLAUDE_PERMISSIONS = [
 export const DEFAULTS = {
   version: STORE_VERSION,
   // Which agents are read. Primary agents are always on.
-  agents: { claude: true, codex: true, workbuddy: true, dsh: true, antigravity: true, opencode: true, qoder: true, hermes: true, qwenwork: true, cursor: true, grokbot: true },
+  agents: { claude: true, codex: true, workbuddy: true, dsh: true, antigravity: true, opencode: true, qoder: true, hermes: true, qwenwork: true, teleagent: true, cursor: true, grokbot: true },
   primaryAgents: ["claude", "dsh"],
   // 0 = midnight (00:00); otherwise the hour at which a new journal day begins.
   dayCutoff: 0,

@@ -27,7 +27,7 @@
 | 层级 | 核心文件 | 职责与关键锚点 |
 | --- | --- | --- |
 | 入口与设置 | `main.js`, `runtime-guard.js`, `security.js`, `trace.js`, `constants.js`, `settings.js`, `settings-agents.js`, `model-groups.js` | 生命周期、`ManagedTimers` / `CircuitBreaker` / `safeRun` 定时隔离、`resolveSecret`（`env:`/`secret:`）与 `redactSecrets`、`evaluatePermissionPolicy` 风险升阶、本地 JSONL `RunTrace` 与脱敏诊断导出（`exportDiagnostics`）、`AGENTS` 元数据、`STORE_VERSION = 1`、`MEMORY_QUERY_ASSET_VERSION = 1`、Agent 排序/主力推荐、模型分组；`openTerminalAt`（`main.js`） |
-| 会话适配器 | `readers.js`, `sqlite.js`, `agent-ingestors.js`, `cursor-sessions.js`, `grok-bot-sessions.js`, `desktop-sessions.js`, `codex-desktop.js`, `prompt-text.js`, `external-state.js` | 可扩展 Agent 日志解析注册表（`registerAgentIngestor`）、跨平台 `sqlite3` CLI 探测（`resolveSqliteBinary`）、只读解析 11 家 Agent 日志/SQLite/Hooks/Persistence Blob/进程与外部排队状态、原生客户端标题（`custom-title` / `ai-title` / `thread_name` / DB `title`）追踪（`hasClientTitle`）；`USAGE_CACHE_VERSION = 14`（`readers.js`）；`cleanUserPrompt` / `isPromptText`（`prompt-text.js`） |
+| 会话适配器 | `readers.js`, `sqlite.js`, `agent-ingestors.js`, `cursor-sessions.js`, `grok-bot-sessions.js`, `desktop-sessions.js`, `codex-desktop.js`, `prompt-text.js`, `external-state.js`, `teleagent.js` | 可扩展 Agent 日志解析注册表（`registerAgentIngestor`）、跨平台 `sqlite3` CLI 探测（`resolveSqliteBinary`）、只读解析 12 家 Agent 日志/SQLite/Hooks/Persistence Blob/进程与外部排队状态、原生客户端标题（`custom-title` / `ai-title` / `thread_name` / DB `title`）追踪（`hasClientTitle`）；`USAGE_CACHE_VERSION = 14`（`readers.js`）；`cleanUserPrompt` / `isPromptText`（`prompt-text.js`） |
 | 委派与控制 | `agent-registry.js`, `harness.js`, `delegation-runners.js`, `delegation.js`, `project-folders.js`, `workflow.js`, `attention.js`, `conversation.js`, `conversation-modal.js`, `dialog.js`, `project-workbench.js`, `workbench-modal.js` | 声明式 Agent 能力注册（`canContinueSession`）、可扩展 Harness 管道（`stripInternalIdentifiers` 剥离内部标识）与大纲/双链上下文解析、可扩展 Runner 注册表（`registerRunnerClass`）、工作位置选择、权限弹窗（含一键允许并开启自动允许）、只读对话查看与归档（`ConversationModal` 保持纯只读，应用内追问走 `taskActions` → `FollowUpModal`）、项目聚合与等待筛选（`buildProjectGroups`、`isWaitingSession`）、小队编排与副驾拆解、项目名↔目录登记与派发目录解析（`projectFolders`、`autoProjectFolder`）、未登记项目的最近会话建议（`suggestProjectForTask` / `recentProjectFolders`）、非日记笔记派发默认不重复记日记（`noteDispatchSessions` / `noteDispatchJournal`）；`openTerminal` / `osa`（`delegation.js`） |
 | 日记与整理 | `outline.js`, `journal.js`, `autolog.js`, `note-updates.js`, `task-status.js`, `task-id.js`, `task-mentions.js`, `summary-links.js`, `background-output.js`, `organize-journal.js`, `journal-organizer.js`, `journal-layout.js`, `journal-archive.js`, `task-export.js`, `sync.js` | 共享只读大纲/双链原语（`outline.js`）、按文件排队写入、AI 总结、短链 `[🔗](url)`、语义块号生成与清理、`<!-- ad-pin -->` 关键记录标记、整理/按视图导出（PDF/HTML/MD/JSON/CSV/剪贴板）与归档 |
 | 编辑器与渲染 | `editor.js`, `ai-records.js`, `record-display.js`, `fractal-board.js`, `fold-actions.js`, `fold-integration.js`, `log-detail.js`, `mention-suggest.js` | CodeMirror 扩展、阅读后处理、记录折叠与 Pin 免藏、分形看板投影（`taskBoardViews`）、视图持久化（`key` + `stableKey`）、隐藏内部编号、`@` 补全 |
@@ -40,7 +40,7 @@
 
 持久化位置：插件状态在 Vault `data.json`（`STORE_VERSION = 1`）；用量汇总在插件目录 `usage.json`（`SUMMARY_VERSION = 3`）；解析缓存在 `~/.agent-deck/usage-cache.json.gz`（`USAGE_CACHE_VERSION = 14`）。
 
-## 3. 十一家 Agent 能力边界
+## 3. 十二家 Agent 能力边界
 
 插件内对话窗口只读查看与归档，不设续聊输入框；写入格式、短链、标题保护、块号清理与 token 让渡统一走公共规则。
 
@@ -54,6 +54,7 @@
 | Hermes Agent | `$HERMES_HOME/state.db`（含 `profiles/*/state.db`） | 后台、终端 | `hermes-acp` 后台委派（支持 `models` / `session/set_model`）或终端 `hermes chat` / `hermes --resume`；只读换算 Unix 秒与 token（`input_tokens + cache_write_tokens` / `cache_read_tokens` / `output_tokens`），跳过 `hidden=1`，保留 `active=1 OR compacted=1` |
 | 千问办公（QwenWork） | 2.x：`~/.qwenworkcn/.harness/*/qwenwork/qwenwork.db`（OpenCode schema）；旧版：`~/.qwenworkcn/projects/*/*.jsonl` | 桌面（仅追踪） | CLI / 客户端未提供非交互委派接口（`trackingOnly: true`）；SQLite 会话带逐轮 token 与模型名，旧 JSONL 缺 usage 或 `model="unknown"` 时不估算；首条用户消息的引擎注入前缀（`workspace_context` / `system-reminder` / 工具清单）在适配器层剥除；打开 `cn.qwenwork.desktop.mac` / `qwenwork-cn://` 并复制会话号 |
 | Qoder | `~/.qoder/projects` / 桌面 `main.sqlite` | 桌面、后台、终端 | CLI 与桌面 SQLite 不互通；后台走 `qodercli`（终端 `-r` 续聊），桌面复制交接 |
+| TeleAgent（星辰超级智能体） | `$SUPER_AGENT_APP_DATA_DIR` 或 `~/.local/share/TeleAgent` 下的 `users/<账号>/teleagent.db`（OpenCode 老版 `session`/`message`/`part` 结构） | 桌面（仅追踪） | 内核是 OpenCode 派生的 Go 二进制，没有 ACP / 非交互 CLI 入口（`trackingOnly: true`）；`current-owner.json` 的 `ownerDir` 排最前，其余账号一并只读；token 取 `message.data.tokens`，缺失记 `0` 不估算；用户消息里 `<span data-path-name>` 附件的绝对路径在适配器层剥除；打开 `teleai-cowork://` 并复制会话号 |
 | WorkBuddy | `~/.workbuddy/projects` / `workbuddy.db` | 桌面、终端 | 仅支持中国版；桌面复制等待粘贴，终端跑 `codebuddy`（与桌面不互通）；无后台执行 |
 | Cursor | `~/.agent-deck/cursor-events/*.jsonl`（Cursor 3.30.14+ Hooks）+ 可选 WAL SQLite / transcript 元数据补全 | 桌面（仅追踪） | 显式安装 `~/.cursor/hooks.json` 后生效；不做旧版兼容与历史回填；对话视图/归档含工具时间线与折叠长结果；打开桌面端并复制会话号 |
 | Grok Bot | `~/Library/Application Support/Grok Bot/sand-client-persistence/*.blob`（Base32 `last-roster` + `transcript.replicas`） | 桌面（仅追踪） | 按 `grokBotTrackedBotIds` 多选过滤（默认全不选）；云端沙箱无本地逐条 token/模型，保留为 `0`/未提供；打开 `grokbot://` / `com.anysphere.sand` 并复制 Bot 会话号 |

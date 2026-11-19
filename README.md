@@ -52,7 +52,7 @@ Agent Deck 把散落在各个客户端的 AI 会话集中到 Obsidian：哪个 A
 
 ### 1. 多 Agent 会话追踪面板
 
-- **统一收拢 11 类本地 Agent**：Claude Code、Codex、WorkBuddy、DeepSeek Harness、Antigravity、OpenCode、Qoder、Hermes Agent、千问办公（QwenWork）、Cursor 与 Grok Bot。
+- **统一收拢 12 类本地 Agent**：Claude Code、Codex、WorkBuddy、DeepSeek Harness、Antigravity、OpenCode、Qoder、Hermes Agent、千问办公（QwenWork）、TeleAgent（星辰超级智能体）、Cursor 与 Grok Bot。
 - **按项目看现在**：侧栏「现在」默认按工作区项目收拢活跃会话，也可以按状态（等你 / 待认领 / 在跑 / 异常）或直接平铺成列表；「最近的会话」支持 7 / 30 / 120 天切换，并按 Agent 或项目叠放。
 - **状态一眼可见**：区分运行中、等待回复、需要确认、到达限额、暂停、出错与已完成；子代理会话缩进跟在母会话下面，点卡片即可切回对应客户端或终端标签。
 - **主力与搜索**：最多设两个主力 Agent（读全部历史，其余只读当天），也可以按标题、项目、模型或正文搜索所有本地会话。
@@ -121,6 +121,7 @@ Agent Deck 把散落在各个客户端的 AI 会话集中到 Obsidian：哪个 A
 | **Qoder** | 支持 | 支持 | 仅复制任务并唤起 | 支持 |
 | **Hermes Agent** | 支持 | 支持 | 不支持（无桌面界面） | 支持 |
 | **千问办公（QwenWork）** | 支持 | 不支持 | 不支持（仅追踪） | — |
+| **TeleAgent（星辰超级智能体）** | 支持 | 不支持 | 不支持（仅追踪） | — |
 | **WorkBuddy** | 支持 | 不支持 | 仅复制任务并唤起 | 支持 |
 | **Cursor** | 支持（需开启 Hooks） | 不支持 | 不支持（仅追踪） | — |
 | **Grok Bot** | 支持（按 Bot 多选） | 不支持 | 不支持（仅追踪） | — |

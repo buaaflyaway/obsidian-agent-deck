@@ -1,6 +1,6 @@
 # TeleAgent（星辰超级智能体）接入方案
 
-> 状态：**方案，未实现**。核验时间 2026-11-17，核验平台 Linux（本机已安装 TeleAgent 桌面版 3.x，数据目录内有真实会话）。**Windows / macOS 未实机核验**，按 AGENTS.md 口径不外推。
+> 状态：**P0（只读追踪）已实现**（2026-11-19，分支 `feat/teleagent-adapter`）。核验平台：**Windows 11**（TeleAgent 桌面版 1.2.27；真实库 810 MB / 4365 会话 / 48609 消息 / 173493 part）+ 2026-11-17 的 **Linux** 桌面版 3.x 样本。**macOS 未实机核验**，按 AGENTS.md 口径不外推。P1（复制交接）、P2（深链与状态增强）仍未实现。
 > 本文只定义数据契约、委派设计与改动面，不含实现代码。
 
 ## 0. 结论
@@ -18,7 +18,8 @@
 |---|---|
 | 安装形态 | `/opt/TeleAgent`（Electron 主程序）+ `/usr/bin/teleagent` → `/opt/TeleAgent/teleagent-launcher`（bash 包装） |
 | 内核 | `runtimes/super-agent-code/bin/TeleAgent`，Go 静态二进制，包名 `@teleai-agent/super-agent-code-linux-x64` 3.0.0-dev |
-| 数据根 | `~/.local/share/TeleAgent`（`TELEAGENT_HOME` 可覆盖） |
+| 数据根 | `~/.local/share/TeleAgent`（Linux / macOS），Windows 同布局 `%USERPROFILE%\.local\share\TeleAgent` |
+| 数据根覆盖 | **实测内核读 `SUPER_AGENT_APP_DATA_DIR`**（配置目录是 `SUPER_AGENT_APP_CONFIG_DIR`）。2026-11-19 在 Windows 内核 `runtimes/super-agent-code/bin/TeleAgent.exe` 的字符串里核到这两个变量；**上一版本文写的 `TELEAGENT_HOME` 是错的**，本机环境里也不存在 |
 | 多账号 | `current-owner.json` 给出 `ownerDir`、`tenantId`、`userId`；每账号独立 `users/<ownerDir>/teleagent.db` |
 | 会话库 | `users/<ownerDir>/teleagent.db`，SQLite **WAL** 模式（实测 26.9 MB） |
 | 表结构 | `session` / `message` / `part` / `todo` / `permission` / `permission_rule` / `project` + FTS |

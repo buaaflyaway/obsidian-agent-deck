@@ -592,7 +592,7 @@ export class AgentDeckSettingsTab extends PluginSettingTab {
     const sharedAgents = this.card(body, t("公共终端与其余 Agent"), "");
     this.rowSelect(sharedAgents, t("主力终端"), t("用于终端委派和恢复会话"), [{ id: "auto", label: t("自动") }, { id: "terminal", label: t("系统终端") }, { id: "iterm", label: "iTerm2" }, { id: "warp", label: "Warp" }, { id: "tern", label: "Tern" }, { id: "herdr", label: "Herdr" }], s.cliTerminal || "auto", (v) => { s.cliTerminal = v; p.saveSettings(); this.display(); });
     this.rowToggle(sharedAgents, t("默认在终端委派"), t("适用于 Claude Code、Codex、OpenCode、Qoder 和 Hermes"), !!s.delegateInTerminal, (v) => { s.delegateInTerminal = v; p.saveSettings(); p.refreshUI(); });
-    for (const id of ["workbuddy", "qwenwork"]) {
+    for (const id of ["workbuddy", "qwenwork", "teleagent"]) {
       const r = this.row(sharedAgents, AGENTS[id].name, "", AGENTS[id].trackingOnly ? t("会话追踪与记录（暂不支持后台委派）") : t("客户端交接 · 在客户端选择模型"));
       r.dataset.agent = id;
     }
