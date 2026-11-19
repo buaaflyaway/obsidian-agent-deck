@@ -114,8 +114,7 @@ test('TeleAgent sessions are tracked from the real session/message/part schema',
   }
 });
 
-test('stripTeleAgentContext keeps the visible attachment name and drops absolute paths', () => {
-  const raw = '<span data-path-name="C:/Users/x/secret/a.pdf" data-path-kind="file">@a.pdf</span> 请总结这个文件';
+test('stripTeleAgentContext keeps the visible attachment name and drops absolute paths', () => {  const raw = '<span data-path-name="C:/Users/x/secret/a.pdf" data-path-kind="file">@a.pdf</span> 请总结这个文件';
   assert.equal(stripTeleAgentContext(raw), '@a.pdf 请总结这个文件');
   assert.equal(stripTeleAgentContext('<span data-path-kind="image"></span>看图'), '看图');
   assert.equal(stripTeleAgentContext('普通提问'), '普通提问');
@@ -183,5 +182,30 @@ test('dragging a task to TeleAgent copies it, opens the client and claims the ne
   } finally {
     delete globalThis.require;
     fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('a message that ended in a tool loop is running, not waiting (tool_calls and tool-calls)', async () => {
+  const root = makeRoot(['owner']);
+  fs.writeFileSync(path.join(root, 'current-owner.json'), JSON.stringify({ ownerDir: 'owner' }));
+  const db = path.join(root, 'users', 'owner', 'teleagent.db');
+  try {
+    sql(db, `CREATE TABLE session(id,title,directory,parent_id,time_created,time_updated,time_archived);
+      CREATE TABLE message(id,session_id,time_created,time_updated,data);
+      CREATE TABLE part(id,message_id,session_id,time_created,time_updated,data);
+      INSERT INTO session VALUES('ses_loop','工具循环','/p',NULL,${now},${now + 1000},NULL),
+        ('ses_stale','客户端关掉的半截会话','/p',NULL,${now - 7200000},${now - 7200000},NULL);
+      INSERT INTO message VALUES
+        ('a1','ses_loop',${now},${now},${quote({ role: 'assistant', finish: 'tool_calls', time: { created: now, completed: now } })}),
+        ('a2','ses_loop',${now + 1},${now + 1},${quote({ role: 'assistant', finish: 'tool-calls', time: { created: now + 1, completed: now + 1 } })}),
+        ('a3','ses_loop',${now + 2},${now + 2},${quote({ role: 'assistant', finish: 'stop', time: { created: now + 2, completed: now + 2 } })}),
+        ('b1','ses_stale',${now - 7200000},${now - 7200000},${quote({ role: 'assistant', finish: 'tool_calls', time: { created: now - 7200000, completed: now - 7200000 } })});`);
+    const messages = await desktopMessages(db, 'teleagent', 'ses_loop');
+    assert.deepEqual(messages.map((m) => m.state), ['run', 'run', 'wait'], 'both spellings keep the turn running; stop ends it');
+    // 两小时前就停在工具循环里的会话，客户端多半已经关了：不能一直挂在「在跑」
+    const stale = await desktopMessages(db, 'teleagent', 'ses_stale');
+    assert.equal(stale.at(-1).state, 'wait');
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
   }
 });

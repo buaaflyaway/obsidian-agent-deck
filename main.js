@@ -5928,6 +5928,7 @@ var hermesTime = (value) => {
   const parsed = Date.parse(value);
   return Number.isFinite(parsed) ? parsed : 0;
 };
+var TOOL_LOOP_IDLE_MIN = 10;
 var modelName = (value) => {
   const m = json(value, value);
   return typeof m === "string" ? m : m?.modelID || m?.id || "";
@@ -6024,7 +6025,8 @@ async function desktopMessages(db, agent, sid) {
     const [, message, part] = await openCodeTables(db);
     const v2 = message === "session_message";
     rows = await desktopQuery(db, `SELECT m.id,m.data,${v2 ? "m.type" : "''"} AS role,m.time_created AS created,m.time_updated AS updated,
-      (SELECT json_group_array(json(p.data)) FROM (SELECT data FROM ${part} WHERE message_id=m.id ORDER BY ${v2 ? "ordinal" : "id"}) p) AS parts
+      (SELECT json_group_array(json(p.data)) FROM (SELECT data FROM ${part} WHERE message_id=m.id ORDER BY ${v2 ? "ordinal" : "id"}) p) AS parts,
+      (SELECT MAX(time_updated) FROM ${part} WHERE message_id=m.id) AS partUpdated
       FROM ${message} m WHERE m.session_id=${quote(sid)} ORDER BY ${v2 ? "m.seq" : "m.time_created,m.id"}`);
   }
   return rows.flatMap((row) => {
@@ -6038,7 +6040,11 @@ async function desktopMessages(db, agent, sid) {
     const tool = [...Array.isArray(content) ? content : [], ...d.tools || []].filter((p2) => p2.type === "tool" || p2.name).at(-1);
     const tokens = d.tokens;
     const completed = desktopTime(d.completedAt || d.time?.completed);
-    const state = role === "user" ? "run" : row.status === "failed" || d.error ? "error" : row.status === "interrupted" ? "wait" : completed || d.finish && d.finish !== "tool-calls" ? "wait" : "run";
+    const finish = String(d.finish || "").replace(/_/g, "-");
+    const lastActivity2 = Math.max(desktopTime(row.updated), Number(row.partUpdated) || 0, completed || 0);
+    const toolLoopRunning = finish === "tool-calls" && Date.now() - lastActivity2 <= TOOL_LOOP_IDLE_MIN * 6e4;
+    const fresh = Date.now() - lastActivity2 <= TOOL_LOOP_IDLE_MIN * 6e4;
+    const state = role === "user" ? "run" : row.status === "failed" || d.error ? "error" : row.status === "interrupted" ? "wait" : finish === "tool-calls" ? toolLoopRunning ? "run" : "wait" : completed || finish ? "wait" : fresh ? "run" : "wait";
     return [{
       id: row.id,
       role,
