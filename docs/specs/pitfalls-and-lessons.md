@@ -8,3 +8,5 @@
 - **会话隔离边界**：CodeBuddy CLI（`~/.codebuddy/projects`）与国内版 WorkBuddy 桌面（`~/.workbuddy`）、`qodercli`（`~/.qoder/projects`）与 Qoder 桌面 SQLite 均不互通，不可跨端续聊。
 - **总结与标题保护**：普通会话不能截取回复开头代替总结或生成后硬截断；后台回答不再生成总结，按 500 字分流到完整原文或干净问答文件，不能把扫描器的截短预览当原文；保留用户改过的 AI 标题时必须跳过空格压缩与时间前缀剥离，并防止历史标记触发重排。
 - **同名项目聚合与子代理等待降噪**：项目分组不能直接用末级目录名当键，必须以规范化根路径隔离并在同名碰撞时附加父目录区分；子代理 `turn/end` / `task_complete` 应标为 `done`（`aborted` 标 `cancelled`）并通过 `parentSid` / `parentCwd` 继承母会话项目，避免落入「独立会话」或污染「等你」列表。
+- **CodeMirror 参数名会遮蔽模块别名**：`src/editor.js` 的 `import { t as tr }` 与 `dropField.update(deco, tr)` 同名，拖拽时 `tr(...)` 调到的其实是事务对象，抛 `tr is not a function`。凡把函数以短名导入（`tr` / `t` / `w`），更新函数的参数一律另取名（本项目统一 `txn`）。
+- **RangeSetBuilder 必须按 `(from, startSide)` 升序添加**：行装饰挂在 `line.from`、行尾 widget 挂在 `line.to`，先加 `line.to` 再加 `line.from` 会让 `finish()` 抛 `Ranges must be added sorted by from position and startSide`，并丢掉**这一整次更新的全部行装饰**（pill、结果行底色、进度）。同一个 `buildDecorations` 里务必先加所有 `line.from`，再加 `line.to`。`test/editor-decorations.test.mjs` 用源码断言锁住这两条（node 测试环境没有真实 CodeMirror 运行时）。
