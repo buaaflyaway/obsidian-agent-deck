@@ -503,7 +503,9 @@ export class AgentUsage {
     for (const [db, agent] of this.desktopDatabases()) {
       if (!this.enabled(agent) || onlyAgent && agent !== onlyAgent || !fs.existsSync(db)) continue;
       try {
-        const sessions = await desktopSessions(db, agent, !strictSince && this.isPrimary(agent) ? 0 : floor);
+        // 桌面库一律按「回溯天数」窗口收敛：主力 Agent 若取 since=0，一个大库（几千会话 / 几百 MB part）
+        // 会在首次扫描时被整个读出来，主线程直接卡死。JSONL 那侧的「主力读全量」不受影响。
+        const sessions = await desktopSessions(db, agent, floor);
         const scope = this.isPrimary(agent) ? -1 : Number(dayKeyToday(this.cfg).replace(/\D/g, "")) || 0;
         for (const row of sessions) {
           const key = `${db}#${row.sid}`;

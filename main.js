@@ -9102,7 +9102,7 @@ var AgentUsage = class {
     for (const [db, agent] of this.desktopDatabases()) {
       if (!this.enabled(agent) || onlyAgent && agent !== onlyAgent || !import_fs8.default.existsSync(db)) continue;
       try {
-        const sessions = await desktopSessions(db, agent, !strictSince && this.isPrimary(agent) ? 0 : floor);
+        const sessions = await desktopSessions(db, agent, floor);
         const scope = this.isPrimary(agent) ? -1 : Number(dayKeyToday(this.cfg).replace(/\D/g, "")) || 0;
         for (const row of sessions) {
           const key = `${db}#${row.sid}`;
