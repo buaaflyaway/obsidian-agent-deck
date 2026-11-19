@@ -300,18 +300,25 @@ Group '任务列表'  (372,392) 205×1529
 | 验收点 | 结果 | 证据 |
 | --- | --- | --- |
 | a. 右键任务行出现 Linux 菜单项 | ✅ **通过** | 任务行 `- DOING 验证 Linux 派发 50%` 渲染 `.ad-prog`；DPR=1.25 换算后物理右键，菜单含「派发到 TeleAgent（自动填写，需手动点运行）」；截图 `obsidian-menu-linux.png`（同上记录） |
-| b. 点击后聚焦/填入/提示 | ❌ **失败（已复现）** | 通知依次为「任务已复制…」+「派发失败（focus）：无法把焦点切到 TeleAgent 主窗口…」；输入框无文本（`obs-after-dispatch.png`，同上记录） |
+| b. 点击后聚焦/填入/提示 | ✅ **已修复并通过**（首轮失败 → 复测通过，见下「b 的修复与复测」） | 复测通知「已填入任务文本，请在 TeleAgent 里手动点「运行」· task-e2e」；输入框读回正文与派发文本一致 |
 | c. 不点「运行」 | ✅ 遵守 | 全程未点发送；SQLite `session` 计数保持 117，无新会话 |
 | d. 缺 xdotool 降级 | ✅ **通过** | renderer `PATH` 置空后调用，通知「派发失败（dependency）：缺少 Linux 派发依赖：xdotool」，无异常 |
 
-**b 的根因（本机实测）**：treeland 在 Obsidian 前台时不会把焦点交给 TeleAgent；`windowfocus` 设置的 X 焦点在两次独立 xdotool 进程之间被重置为 PointerRoot，`getwindowfocus` 直接报错。`xdg-open teleai-cowork://` 与二次运行 `/usr/bin/teleagent` 都没能把主窗抬到前台。对照实验：用 treeland 原生协议把 TeleAgent 激活后，**单进程** `xdotool windowfocus <id> getwindowfocus mousemove … click 1 key --clearmodifiers ctrl+v` 可以成功粘贴（`chain-test.png`，随后清空；同上记录）。→ 修复方向：合成器级窗口激活（treeland helper，或明确要求用户先手动切到 TeleAgent）+ 把 focus/click/paste 合并为一次 xdotool 调用（或去掉跨进程焦点校验竞态）。
+**b 的根因（首轮失败，本机实测）**：treeland 在 Obsidian 前台时不会把焦点交给 TeleAgent；`windowfocus` 设置的 X 焦点在两次独立 xdotool 进程之间被重置为 PointerRoot，`getwindowfocus` 直接报错。`xdg-open teleai-cowork://` 与二次运行 `/usr/bin/teleagent` 都没能把主窗抬到前台。对照实验：用 treeland 原生协议把 TeleAgent 激活后，**单进程** `xdotool windowfocus <id> getwindowfocus mousemove … click 1 key --clearmodifiers ctrl+v` 可以成功粘贴（`chain-test.png`，随后清空；同上记录）。→ 修复方向：合成器级窗口激活（treeland helper，或明确要求用户先手动切到 TeleAgent）+ 把 focus/click/paste 合并为一次 xdotool 调用（或去掉跨进程焦点校验竞态）。
+
+**b 的修复与复测（2026-11-19 23:50–00:10 CST，同一环境）**：
+
+- **修复**：新增可选原生 helper `src/native/treeland-activate.c`（`treeland_foreign_toplevel_manager_v1` 的 `activate`，源码入库、产物 `bin/` 不入库、`node scripts/build-native.mjs` 按需构建）负责合成器级激活；同时把 focus / 点输入框 / `Ctrl+V` **合并成一次 xdotool 调用**（`buildFocusPasteArgs`），消除跨进程焦点被重置的竞态。
+- **复测（Obsidian 前台时经 CDP 触发 `dispatchToTeleagent`）**：耗时 1.85 s；焦点由 Obsidian `48234500` 变为 TeleAgent `18874386`；通知为「已填入任务文本，请在 TeleAgent 里手动点「运行」· task-e2e」；把输入框内容 `Ctrl+A / Ctrl+C` 读回剪贴板得到 `- DOING 验证 Linux 派发 50%` + `（来自 Obsidian：task-e2e.md）`，与派发文本逐字一致；随后清空并用哨兵剪贴板确认输入框已空。
+- **降级复测**：把插件目录里的 helper `chmod -x` 后重跑，273 ms 内返回「派发失败（focus）：缺少 treeland 窗口激活 helper…请先手动切到 TeleAgent 再派发」，**没有**任何点击或粘贴动作。
+- 依赖与边界：helper 仅在 treeland 生效（协议缺失 exit 1）；没有 helper 且用户未把 TeleAgent 切到前台时，插件明确拒绝而不是盲点盲打。
 
 **右击的前置条件**：普通 TODO 行没有 `.ad-prog`/`.ad-pill`，右键只会出现 Obsidian 默认编辑器菜单；测试用 `DOING` + 手动进度（`50%`）让进度控件出现，才能命中插件的 `contextmenu` 监听。DPR≠1 时必须把 CDP viewport 坐标乘以 DPR 再交给 xdotool。
 
 ### 11.7 仍未验证项（Linux）
 
 - **AT-SPI**：需要 root 安装 `at-spi2-core` + 客户端带 `--force-renderer-accessibility` 重启；本机 `/usr` 只读，**未实测，不外推**。
-- **b 的成功路径**：需要修复合成的窗口激活/焦点竞态后，在真实 Obsidian 里重测「菜单点击 → 填入 → 提示」；当前只验证到“失败可复现 + 手动前置条件下单进程粘贴可行”。
+- **非 treeland 合成器**（GNOME/KDE/wlroots）上的激活行为：本机只有 treeland，未实测；helper 协议不可用时按缺失降级。
 - `xclip` 回退的生产可用性（Electron clipboard 优先，未做真实 Obsidian 内测试）。
 - 窗口最大化/缩放/多屏/DPI 变化下的相对坐标稳定性（实现有几何 sanity 与焦点/像素校验，但未逐一实测）。
 - 深链 `teleai-cowork://` 的唤起与带参行为（注册已确认，未实测；本机实测唤起未抬起窗口）。

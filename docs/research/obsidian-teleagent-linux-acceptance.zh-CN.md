@@ -64,3 +64,24 @@ XGetInputFocus returned the focu）；请先手动切到该窗口，t...
 - 截图：`temp/probe/shots/obsidian-menu-linux.png`、`obs-before-dispatch.png`、`obs-after-dispatch.png`、`chain-test.png`、`chain-cleared.png`。
 - 测试 vault 保留：`temp/vault-e2e`（未动真实 Vault）。
 - Obsidian 进程已关闭；桌面焦点已还给用户 Edge。
+
+## 修复后复测（2026-11-19 23:50–00:10 CST）
+
+修复：`src/native/treeland-activate.c`（treeland 原生 `foreign_toplevel_manager_v1` 激活，源码入库、产物 `bin/` 不入库）+ `buildFocusPasteArgs` 把 focus/点击/`Ctrl+V` 合并成一次 xdotool 调用。
+
+```
+# 前置：Obsidian 前台焦点 48234500；经 CDP 调用 plugin.dispatchToTeleagent("task-e2e.md", 2, lines)
+{"ms": 1855, "notices": ["已填入任务文本，请在 TeleAgent 里手动点「运行」· task-e2e"]}
+# 焦点：18874386（TeleAgent 主窗），即激活成功
+# 输入框内容 Ctrl+A/C 读回剪贴板：
+- DOING 验证 Linux 派发 50%
+
+（来自 Obsidian：task-e2e.md）
+# 清空后用哨兵剪贴板复读：仍为哨兵 ⇒ 输入框已空
+
+# 降级复测：chmod -x 插件目录里的 helper 后重跑
+{"ms": 273, "notices": ["派发失败（focus）：缺少 treeland 窗口激活 helper：treeland-activate；…请先手动切到 TeleAgent 再派发（当前焦点：未知（没有 X 焦点））"]}
+# 没有任何 mousemove / ctrl+v 调用
+```
+
+结论：b 在“Obsidian 前台 → 右键派发”的真实路径上通过；helper 缺失时明确拒绝，不盲点盲打。

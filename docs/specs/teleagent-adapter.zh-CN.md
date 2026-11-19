@@ -168,7 +168,7 @@ TeleAgent 的 `session` 表没有 `time_busy` / `idle_outcome`，无法像新版
 
 ### 5.1 Linux 派发的实现范围（2026-11-19）
 
-- 模块 `src/teleagent-dispatch-linux.js`：xdotool 定位 XWayland 主窗 → `windowfocus` + `getwindowfocus` 校验 → 按窗口相对比例点输入框 → 剪贴板写入（优先 Obsidian Electron clipboard，回退 xclip）→ `Ctrl+V`；
+- 模块 `src/teleagent-dispatch-linux.js`：xdotool 定位 XWayland 主窗 → **可选原生 helper `bin/treeland-activate` 做合成器级激活**（treeland 忽略 X11 激活请求；helper 源码在 `src/native/`，`node scripts/build-native.mjs` 按需构建，产物不入库）→ 一次 xdotool 调用内完成「焦点 + 按相对比例点输入框 + `Ctrl+V`」→ 剪贴板写入优先 Obsidian Electron clipboard、回退 xclip；缺 helper 时要求用户先手动切到 TeleAgent，不盲点盲打；
 - **默认只做到“填入 + 提示用户手动点运行”**；`submitTeleAgentDispatch` 必须显式 `confirm:true`，未接入 UI。2026-11-19 22:29 在负责人批准下用一次真实提交完成端到端验证（会话 `ses_e0bc97898ffe3NfF3EYllOYSgv`，详见 [`teleagent-uia-automation.zh-CN.md`](teleagent-uia-automation.zh-CN.md) §11.4）；
 - 成功判据统一走 `verifyDispatchedSession` 的只读 SQL；填入阶段返回 `verified:false, reason:"not-submitted"`；
 - **未验证**：AT-SPI（依赖 root 装包 + 客户端重启，不外推）、多屏/DPI/窗口缩放下的坐标稳定性、深链唤起。
