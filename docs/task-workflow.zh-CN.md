@@ -34,13 +34,28 @@
 | 平台 | 已验证范围 | 未覆盖 / 已知代码缺口 |
 | --- | --- | --- |
 | **macOS** | 全量 `npm test`、构建、`swiftc` 编译与运行（`AgentDeckMenuBar.app`）、Vault 安装与热重载（Obsidian `1.15.1`）、Antigravity (`agy` / `agy acp`) 两轮续聊与记忆查询、`preview` 模式草稿读取、Dashboard、AI 记录 Pin（大纲与阅读视图 DOM）、Menu Bar 会话置顶命令队列 | 终端交互仅实测 Tern / Herdr；7 家可委派客户端全量逐一派发、Menu Bar SwiftUI 悬浮窗口拖拽手感待人手目视微调 |
-| **Windows** | 尚未实机运行验证 | `src/delegation.js`（`findBin` / `pickTerminal` / `openTerminal` / `osa`）与 `src/main.js`（`openTerminalAt`）仍依赖 macOS `osascript`/终端；`src/readers.js` 在 `win32` 跳过 `claudeDesktop`；CLI 探测与路径短链待实测 |
+| **Windows** | 全量 `npm test` 通过（2026-11-19，Windows 11 + Node 24.19.0 + sqlite3 3.54.1 本机）；`npm run build` 可复现 | 尚未在 Obsidian 实机运行验证；`src/delegation.js`（`findBin` / `pickTerminal` / `openTerminal` / `osa`）与 `src/main.js`（`openTerminalAt`）仍依赖 macOS `osascript`/终端；`src/readers.js` 在 `win32` 跳过 `claudeDesktop`；路径短链待实测 |
+
+### 本机分叉（相对上游 1.13.3，2026-11-19）
+
+上游 `windows-latest` CI 自 1.13.0 引入三端矩阵起就一直红，而且 `npm test` 是 `&&` 串联，在 `test/llm.test.mjs` 就断了，后面的用例在 Windows 上从来没真正跑过。本机为让 Windows 门禁变绿一共修了 6 处，全部用 `process.platform` 做运行时判定，macOS / Linux 走的是原来的分支（本机没有 macOS 实机，未复测）：
+
+| # | 文件 | 改动 | 在 Windows 上解决什么 | macOS 上的表现 |
+| --- | --- | --- | --- | --- |
+| 1 | `src/llm.js` | 超时改 `killChildProcess`（`taskkill /T /F` 杀进程树） | `.cmd` 包装脚本被 `child.kill()` 只杀掉 `cmd.exe`，真正的 node 子进程还占着临时目录，`rmSync` 抛 `EPERM` 并把「等了 N 秒没回来」盖掉 | 等价于原来的 `child.kill("SIGTERM")` |
+| 2 | `src/llm.js` | `rmTempDir()`：删除加重试并吞掉失败 | 同一竞态下不再用 `EPERM` 覆盖真实异常 | 首轮即删成功，重试不触发 |
+| 3 | `src/llm.js` | `flattenForCmd()`：`.cmd` / `.bat` 的提示词压成单行 | `cmd.exe` 传参会在换行处截断，`agy --print=` / `qodercli -p` / `codebuddy` 的提示词被静默截成第一行 | 函数直接返回原文 |
+| 4 | `src/project-folders.js` | 家目录比较前把 `os.homedir()` 的反斜杠归一化；`win32` 忽略大小写 | `C:\Users\x` 与归一化后的 `C:/Users/x` 永远不相等，家目录会被当成合法项目目录登记进去 | 字符串替换是空操作，比较逻辑不变 |
+| 5 | `src/delegation-runners.js` | `findInPathDirs` 按 `PATHEXT` 逐个试扩展名；`resolveExecutableWithFallback` 在 Windows 改走 PATH（原来依赖 login shell，而 Windows 下它恒为空） | `CreateProcess` 只自动补 `.exe`，裸名找不到 npm 装的 `.cmd` / `.bat` CLI | `exts` 只有空串；仍走 login shell 分支 |
+| 6 | `test/menubar-startup.test.mjs`、`test/cursor-sessions.test.mjs`、`test/acp-hermes-qwenwork.test.mjs` | `fileURLToPath` 取代 `new URL().pathname`；Cursor 夹具改 `USERPROFILE` 并清 `APPDATA`、钩子子进程补传 `USERPROFILE`；`expandedPathEntries` 的 nvm / uv / conda 断言按平台分支 | `.pathname` 在 Windows 得到 `/E:/...`，esbuild 解析不到；`os.homedir()` 不认 `HOME`，夹具会被写进真实用户的 Cursor 库；这些目录本来就只存在于 POSIX 布局 | 平台分支整块跳过，`fileURLToPath` 本身是等价修正 |
+
+注意：修复前 `test/cursor-sessions.test.mjs` 会把两条 `composerData:` 夹具写进真实 `%APPDATA%\Cursor\User\globalStorage\state.vscdb`，本机已删除这两条；macOS 上 `HOME` 能生效，没有这个问题。
 
 ## 本批发版基线（1.13.3，2026-11-19，已构建、装库实测并触发三端 CI）
 
 `1.13.3` 重做了 AI 自动记录的右键菜单：Pin 挪到第一位并去掉图标，新增复制这一轮（任务与结论 / 只复制结论）、查看原会话、跳到母任务、带二次确认的删除；记录菜单项收进独立分区排在 Obsidian 默认项之前，解析不到会话或旧版菜单 API 时降级。解析、母任务定位、删除范围抽到 `src/record-menu.js` 并有 `test/record-menu.test.mjs` 覆盖；实机用 fake menu 触发 `editor-menu` 验证过顺序、无图标与会话项。
 
-`1.13.2` 完成两件事：**千问办公 2.x 会话追踪**（读取新版客户端内置引擎的 SQLite 会话库，保留旧版 `projects` JSONL 回退，剥除首条用户消息里引擎注入的工作区说明与工具清单，缓存版本升到 15 以重读旧缓存）；**README 改版**（开头加目录与三张功能图，功能段落只留用户视角，新增记忆 Base 表格截图，英文版同步）。已随 tag `1.13.2` 发布（[Release](https://github.com/MatsuriMW/obsidian-agent-deck/releases/tag/1.13.2)），macOS / Ubuntu CI 通过；`windows-latest` 仍卡在 `test/llm.test.mjs` 的两处既有失败（超时清理 `EBUSY` 覆盖原错误、`agy --print` 断言），本次未处理。
+`1.13.2` 完成两件事：**千问办公 2.x 会话追踪**（读取新版客户端内置引擎的 SQLite 会话库，保留旧版 `projects` JSONL 回退，剥除首条用户消息里引擎注入的工作区说明与工具清单，缓存版本升到 15 以重读旧缓存）；**README 改版**（开头加目录与三张功能图，功能段落只留用户视角，新增记忆 Base 表格截图，英文版同步）。已随 tag `1.13.2` 发布（[Release](https://github.com/MatsuriMW/obsidian-agent-deck/releases/tag/1.13.2)），macOS / Ubuntu CI 通过；`windows-latest` 仍卡在 `test/llm.test.mjs` 的两处既有失败（超时清理 `EBUSY` 覆盖原错误、`agy --print` 断言），本次未处理（本机分叉在同步 1.13.3 时已修掉，见下文「本机分叉」）。
 
 上一版 `1.13.1` 在 `1.13.0` 基础上依据首次 `windows-latest` CI 实报缺陷完成跨平台兼容性修复（`src/sqlite.js` 跨平台探测替换 `/usr/bin/sqlite3`、Windows `.cmd`/`.bat` CLI 拉起、`CodexDesktopRunner` trace 与脱敏补齐、跨平台测试垫片 `test/helpers/mock-cli.mjs`）并面向用户刷新中英文 README 功能说明。接手后续 M1.2 / M1.3 时先看本节，再看 [`specs/harness-roadmap.zh-CN.md`](specs/harness-roadmap.zh-CN.md)（方向）与 [`specs/context-protocol.zh-CN.md`](specs/context-protocol.zh-CN.md)（契约草案）。
 

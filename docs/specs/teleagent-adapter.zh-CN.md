@@ -5,7 +5,7 @@
 
 ## 0. 结论
 
-- **可以接入**，定位为第 10 家 Agent：**只读追踪 + 复制交接式委派**，与 WorkBuddy 同档（`desktopHandoffOnly`）。
+- **可以接入**，定位为第 12 家 Agent（上游 1.13.x 已有 11 家）：**只读追踪 + 复制交接式委派**，与 WorkBuddy 同档（`desktopHandoffOnly`）。
 - **不做**后台执行、不做终端交互委派：桌面端没有 CLI/ACP，`/usr/bin/teleagent` 只是 GUI 启动器，按 [`acp-integration.zh-CN.md`](acp-integration.zh-CN.md) 第 1 条「无 CLI 的客户端不纳入委派」处理。
 - 相对 WorkBuddy 的两个有利条件：
   1. 会话**全部落在本地 SQLite**（本机样本 115 个会话里 106 个是云端路径或空目录，说明云电脑会话也会出现在本地库），只读追踪不依赖客户端保持运行；
@@ -150,7 +150,7 @@ TeleAgent 的 `session` 表没有 `time_busy` / `idle_outcome`，无法像新版
 | `src/locales/en/*.js` | 新增文案英文 | ~10 |
 | `test/teleagent-sessions.test.mjs` | 建夹具库、路径发现、解析、token、认领 | ~150 |
 | `README.md` / `README.en.md` | 支持表加一行（追踪 ✅ / 后台委派 ❌ / 桌面交接 ✅ 复制 / 终端 ❌ / 直达 ⚠️ 唤起+复制） | ~4 |
-| `docs/specs/architecture-and-boundaries.md`、`acp-integration.zh-CN.md`、`docs/README.md` | 九家 → 十家、接入原则表加一行、索引加本文 | ~11 |
+| `docs/specs/architecture-and-boundaries.md`、`acp-integration.zh-CN.md`、`docs/README.md` | 十一家 → 十二家、接入原则表加一行、索引加本文 | ~11 |
 
 ## 5. 跨平台
 
@@ -162,10 +162,10 @@ TeleAgent 的 `session` 表没有 `time_busy` / `idle_outcome`，无法像新版
 
 两个共用阻塞点（与 Linux/Windows 移植任务重叠）：
 
-1. **`sqlite3` CLI**：`src/desktop-sessions.js:13` 硬编码 `/usr/bin/sqlite3`，Windows 无此路径。应先改为 PATH + `where`/PATHEXT 查找，缺失时明确降级。
+1. **`sqlite3` CLI**：**已解决**。1.13.1 起 `src/sqlite.js` 的 `resolveSqliteBinary()` 跨平台探测 `sqlite3` / `sqlite3.exe`（PATH、`/usr/bin`、Homebrew、chocolatey、scoop、WinGet Links），`readers.js` / `desktop-sessions.js` / `cursor-sessions.js` 与测试夹具都改走它；找不到时回退裸名，由调用方按失败处理。
 2. **WAL 并发读**：客户端运行时库处于 WAL，读取需 `-readonly` + 失败重试；现有 OpenCode 读取路径可参考。
 
-建议顺序：**先做跨平台移植（阶段 A/B），再接 TeleAgent**，避免把同一个 sqlite3 问题踩两遍。
+建议顺序：跨平台移植（阶段 A/B）已在 1.13.1 完成（`src/sqlite.js` 探测 + `.cmd`/`.bat` 拉起 + 进程树清理），可以直接接 TeleAgent；接入时注意 Windows 下 `.cmd` 包装脚本经 `cmd.exe` 传参会截断换行，提示词需压成单行（`src/llm.js` 的 `flattenForCmd` 是现成写法）。
 
 ## 6. 测试计划
 
