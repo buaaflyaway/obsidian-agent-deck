@@ -25,6 +25,10 @@ import { DISPATCH_STAGES, runHandoffDispatch } from "../src/teleagent-dispatch.j
 const ok = (stdout = "") => ({ ok: true, code: 0, stdout, stderr: "", error: "" });
 const fail = (error = "boom") => ({ ok: false, code: 1, stdout: "", stderr: error, error });
 
+// 跨平台的可执行文件替身：process.execPath 是当前 Node 的绝对路径，每个平台都真实存在且可执行。
+// 原先硬编码 /bin/true，Windows 上会被解析成 <盘符>:\bin\true 而不存在，导致三条断言失败。
+const HELPER_BIN = process.execPath;
+
 function makeClipboard(initial = "") {
   return {
     text: initial,
@@ -57,7 +61,7 @@ function makeRunner({ focus = "102", pasteOk = true, searchIds = "101\n102\n103"
       if (args[0] === "key") return ok();
     }
     if (command === "/usr/bin/xprop" || command === "xprop") return ok("_NET_WM_PID(CARDINAL) = 50510\n");
-    if (command === "/bin/true" || command === "/usr/bin/treeland-activate") return ok("activated: TeleAgent 星辰超级智能体\n");
+    if (command === HELPER_BIN || command === "/usr/bin/treeland-activate") return ok("activated: TeleAgent 星辰超级智能体\n");
     return fail(`unexpected ${command} ${args.join(" ")}`);
   };
   return { run, calls };
@@ -169,9 +173,9 @@ test("成功路径：填入后停在 filled/manualSubmit，绝不自动点「运
 });
 
 test("激活 helper：可显式注入/环境变量/PATH 探测；缺失时返回 focus 且不点不粘", async () => {
-  assert.equal(resolveActivationHelper({ explicit: "/bin/true", env: {}, which: () => "" }), "/bin/true");
-  assert.equal(resolveActivationHelper({ env: { AGENT_DECK_TREELAND_ACTIVATE: "/bin/true" }, which: () => "" }), "/bin/true");
-  assert.equal(resolveActivationHelper({ env: {}, which: (name) => (name === "treeland-activate" ? "/bin/true" : "") }), "/bin/true");
+  assert.equal(resolveActivationHelper({ explicit: HELPER_BIN, env: {}, which: () => "" }), HELPER_BIN);
+  assert.equal(resolveActivationHelper({ env: { AGENT_DECK_TREELAND_ACTIVATE: HELPER_BIN }, which: () => "" }), HELPER_BIN);
+  assert.equal(resolveActivationHelper({ env: {}, which: (name) => (name === "treeland-activate" ? HELPER_BIN : "") }), HELPER_BIN);
   assert.equal(resolveActivationHelper({ env: {}, which: () => "" }), "");
 
   const { run, calls } = makeRunner({ focus: "999" });
@@ -188,11 +192,11 @@ test("激活 helper：可显式注入/环境变量/PATH 探测；缺失时返回
   const { run: run2, calls: calls2 } = makeRunner();
   const ok2 = await dispatchTeleagentLinux(
     { project: "p", text: "t" },
-    { platform: "linux", env: { DISPLAY: ":1", PATH: "/usr/bin" }, which, run: run2, clipboard: makeClipboard(), activationHelper: "/bin/true", capture: async () => null },
+    { platform: "linux", env: { DISPLAY: ":1", PATH: "/usr/bin" }, which, run: run2, clipboard: makeClipboard(), activationHelper: HELPER_BIN, capture: async () => null },
   );
   assert.equal(ok2.ok, true);
   assert.equal(ok2.stage, "filled");
-  assert.ok(calls2.some((call) => call[0] === "/bin/true"), "应先调用激活 helper");
+  assert.ok(calls2.some((call) => call[0] === HELPER_BIN), "应先调用激活 helper");
   assert.ok(calls2.some((call) => call.includes("ctrl+v")), "激活后应走单进程粘贴");
 });
 
