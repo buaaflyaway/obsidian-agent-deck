@@ -143,15 +143,15 @@ TeleAgent 的 `session` 表没有 `time_busy` / `idle_outcome`，无法像新版
 |---|---|---|
 | `src/constants.js` | `AGENTS.teleagent`（`desktopOnly: true`、`trackingOnly` 可先不加）、`AGENT_ORDER`、`DEFAULTS.agents`、`autoLogAgents` | ~15 |
 | `src/agent-registry.js` | 能力表：`delegate:false`、`runnerKind:"handoff"`、`desktopHandoffOnly:true`、`terminalHandoff:false` | ~12 |
-| `src/readers.js` | `desktopDatabases()` 增加 TeleAgent 库；`roots()` 不动 | ~10 |
+| `src/readers.js` | `desktopDatabases()` 增加 TeleAgent 库；`roots()` 不动；桌面 SQLite 库默认只读 `settings.fullHistoryDays` 天（`settings.desktopFullHistory` 可切回主力读全量，实测 4367 会话 / 498 MB 库全量读会卡几分钟） | ~10 |
 | `src/desktop-sessions.js` | 新增 `teleagent` 分支（复用 `session`/`message`/`part` SQL）、`finish` 归一化、模型名回退 | ~40 |
 | `src/delegation.js` | `AGENT_APPS.teleagent`、`openAgentApp` 平台分支、`openSession` 分支 | ~25 |
 | `src/journal.js` | `linkLine()` 的 `teleagent` 分支（`obsidian://agent-deck?…`） | ~3 |
 | `src/settings.js` / `src/settings-agents.js` | Agent 卡片、来源与扫描、启用状态 | ~25 |
 | `src/locales/en/*.js` | 新增文案英文 | ~10 |
 | `test/teleagent-sessions.test.mjs` | 建夹具库、路径发现、解析、token、认领 | ~150 |
-| `README.md` / `README.en.md` | 支持表加一行（追踪 ✅ / 后台委派 ❌ / 桌面交接 ✅ 复制 / 终端 ❌ / 直达 ⚠️ 唤起+复制） | ~4 |
-| `docs/specs/architecture-and-boundaries.md`、`acp-integration.zh-CN.md`、`docs/README.md` | 十一家 → 十二家、接入原则表加一行、索引加本文 | ~11 |
+| `README.md`（英文）/ `README.zh-CN.md`（中文） | 支持表加一行（追踪 ✅ / 后台委派 ❌ / 桌面交接 ✅ 复制 / 终端 ❌ / 直达 ⚠️ 唤起+复制）；1.13.17 起 `README.en.md` 已被上游删除，英文正本是 `README.md` | ~4 |
+| `docs/specs/architecture-and-boundaries.md`、`acp-integration.zh-CN.md`、`docs/README.md` | 十一家 → 十八家（1.13.4 时为十二家，1.13.17 合并后上游已扩到十七家 + TeleAgent）、接入原则表加一行、索引加本文 | ~11 |
 
 ## 5. 跨平台
 

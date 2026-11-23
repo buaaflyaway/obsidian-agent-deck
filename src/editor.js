@@ -7,13 +7,12 @@
 // Drag and drop between the note and the panel also lives here:
 //   · a session card dropped on a line binds it (🔗 child) or starts a new item there;
 //     the target line is highlighted while dragging, with what will happen;
-//   · the line under the cursor gets a small grip: click sends the item (with its
-//     children) to the primary agent after a confirm, double-click or ⌘-click picks the agent, drag it onto an
-//     agent card to delegate.
+//   · the paragraph under the cursor gets a small arrow: click sends it (a list item goes
+//     with its children, a plain paragraph goes alone) to the primary agent after a confirm,
+//     double-click or ⌘-click picks the agent, drag it onto an agent card to delegate.
 
 import { Decoration, WidgetType, ViewPlugin, EditorView } from "@codemirror/view";
 import { RangeSetBuilder, StateEffect, StateField, Prec } from "@codemirror/state";
-import { BULLET_RE } from "./delegation.js";
 import * as J from "./journal.js";
 import { agentIcon, setLucide } from "./icons.js";
 import { lattice } from "./lattice.js";
@@ -21,6 +20,7 @@ import { aiRecordDisplayExtension } from "./record-display.js";
 import { taskBoardExtension } from "./fractal-board.js";
 import { executionStatus } from "./workflow.js";
 import { AGENTS, fmtDur, fmtTok, truncate } from "./constants.js";
+import { formatTaskMetricsTooltip } from "./task-metrics.js";
 import { t as tr } from "./i18n.js";
 import { RESULT_LINE_RE, SUB_LINE_RE, TOK_BLOCK_MAX } from "./external-state.js";
 import { bindConnectedInterval } from "./runtime-guard.js";
@@ -318,14 +318,19 @@ class PillWidget extends WidgetType {
       meta.textContent = [progText, session && session.step ? truncate(session.step, 24) : ""].filter(Boolean).join(" · ");
     }
 
-    if (session && session.tokens) {
+    if (session && (session.tokens || session.taskMetrics?.activeMin > 0)) {
       const tok = document.createElement("span");
       tok.className = "ad-pill__tok";
       const icon = tok.appendChild(document.createElement("span"));
       icon.setAttribute("aria-hidden", "true");
       setLucide(icon, "database");
-      tok.appendChild(document.createTextNode(fmtTok(session.tokens)));
-      tok.title = session.tokens.toLocaleString() + " token";
+      const tm = session.taskMetrics;
+      const labelParts = [];
+      if (session.tokens) labelParts.push(fmtTok(session.tokens));
+      if (tm?.activeMin > 0 && tm.sessionCount > 1) labelParts.push(fmtDur(tm.activeMin * 60000));
+      if (tm?.sessionCount > 1) labelParts.push(`×${tm.sessionCount}`);
+      tok.appendChild(document.createTextNode(labelParts.join(" · ")));
+      tok.title = formatTaskMetricsTooltip(tm) || (session.tokens ? session.tokens.toLocaleString() + " token" : "");
       right.appendChild(tok);
     }
 
@@ -393,7 +398,8 @@ function paintLineProgress(el, info) {
       setLucide(c, "database");
     }
   }
-  el._tok.title = tok ? tr("{tok} tok：实心的一个 100 万，空心的一个 10 万", { tok: fmtTok(tok) }) : "";
+  const taskTip = info.taskMetrics ? formatTaskMetricsTooltip(info.taskMetrics) : "";
+  el._tok.title = taskTip || (tok ? tr("{tok} tok：实心的一个 100 万，空心的一个 10 万", { tok: fmtTok(tok) }) : "");
 
   if (info.mode === "bar") {
     const to = Math.max(0, Math.min(PROG_BAR_WIDTH, Math.round(info.pct * PROG_BAR_WIDTH)));
@@ -453,7 +459,7 @@ class LineProgressWidget extends WidgetType {
       ev.preventDefault();
       ev.stopPropagation();
       if (jobId && this.plugin.jobs?.[jobId]) this.plugin.openJob(jobId, sid);
-      else if (sid) this.plugin.openSession(el.dataset.agent || "claude", sid);
+      else if (sid) this.plugin.openSessionBySid(sid, el.dataset.agent || "claude");
     });
     el.addEventListener("contextmenu", (ev) => {
       ev.preventDefault();
@@ -505,7 +511,7 @@ function buildDecorations(view, plugin) {
   const map = plugin.lineMap(path, doc);
   const seen = new Set();
   const sel = view.state.selection.main;
-  // 把手只放在最近用过的那个编辑器的光标行上：点到侧栏面板里再回来拖，它还在
+  // 委派箭头只放在最近用过的那个编辑器的光标行上：点到侧栏面板里再回来，它还在
   const cursorLine = plugin._lastEditor === view && sel.empty ? doc.lineAt(sel.head).number - 1 : -1;
   for (const { from, to } of view.visibleRanges) {
     let pos = from;
@@ -536,25 +542,21 @@ function buildDecorations(view, plugin) {
         // A finished task keeps no status pill: 「正在执行」「等你」 under a line
         // that is already marked DONE is only noise.
         if (job?.destination === "background" && state?.kind === "done") state = null;
-        const displayState = plugin.aiRecordDisplayField ? view.state.field(plugin.aiRecordDisplayField, false) : null;
-        const boardState = plugin.taskBoardField ? view.state.field(plugin.taskBoardField, false) : null;
-        const isTopLevelAiParent = Boolean(displayState?.topLevelLines?.has(n) || boardState?.boardLines?.has(n));
-        // RangeSetBuilder 要求所有装饰按 (from, startSide) 升序添加：行装饰挂在 line.from，
-        // 行尾的 widget 挂在 line.to，所以必须先加行装饰再加任何 line.to 的东西，
-        // 否则 finish() 会抛 “Ranges must be added sorted by from position and startSide”，
-        // 本次更新的全部行装饰（pill、结果行底色、进度）都会一起丢掉。
         const prog = line.length < 2000 && plugin.lineProgressInfo ? plugin.lineProgressInfo(text, map.lines, n, session, job) : null;
         if (!prog && typeof Decoration.line === "function" && (RESULT_LINE_RE.test(text) || SUB_LINE_RE.test(text))) {
           builder.add(line.from, line.from, Decoration.line({ class: "ad-said" }));
-        }
-        if (n === cursorLine && !isTopLevelAiParent && plugin.settings.dragGrip !== false && BULLET_RE.test(text) && (J.kwLine(text) || J.CONTEXT_RECORD_RE.test(text))) {
-          builder.add(line.to, line.to, Decoration.widget({ widget: new GripWidget(plugin, path, n, text), side: 1, block: false }));
         }
         if (prog) {
           builder.add(line.to, line.to, Decoration.widget({ widget: new LineProgressWidget(plugin, path, n, prog), side: 1, block: false }));
         } else if (state && !J.isDoneLine(text)) {
           const widget = new PillWidget(plugin, path, n, state);
           builder.add(line.to, line.to, Decoration.widget({ widget, side: 1, block: false }));
+        }
+        // 光标所在的段落都出委派箭头：任务行、AI 记录行（💬 / ⏱ / 🔗 回传日志）、普通段落一视同仁，
+        // 顶层的 AI 记录父行也照给。RangeSetBuilder 要求按 from 递增加入，所以这一段必须放在本行其他
+        // 装饰（行首的 ad-said、行尾的 pill）之后，否则光标停在 💬 行上会抛 "Ranges must be added sorted"。
+        if (n === cursorLine && plugin.settings.dragGrip !== false && text.trim() && !/^\s*<!--/.test(text)) {
+          builder.add(line.to, line.to, Decoration.widget({ widget: new GripWidget(plugin, path, n, text), side: 1, block: false }));
         }
       }
       if (line.to >= to) break;

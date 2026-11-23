@@ -7,8 +7,8 @@ import { settingsAgentOrder, recommendPrimaryAgents } from "./settings-agents.js
 
 import fs from "fs";
 import { archiveCompletedTo } from "./journal-archive.js";
-import { planJournal, renderJournal, ACTIVE_HEADING, LEGACY_HEADINGS } from "./organize-journal.js";
-import { readJournalLayout, configuredJournalLayout, repairJournalLayout, stripJournalLayout } from "./journal-layout.js";
+import { planJournal, renderJournal, ACTIVE_HEADING, LEGACY_HEADINGS, hasBoundedJournalFrame } from "./organize-journal.js";
+import { readJournalLayout, configuredJournalLayout, repairJournalLayout, stripJournalLayout, JOURNAL_LAYOUT_INCOMPLETE, isJournalLayoutIncompleteError } from "./journal-layout.js";
 import { JournalOrganizer } from "./journal-organizer.js";
 import { semanticTaskId } from "./task-id.js";
 import { AttentionTracker } from "./attention.js";
@@ -16,11 +16,12 @@ import { defaultDestination, activeJob, canOpenClient } from "./workflow.js";
 import path from "path";
 import os from "os";
 import { execFile } from "child_process";
+import * as obsidianNs from "obsidian";
 import {
   Plugin, Notice, MarkdownView, MarkdownRenderChild, Menu, editorInfoField,
 } from "obsidian";
 import {
-  AGENTS, AGENT_ORDER, MODEL_CATALOG, DEFAULTS, deepMerge, syncDelegationSettings, dayKey, dayKeyToday, fmtMin, fmtTok, fmtClock, timeAgo, truncate, clamp, visibleMenuAgents, journalPath, STORE_VERSION, MEMORY_QUERY_ASSET_VERSION,
+  AGENTS, AGENT_ORDER, MODEL_CATALOG, DEFAULTS, deepMerge, syncDelegationSettings, dayKey, dayKeyToday, fmtMin, fmtTok, timeAgo, truncate, clamp, visibleMenuAgents, journalPath, STORE_VERSION, MEMORY_QUERY_ASSET_VERSION,
 } from "./constants.js";
 import {
   AgentUsage, UsageStore, projectName, normalizeProjectRoot, SUMMARY_VERSION, USAGE_CACHE_VERSION,
@@ -30,9 +31,11 @@ import {
   grokBotPersistenceDir,
 } from "./readers.js";
 import { evaluatePermissionPolicy } from "./security.js";
+import { runSecurityAudit, renderSecurityAuditReport, parseAuditConfig } from "./security-audit.js";
+import { computeTaskMetrics } from "./task-metrics.js";
 import { readRecentTraces, checkExternalAssets, buildDiagnosticReport } from "./trace.js";
-import { Delegator, blockAt, freshTaskText, stripInternalIdentifiers, ancestorLines, delegationText, findDraftLink, openSession as openSessionRaw, openExternal as openExternalRaw, openTerminal, findAgentBinary, findLink, sessionDeepLink, openAgentApp, isCliSession, isCodexDesktop } from "./delegation.js";
-import { pickPermissionOption } from "./delegation-runners.js";
+import { Delegator, blockAt, paragraphBlock, freshTaskText, stripInternalIdentifiers, ancestorLines, delegationText, findDraftLink, openSession as openSessionRaw, openExternal as openExternalRaw, openTerminal, findAgentBinary, findLink, sessionDeepLink, openAgentApp, isCliSession, isCodexDesktop } from "./delegation.js";
+import { pickPermissionOption, cleanEnv, resolveExecutableWithFallback } from "./delegation-runners.js";
 import { AgentDeckView, VIEW_TYPE } from "./view.js";
 import { DashboardView, DASHBOARD_TYPE } from "./dashboard.js";
 import { AgentDeckSettingsTab } from "./settings.js";
@@ -71,7 +74,7 @@ import { registerContextResolver } from "./harness.js";
 import { detectInstalledHarnesses, applyHarnessDetection, pickDefaultDelegateTarget, HARNESS_DETECTION_VERSION } from "./harness-detect.js";
 import { ConversationModal, AcpPermissionModal } from "./conversation-modal.js";
 import { registerTaskAgentSuggest } from "./mention-suggest.js";
-import { t, currentLanguage } from "./i18n.js";
+import { t, currentLanguage, setLanguage, registerCustomLocales, listCustomLocales, exportLocaleTemplate } from "./i18n.js";
 import {
   registerTaskStatusMenu, selectedTaskLines, selectionLineRanges, openBatchStatusMenu, populateBatchStatusMenu,
   itemLineFor, parentItem, contentSpan, groupRowsEdit,
@@ -83,7 +86,9 @@ import {
 } from "./task-export.js";
 import { scanAgentWait, scanLimitQueue, resolveExternalState, buildLineProgressInfo } from "./external-state.js";
 import { ManagedTimers, CircuitBreaker, safeRun } from "./runtime-guard.js";
-import { hasAgentCapability, usesDeckSessionLink, canContinueSession } from "./agent-registry.js";
+import { getAgentCapability, hasAgentCapability, usesDeckSessionLink, canContinueSession } from "./agent-registry.js";
+import { syncCustomAcpRegistry, parseCustomAcpEnv } from "./custom-acp.js";
+import { checkLatestRelease, shouldAutoCheckUpdate, shouldPromptUpdate } from "./update-check.js";
 import { updateNote } from "./note-updates.js";
 import { parseThread, pendingQuestion, answerSlot, fillAnswer, ensureQuestionId, anchorThreadText, makeQuestionId, suggestOptions, latestWrittenAnswer } from "./thread-replies.js";
 import { ReplyModal } from "./reply-modal.js";
@@ -121,9 +126,9 @@ import {
   MAX_STEWARD_ROUNDS,
   STANDALONE_PROJECT_ID,
 } from "./project-workbench.js";
-import { setTaskBoardEffect, taskBoardMode } from "./fractal-board.js";
+import { setTaskBoardEffect, taskBoardMode, renderTaskBoards } from "./fractal-board.js";
 import { judgeWave, newFindings, syncSeen, STEWARD_WATCH_MS } from "./steward-watch.js";
-import { SHOWCASE_VERSION, showcasePath, applyShowcaseDefaults, buildShowcaseMarkdown } from "./welcome-demo.js";
+import { SHOWCASE_VERSION, showcasePath, applyShowcaseDefaults, buildShowcaseMarkdown, shouldOpenShowcaseForVersion } from "./welcome-demo.js";
 
 const fsp = fs.promises;
 const home = () => os.homedir();
@@ -134,6 +139,7 @@ export default class AgentDeckPlugin extends Plugin {
   async onload() {
     const data = await this.loadData();
     this.settings = syncDelegationSettings(deepMerge(DEFAULTS, data || {}), data || {});
+    this.syncCustomAcpAgents();
     // 日记目录改成留空自动检测：以前存下的默认值「日记」当作没设过（只迁一次）
     if (!this.settings.journalFolderAuto) { if (this.settings.journalFolder === "日记") this.settings.journalFolder = ""; this.settings.journalFolderAuto = true; }
     this.settings.primaryAgentsInitialized = data?.primaryAgentsInitialized ?? !!(Array.isArray(data?.primaryAgents) || data?.aiPrimary);
@@ -155,7 +161,9 @@ export default class AgentDeckPlugin extends Plugin {
       this.saveSettings().catch(() => {});
     }
     this.settings.jobs = this.settings.jobs && typeof this.settings.jobs === "object" ? this.settings.jobs : {};
-    J.setDayOffset((Number.isFinite(this.settings.dayCutoff) ? this.settings.dayCutoff : 0) * 60);
+    this._standaloneDayCutoff = this.settings.dayCutoff;
+    this.syncJournalCutoff();
+    this._scannedDayCutoff = this.settings.dayCutoff;
     this.jobs = this.settings.jobs;
     // 自动会话记录改为默认打开、扫描间隔改为 30 秒：老库也迁一次，之后再手动改就尊重用户的
     if (!this.settings.defaultsMigratedAutoLog) {
@@ -180,6 +188,7 @@ export default class AgentDeckPlugin extends Plugin {
     this.manifestDir = this.manifest.dir || `.obsidian/plugins/${this.manifest.id}`;
     this.pluginDir = path.join(this.vaultPath, this.manifestDir);
     this.usageFile = path.join(this.pluginDir, "usage.json");
+    this.reloadLocales();
 
     this.store = new UsageStore(this, this.settings);
     this.usage = new AgentUsage({ cfg: this.settings, settings: this.settings });
@@ -210,6 +219,7 @@ export default class AgentDeckPlugin extends Plugin {
     });
     this.journalSync = new JournalSync(this);
     this.journalOrganizer = new JournalOrganizer(this);
+    if (this.app.workspace.on) this.registerEvent(this.app.workspace.on("nautilus-spiral:day-cutoff-changed", () => this.scanNow(false)));
 
     this.registerView(VIEW_TYPE, (leaf) => new AgentDeckView(leaf, this));
     this.registerView(MEMORY_BOARD_TYPE, (leaf) => new MemoryBoardView(leaf, this));
@@ -231,8 +241,10 @@ export default class AgentDeckPlugin extends Plugin {
         const canPinCursor = isRecord
           || /^\s*(?:[-*+]|\d+[.)])\s+TODO\s+🤖\s/.test(cursorRaw)
           || Boolean(J.kwLine(cursorRaw)?.kw);
+        // 光标所在那一段只要能当任务发出去，右键就给委派（和行尾箭头同一个口径）。
+        const canDelegateCursor = Boolean(cursorRaw.trim()) && !/^\s*<!--/.test(cursorRaw);
         const selected = selectedTaskLines(cm.state.doc, cm.state.selection);
-        if (!selected.length && !canPinCursor) return;
+        if (!selected.length && !canPinCursor && !canDelegateCursor) return;
         // AI 记录的右键菜单整组放在最上面，Pin 排第一；记录菜单不配图标。
         const canSection = createRecordMenuSection(menu);
         const addRecordItem = (build) => {
@@ -252,6 +264,8 @@ export default class AgentDeckPlugin extends Plugin {
               }),
           );
         }
+        const activePath = this.app.workspace.getActiveFile()?.path || "";
+        if (canDelegateCursor && activePath) this.addDelegateMenuItems(menu, activePath, cursorLine, addRecordItem);
         if (isRecord) {
           const lines = editor.getValue().split("\n");
           const parentLine = this.parentTimelineLine(lines, cursorLine);
@@ -315,7 +329,12 @@ export default class AgentDeckPlugin extends Plugin {
     }
     this.registerMarkdownPostProcessor((el, ctx) => {
       const child = new MarkdownRenderChild(el);
-      child.onunload = renderAIRecords(el, this, ctx);
+      const cleanupRecords = renderAIRecords(el, this, ctx);
+      const cleanupBoards = renderTaskBoards(el, this, ctx);
+      child.onunload = () => {
+        cleanupRecords?.();
+        cleanupBoards?.();
+      };
       ctx.addChild(child);
     });
 
@@ -367,21 +386,27 @@ export default class AgentDeckPlugin extends Plugin {
       if (!checking) this.activateDashboard();
       return true;
     } });
-    this.addCommand({
-      id: "open-menubar-panel",
-      name: t("打开 macOS 菜单栏面板"),
-      callback: async () => {
-        if (this.settings.showMenuBar === false) return this.notice(t("macOS 菜单栏已关闭，请先在「记录」里打开"));
-        await this.menubar.start();
-        const started = Date.now();
-        const wait = setInterval(() => {
-          if (this.menubar.isAlive() || Date.now() - started > 15000) {
-            clearInterval(wait);
-            this.menubar.show();
+    if (process.platform === "darwin") {
+      this.addCommand({
+        id: "open-menubar-panel",
+        name: t("打开 macOS 菜单栏面板"),
+        callback: async () => {
+          if (this.settings.showMenuBar === false) {
+            this.settings.showMenuBar = true;
+            await this.saveSettings();
+            this.settingTab?.mbSwitch?.setOn(true);
           }
-        }, 300);
-      },
-    });
+          await this.menubar.start();
+          const started = Date.now();
+          const wait = setInterval(() => {
+            if (this.menubar.isAlive() || Date.now() - started > 15000) {
+              clearInterval(wait);
+              this.menubar.show();
+            }
+          }, 300);
+        },
+      });
+    }
     this.addCommand({ id: "open-settings", name: t("打开 Agent Deck 设置"), callback: () => this.openSettings() });
     this.addCommand({ id: "open-models", name: t("打开 Agent Deck 的管理模型设置"), callback: () => this.openSettings("models") });
     this.addCommand({ id: "delegate-line", name: t("委派当前任务 / 打开任务操作"), hotkeys: [{ modifiers: ["Ctrl", "Alt"], key: "D" }], editorCallback: (editor, view) => {
@@ -404,7 +429,7 @@ export default class AgentDeckPlugin extends Plugin {
       const job = view.file && this.jobAtLine(view.file.path, editor.getCursor().line, editor.getLine(editor.getCursor().line));
       if (job && activeJob(job)) this.cancelJob(job.id); else this.notice(t("当前任务没有可停止的执行"));
     } });
-    this.addCommand({ id: "scan-now", name: t("重新扫描本机 Agent 会话"), callback: () => this.scanNow() });
+    this.addCommand({ id: "scan-now", name: t("重新扫描本机会话并整理今天的日记"), callback: () => this.rescanAndLog() });
     this.addCommand({ id: "redetect-harnesses", name: t("重新检测本机已安装的 Harness"), callback: () => this.redetectHarnesses() });
     this.addCommand({ id: "jump-running-project", name: t("跳转到日记正在做的区域"), hotkeys: [{ modifiers: ["Ctrl", "Alt"], key: "J" }], callback: () => this.jumpRunningProject() });
     this.addCommand({
@@ -452,8 +477,11 @@ export default class AgentDeckPlugin extends Plugin {
     this.addCommand({ id: "draft-delegation", name: t("委派：先生成草稿（不发送，看完再点委派）"), callback: () => this.makeDispatchDraft() });
     this.addCommand({ id: "skills-refresh", name: t("技能：刷新技能卡（外部 Skill → 库内笔记）"), callback: () => this.refreshSkillCards() });
     this.addCommand({ id: "import-nautilus", name: t("导入螺旋日程的历史用量"), callback: () => this.importNautilus(true) });
+    this.addCommand({ id: "check-update", name: t("检查 Agent Deck 更新"), callback: () => this.checkForUpdates({ manual: true }) });
     this.addCommand({ id: "clean-jobs", name: t("清理已结束的委派记录"), callback: () => this.cleanJobs() });
     this.addCommand({ id: "export-diagnostics", name: t("导出脱敏诊断报告（Trace / 版本 / 熔断状态）"), callback: () => this.exportDiagnostics() });
+    this.addCommand({ id: "security-audit-replay", name: t("安全：回放最近 30 天会话的工具调用并生成审计报告"), callback: () => this.runSecurityAuditReport() });
+    this.addCommand({ id: "security-audit-replay-7d", name: t("安全：快速回放最近 7 天会话并生成审计报告"), callback: () => this.runSecurityAuditReport({ days: 7, overrideDays: true }) });
     this.addCommand({ id: "open-welcome-showcase", name: t("打开 1.10.0 新功能示例笔记"), callback: () => this.openWelcomeShowcase() });
 
     this.registerObsidianProtocolHandler("agent-deck", async (params) => {
@@ -490,7 +518,7 @@ export default class AgentDeckPlugin extends Plugin {
       if (this.settings.openDashboardOnStartup) this.activateView();
       else { try { this.openPanelOnce(); } catch (e) { console.error("[agent-deck] panel", e); } }
       if (this.settings.showMenuBar !== false) this.menubar.start().catch((e) => console.error("[agent-deck] menubar", e));
-      if (this.settings.menuBarHideNautilus !== false) this.defer(() => this.hideNautilusAgentBar().catch(() => {}), 2500);
+      if (process.platform === "darwin" && this.settings.menuBarHideNautilus !== false) this.defer(() => this.hideNautilusAgentBar().catch(() => {}), 2500);
       this.scheduleScan();
       this.startStewardWatch();
       this.watchCursorEvents();
@@ -505,6 +533,7 @@ export default class AgentDeckPlugin extends Plugin {
       }
       this.defer(() => this.recoverJobs(), 4000);
       this.defer(() => this.maybeOpenWelcomeShowcase().catch((e) => console.error("[agent-deck] showcase", e)), 600);
+      this.defer(() => this.checkForUpdates({ manual: false }).catch(() => {}), 12000);
     });
   }
 
@@ -943,8 +972,9 @@ export default class AgentDeckPlugin extends Plugin {
 
   async maybeOpenWelcomeShowcase() {
     if (this._unloaded) return false;
-    if (this.settings?.welcomeShowcaseVersion === SHOWCASE_VERSION) return false;
-    return Boolean(await this.openWelcomeShowcase({ force: false }));
+    const currentVersion = this.manifest?.version || SHOWCASE_VERSION;
+    if (!shouldOpenShowcaseForVersion(currentVersion, this.settings?.welcomeShowcaseVersion)) return false;
+    return Boolean(await this.openWelcomeShowcase({ force: true }));
   }
 
   async openWelcomeShowcase({ force = false } = {}) {
@@ -961,11 +991,12 @@ export default class AgentDeckPlugin extends Plugin {
       file = ensured.file;
       created = true;
     }
-    if (created || force) await this.app.vault.modify(file, content);
-
+    const currentVersion = this.manifest?.version || SHOWCASE_VERSION;
     const prevVersion = this.settings.welcomeShowcaseVersion;
-    this.settings.welcomeShowcaseVersion = SHOWCASE_VERSION;
-    if (presetChanged || prevVersion !== SHOWCASE_VERSION) await this.saveSettings?.();
+    if (created || force || prevVersion !== currentVersion) await this.app.vault.modify(file, content);
+
+    this.settings.welcomeShowcaseVersion = currentVersion;
+    if (presetChanged || prevVersion !== currentVersion) await this.saveSettings?.();
     this.refreshUI?.();
     dispatchRefresh(this);
 
@@ -974,10 +1005,14 @@ export default class AgentDeckPlugin extends Plugin {
       if (!opened && leaf?.view?.file?.path === targetPath) opened = leaf;
     });
     if (opened) {
+      if (opened.getViewState && opened.setViewState) {
+        const vs = opened.getViewState();
+        await opened.setViewState({ ...vs, state: { ...(vs?.state || {}), mode: "source", source: false } });
+      }
       this.app.workspace.revealLeaf(opened);
     } else {
       const leaf = this.app.workspace?.getLeaf?.("tab") || this.app.workspace?.getLeaf?.(false);
-      if (leaf?.openFile) await leaf.openFile(file, { active: true });
+      if (leaf?.openFile) await leaf.openFile(file, { active: true, state: { mode: "source", source: false } });
     }
     return targetPath;
   }
@@ -1020,6 +1055,79 @@ export default class AgentDeckPlugin extends Plugin {
       this.app.setting.openTabById(this.manifest.id);
       if (tab && this.settingTab) setTimeout(() => { try { this.settingTab.display(); } catch { /* not open yet */ } }, 120);
     } catch (e) { console.error("[agent-deck] open settings", e); }
+  }
+
+  customLocaleDirs() {
+    const dirs = [];
+    if (this.pluginDir) dirs.push(path.join(this.pluginDir, "locales"));
+    if (this.vaultPath) dirs.push(path.join(this.vaultPath, "Agent Deck", "locales"));
+    return [...new Set(dirs)];
+  }
+
+  reloadLocales() {
+    const byId = new Map();
+    for (const dir of this.customLocaleDirs()) {
+      try {
+        if (!fs.existsSync(dir)) continue;
+        for (const entry of fs.readdirSync(dir)) {
+          if (!entry.endsWith(".json") || entry.toLowerCase() === "template.json") continue;
+          const id = entry.slice(0, -5).trim();
+          if (!id || id === "auto" || id === "zh" || id === "en") continue;
+          const filePath = path.join(dir, entry);
+          try {
+            const raw = JSON.parse(fs.readFileSync(filePath, "utf8"));
+            if (!raw || typeof raw !== "object" || Array.isArray(raw)) continue;
+            const strings = {};
+            for (const [k, v] of Object.entries(raw)) {
+              if (k === "_meta" || typeof v !== "string" || !v.trim()) continue;
+              strings[k] = v;
+            }
+            const name = String(raw._meta?.name || id).trim() || id;
+            byId.set(id.toLowerCase(), { id, name, path: filePath, strings });
+          } catch (e) {
+            console.warn("[agent-deck] skip invalid locale file", filePath, e?.message || e);
+          }
+        }
+      } catch { /* unreadable locale dir */ }
+    }
+    const list = registerCustomLocales([...byId.values()]);
+    setLanguage(this.settings?.uiLanguage || "auto");
+    return list;
+  }
+
+  async setUiLanguage(lang) {
+    this.settings.uiLanguage = String(lang || "auto").trim() || "auto";
+    await this.saveSettings();
+    this.reloadLocales();
+    this.refreshUI();
+    this.menubar?.update?.(true);
+    for (const type of [DASHBOARD_TYPE, MEMORY_BOARD_TYPE, REPLY_INBOX_TYPE]) {
+      for (const leaf of this.app.workspace?.getLeavesOfType?.(type) || []) {
+        try { leaf.view?.render?.(); } catch { /* ignore */ }
+      }
+    }
+    try { this.settingTab?.display?.(); } catch { /* ignore */ }
+    this.notice(t("界面语言已切换；命令面板和右键菜单会在重启或重载插件后完全更新"));
+  }
+
+  async exportLocaleTemplateFile() {
+    const rel = "Agent Deck/locales/template.json";
+    const content = exportLocaleTemplate();
+    try {
+      if (this.vaultPath) {
+        const full = path.join(this.vaultPath, "Agent Deck", "locales", "template.json");
+        fs.mkdirSync(path.dirname(full), { recursive: true });
+        fs.writeFileSync(full, content, "utf8");
+      } else {
+        await this.app.vault.adapter.mkdir("Agent Deck/locales").catch(() => {});
+        await this.app.vault.adapter.write(rel, content);
+      }
+      this.notice(t("已导出语言模板到 {path}；翻译后改名为如 zh-TW.json 或 ja.json 放回该目录，再点「重新扫描语言包」即可，插件更新不会覆盖。", { path: rel }));
+      return rel;
+    } catch (e) {
+      this.notice(t("导出语言模板失败：{error}", { error: e?.message || e }));
+      return null;
+    }
   }
 
   // ---------- scan ----------
@@ -1188,23 +1296,28 @@ export default class AgentDeckPlugin extends Plugin {
     return touched;
   }
 
-  async scanNow(force = false, { agent = "", days = 0 } = {}) {
+  async scanNow(force = false, { agent = "", days = 0, manual = false } = {}) {
     await this._usageReady;
     if (this._unloaded) return;
-    if (this._scanning) return;
+    if (this._scanning || (this._manualRescan && !manual)) return;
     this._scanning = true;
     try {
+      const fullScan = !agent && !days;
+      if (fullScan) this.syncJournalCutoff?.();
+      const dayCutoff = this.settings.dayCutoff;
+      const cutoffChanged = fullScan && this._scannedDayCutoff !== undefined && this._scannedDayCutoff !== dayCutoff;
       const initialDays = this.settings.primaryAgentsInitialized === false ? await this.initializePrimaryAgents() : null;
       // First scan after a load: paint what the last session stored before
       // walking the logs, so the panel is not blank for the whole scan.
       if (!this._painted) { this._painted = true; this.refreshUI(); }
-      if (force && !agent && !days) {
+      if (fullScan && (force || cutoffChanged)) {
+        this._rescanMeta = new Map(this.usage.meta);
         this.usage.files.clear();
         this.usage.meta.clear();
         this.usage.titles.clear();
         this.usage.lastScan = 0;
       }
-      const since = days ? Date.now() - days * 86400000 : force ? 0 : Math.max(0, (this.usage.lastScan || 0) - 60000);
+      const since = days ? Date.now() - days * 86400000 : force || cutoffChanged ? 0 : Math.max(0, (this.usage.lastScan || 0) - 60000);
       // A card scan must also recover non-primary history already skipped by
       // incremental parsing. Read it separately, then replace only those files.
       const scoped = !!(agent && days);
@@ -1212,6 +1325,7 @@ export default class AgentDeckPlugin extends Plugin {
       const touched = await usage.scan({ since, agent, strictSince: !!days });
       for (const day of initialDays || []) touched.add(day);
       if (this._unloaded) return;
+      if (fullScan) this._scannedDayCutoff = dayCutoff;
       if (scoped) {
         for (const key of ["files", "meta", "titles", "subs"]) for (const [id, value] of usage[key]) this.usage[key].set(id, value);
         this.usage.errors = [...this.usage.errors, ...usage.errors].slice(-20);
@@ -1224,16 +1338,20 @@ export default class AgentDeckPlugin extends Plugin {
       this.delegator.retryBackgroundResults?.();
       this.syncWorkbenchWaves?.().catch((e) => console.error("[agent-deck] wave sync", e));
       this.usage.maybeSaveCache(this.usageCacheFile);
-      await this.refreshExternalState?.().catch(() => {});
+      const externalChanged = await this.refreshExternalState?.().catch(() => {});
       this.refreshUI();
-      this.journalSync.run().catch((e) => console.error("[agent-deck] journal sync", e));
+      if (manual || touched.size || externalChanged || cutoffChanged) this.notifySpiral?.();
+      if (!manual) this.journalSync.run().catch((e) => console.error("[agent-deck] journal sync", e));
       if (!scoped) this.maybePromptCursorHooks?.().catch(() => {});
-      if (force) new Notice(t("Agent Deck：读到 {files} 个日志，{days} 天有内容", { files: this.usage.files.size, days: touched.size }), 4000);
+      const result = { files: this.usage.files.size, days: touched.size };
+      if (force && !manual) new Notice(t("Agent Deck：读到 {files} 个日志，{days} 天有内容", result), 4000);
       if (agent && days) new Notice(t("{name}：最近 {days} 天的会话已扫描", { name: AGENTS[agent].name, days }), 4000);
+      return result;
     } catch (e) {
       console.error("[agent-deck] scan", e);
       this.notice(t("扫描会话失败：{error}", { error: e && e.message || e }), 8000);
     } finally {
+      this._rescanMeta = null;
       this._scanning = false;
     }
   }
@@ -1247,6 +1365,39 @@ export default class AgentDeckPlugin extends Plugin {
     await this.store.save();
     await this.scanNow(true);
     new Notice(t("Agent Deck：历史已重算"));
+  }
+
+  async rescanAndLog() {
+    if (this._manualRescan || this._scanning) return this.notice(t("正在扫描或整理会话…"));
+    this._manualRescan = true;
+    let progress;
+    try {
+      progress = new Notice(t("正在扫描或整理会话…"), 0);
+      await Promise.all([this.journalSync._running, this.autoLog?._running]);
+      const scan = await this.scanNow(true, { manual: true });
+      if (!scan || this._unloaded) return;
+      const summary = t("Agent Deck：读到 {files} 个日志，{days} 天有内容", scan);
+      const synced = this.settings.journalAutoWrite !== false ? await this.journalSync.run({ force: true }) : null;
+      if (this._unloaded) return;
+      if (this.settings.journalAutoWrite === false) {
+        this.notice(summary + "\n" + t("日记写入已关闭，只重扫了会话"), 6000);
+        return;
+      }
+      const result = await this.logNowWithMarkerGuard({ notify: false });
+      if (this._unloaded) return;
+      const n = result.updated === false ? 0 : result.changes.length;
+      const updated = result.updated || synced?.updated;
+      const error = result.error || synced?.error;
+      const changes = n ? t("整理进日记 {n} 处", { n }) : updated ? t("已更新日记里的会话记录") : t("没有新的会话内容需要整理");
+      const status = error ? [n || updated ? changes : "", t("日记整理遇到问题：{error}", { error })].filter(Boolean).join("\n") : changes;
+      this.notice(summary + "\n" + status, 8000);
+    } catch (e) {
+      console.error("[agent-deck] rescan", e);
+      this.notice(t("日记整理遇到问题：{error}", { error: e?.message || e }), 8000);
+    } finally {
+      progress?.hide();
+      this._manualRescan = false;
+    }
   }
 
   async importNautilus(manual = false) {
@@ -1315,11 +1466,31 @@ export default class AgentDeckPlugin extends Plugin {
   }
 
   // ---------- settings ----------
+  spiralJournalCutoff() {
+    const spiral = this.app?.plugins?.plugins?.["nautilus-spiral"];
+    const cutoff = spiral?.journalDayCutoff?.() ?? spiral?.settings?.dayCutoff;
+    return Number.isFinite(cutoff) && cutoff >= 0 && cutoff < 24 ? cutoff : null;
+  }
+
+  syncJournalCutoff() {
+    this.settings.dayCutoff = this.spiralJournalCutoff() ?? this._standaloneDayCutoff ?? this.settings.dayCutoff ?? 0;
+    J.setDayOffset(this.settings.dayCutoff * 60);
+  }
+
+  async setStandaloneDayCutoff(value) {
+    this._standaloneDayCutoff = value;
+    await this.saveSettings();
+    await this.scanNow(false);
+  }
+
+  notifySpiral() {
+    this.app?.workspace?.trigger?.("agent-deck:sessions-changed");
+  }
+
   async saveSettings() {
     syncModelGroups(this.settings, agent => this.agentEnabled(agent));
     this.settings.jobs = this.jobs;
-    J.setDayOffset((Number.isFinite(this.settings.dayCutoff) ? this.settings.dayCutoff : 0) * 60);
-    await this.saveData(this.settings);
+    await this.saveData({ ...this.settings, dayCutoff: this._standaloneDayCutoff ?? this.settings.dayCutoff });
   }
 
   saveJobs() {
@@ -1465,7 +1636,10 @@ export default class AgentDeckPlugin extends Plugin {
   async pollExternalState() {
     if (this._unloaded) return;
     if (await this.refreshExternalState()) {
-      if (!this._unloaded) this.refreshUI();
+      if (!this._unloaded) {
+        this.refreshUI();
+        this.notifySpiral();
+      }
     }
   }
 
@@ -1637,7 +1811,7 @@ export default class AgentDeckPlugin extends Plugin {
 
   // 给别的插件用（螺旋日程的进度行）：只给会话号，按 Agent Deck 的规矩打开——命令行会话切到它的终端标签
   openSessionBySid(sid, agent = "") {
-    const m = (sid && this.usage.meta.get(sid)) || {};
+    const m = (sid && (this.usage.meta.get(sid) || this._rescanMeta?.get(sid))) || {};
     return this.openSession(m.agent || agent || "claude", sid, m.app || "", m);
   }
 
@@ -1749,23 +1923,44 @@ export default class AgentDeckPlugin extends Plugin {
     };
     const jobsBySid = new Map();
     for (const job of Object.values(this.jobs)) if (!jobsBySid.has(job.sessionId)) jobsBySid.set(job.sessionId, job);
-    for (const parsed of cached.links) {
-      const meta = this.usage.meta.get(parsed.sid) || { sid: parsed.sid, agent: parsed.agent, state: "idle", title: "", tokens: 0, lastAt: 0 };
-      const live = liveFor(parsed.sid);
-      const job = jobsBySid.get(parsed.sid);
-      const rawSession = { ...meta, ...(live || {}), tokens: live?.tokens ?? meta.tokens ?? ((meta.out || 0) + (meta.fresh || 0)), agent: parsed.agent || meta.agent, job };
-      sessionByParent.set(parsed.parent, this.applyExternalState ? this.applyExternalState(rawSession) : rawSession);
+    const linksByParent = new Map();
+    for (const link of cached.links) {
+      let arr = linksByParent.get(link.parent);
+      if (!arr) linksByParent.set(link.parent, arr = []);
+      arr.push(link);
     }
-    const daySt = (this.settings.autoLogState && this.settings.autoLogState[dayKeyToday(this.settings)]) || {};
-    for (const [sid, rec] of Object.entries(daySt)) {
-      if (!rec || !rec.blockId || rec.skip || rec.gone) continue;
-      const i = cached.blockIds.get(rec.blockId);
-      if (i === undefined || sessionByParent.has(i)) continue;
-      const meta = this.usage.meta.get(sid);
-      if (!meta) continue;
+    const bind = (line, sid, agent, allLinks = null) => {
+      const meta = this.usage.meta.get(sid) || this._rescanMeta?.get(sid) || {};
       const live = liveFor(sid);
-      const rawSession = { ...meta, ...(live || {}), tokens: live?.tokens ?? meta.tokens ?? ((meta.out || 0) + (meta.fresh || 0)), sid, agent: meta.agent || "claude" };
-      sessionByParent.set(i, this.applyExternalState ? this.applyExternalState(rawSession) : rawSession);
+      const taskLinks = Array.isArray(allLinks) && allLinks.length ? allLinks : [{ sid, agent: agent || live?.agent || meta.agent || "claude" }];
+      const taskMetrics = typeof computeTaskMetrics === "function" ? computeTaskMetrics(taskLinks, this.usage) : null;
+      const singleTokens = live?.tokens ?? meta.tokens ?? ((meta.out || 0) + (meta.fresh || 0));
+      const tokens = taskMetrics && taskMetrics.sessionCount > 1 ? Math.max(taskMetrics.tokens, singleTokens) : singleTokens;
+      const rawSession = {
+        state: "idle",
+        ...meta,
+        ...live,
+        tokens,
+        taskMetrics,
+        sid,
+        agent: agent || live?.agent || meta.agent || "claude",
+        job: jobsBySid.get(sid),
+      };
+      sessionByParent.set(line, this.applyExternalState ? this.applyExternalState(rawSession) : rawSession);
+    };
+    for (const [parent, arr] of linksByParent) {
+      const last = arr[arr.length - 1];
+      bind(parent, last.sid, last.agent, arr);
+    }
+    if (cached.blockIds.size) {
+      const byDay = this.settings.autoLogState || {};
+      for (const day of Object.keys(byDay).sort().reverse()) {
+        for (const [sid, rec] of Object.entries(byDay[day] || {})) {
+          if (!rec?.blockId || rec.skip || rec.gone) continue;
+          const line = cached.blockIds.get(rec.blockId);
+          if (line !== undefined && !sessionByParent.has(line)) bind(line, sid, rec.agent);
+        }
+      }
     }
     return { doc, lines: cached.lines, sessionByParent, linkByLine: cached.linkByLine };
   }
@@ -1886,11 +2081,10 @@ export default class AgentDeckPlugin extends Plugin {
     const day = dayKeyToday(this.settings);
     const rec = ((this.settings.autoLogState || {})[day] || {})[sid];
     const daySess = ((this.usage.summary(day) || {}).list || []).find((x) => x.sid === sid);
-    const first = daySess && daySess.segs && daySess.segs.length ? daySess.segs[0][0] : null;
-    const last = daySess && daySess.segs && daySess.segs.length ? daySess.segs[daySess.segs.length - 1][1] : first;
-    const now = new Date();
-    const since = first != null ? J.clock(first) : fmtClock(now.getTime());
-    const until = last != null ? J.clock(last) : (meta.lastAt ? fmtClock(meta.lastAt) : since);
+    const { start: since, end: until } = J.sessionRecordSpan({
+      segs: daySess?.segs, meta: live || meta, kw: J.kwForState(live?.state || meta.state),
+      idleMinutes: Math.max(5, this.settings.autoLogIdle || 10),
+    });
     const before = cm.state.doc.toString(), anchor = before.split("\n")[line], notePath = view.file.path;
     const agent = data.agent || meta.agent || "claude";
     const title = data.title || meta.title || (meta.text || "").split(" / ")[0] || sid.slice(0, 8);
@@ -2034,12 +2228,13 @@ export default class AgentDeckPlugin extends Plugin {
     let line = lines[item.line] === item.lineText ? item.line : lines.indexOf(item.lineText);
     if (line < 0) return { error: t("这一行刚改过，重新来一次") };
     // 自动记录也可以作为任务；只有这一块自己的绑定才阻止重复发送。
-    const block = blockAt(lines, line);
+    // 不带列表标记的普通段落没有子块，就把这一行当成一项。
+    const block = blockAt(lines, line) || paragraphBlock(lines, line);
     if (!newSession && block && findLink(lines, block)) return { error: t("已经绑着会话，不委派") };
     return { file, lines, line, block };
   }
 
-  async delegateDrop(agent, item, fromEl, { cli = false, destination, permission, cwd = "", projectName = "", fromDialog = false, newSession = false, confirmed = false, expectedText, boardContext = "" } = {}) {
+  async delegateDrop(agent, item, fromEl, { cli = false, destination, permission, cwd = "", projectName = "", fromDialog = false, newSession = false, confirmed = false, expectedText, boardContext = "", model = "" } = {}) {
     this._dragItem = null;
     if (AGENTS[agent]?.trackingOnly) return;
     const target = await this.delegateTarget(item, { newSession });
@@ -2047,6 +2242,8 @@ export default class AgentDeckPlugin extends Plugin {
     if (confirmed && expectedText !== undefined && delegationText(target.lines, target.block, { newSession }) !== expectedText) return this.notice(t("任务内容已变化，请重新预览后发送"));
     try {
       const opts = mentionOptions(this, { ...target, agent, ignoreMention: newSession });
+      // 右键菜单里点名的模型：只在这一项确实按那个 Agent 走时生效，别盖掉正文里的 @agent。
+      if (model && opts.agent === agent) opts.model = model;
       agent = opts.agent;
       destination ||= cli && hasAgentCapability(agent, "terminalHandoff") ? "terminal" : defaultDestination(this, agent);
       if (!confirmed) {
@@ -2070,6 +2267,7 @@ export default class AgentDeckPlugin extends Plugin {
           confirmed: true,
           expectedText: delegationText(target.lines, target.block, { newSession }),
           boardContext,
+          model,
         })).open();
         return;
       }
@@ -2647,6 +2845,79 @@ export default class AgentDeckPlugin extends Plugin {
     new DelegateOptionsModal(this.app, this, path, line).open();
   }
 
+  // 四视图（表格 / 卡片 / 时间线）和阅读视图的行右键菜单：Pin 与委派都收在这里。
+  async recordRowMenu(event, { path, line } = {}) {
+    if (!path || !Number.isInteger(line) || line < 0) return null;
+    let text;
+    try { text = await this.readNote(path); } catch { return null; }
+    const lines = text.split("\n");
+    const raw = lines[line];
+    if (raw === undefined) return null;
+    const menu = new Menu();
+    if (J.CONTEXT_RECORD_RE.test(raw)) {
+      const pinned = J.hasPinMarker(raw);
+      menu.addItem((item) => item
+        .setTitle(pinned ? t("取消 Pin（恢复常规折叠）") : t("Pin 为关键记录（折叠不隐藏 · Dreaming 优先）"))
+        .onClick(() => this.toggleRecordPin(path, line)));
+      menu.addSeparator();
+    }
+    this.addDelegateMenuItems(menu, path, line);
+    menu.showAtMouseEvent(event);
+    return menu;
+  }
+
+  // 右键菜单里的委派两项：直接走默认 Agent + 默认模型，或展开二级菜单按 Agent 选模型。
+  // 四视图 / 阅读视图的行和编辑器源码行共用这一份，标题里写清楚会用谁。
+  // 菜单里用的模型名：`*-default` 这类「不传模型参数」的占位符收成短写法，
+  // 免得标题变成「委派（DSH · 不指定（使用 DSH 当前默认模型））」这种括号套括号。
+  delegateModelLabel(id = "") {
+    const model = this.modelById(id);
+    if (!model) return id || t("客户端模型");
+    return model.value === "" ? t("CLI 默认") : model.name;
+  }
+
+  addDelegateMenuItems(menu, path, line, addItem = null) {
+    const add = addItem || ((build) => menu.addItem(build));
+    const primary = this.defaultTarget();
+    const modelName = this.delegateModelLabel(this.defaultModel(primary));
+    add((item) => item
+      .setTitle(t("委派（{agent} · {model}）", { agent: AGENTS[primary]?.short || primary, model: modelName }))
+      .setIcon("send")
+      .onClick(() => this.delegateViewRow(path, line)));
+    const choices = this.recordMenuModels();
+    add((item) => {
+      item.setTitle(t("委派并选择模型")).setIcon("bot");
+      const sub = typeof item.setSubmenu === "function" ? item.setSubmenu() : null;
+      if (!sub || !choices.length) {
+        item.onClick(() => this.delegateViewRow(path, line));
+        return;
+      }
+      for (const { agent, model } of choices) {
+        sub.addItem((entry) => entry
+          .setTitle(`${AGENTS[agent]?.short || agent} · ${this.delegateModelLabel(model.id)}`)
+          .onClick(() => this.delegateViewRow(path, line, agent, model.id)));
+      }
+    });
+  }
+
+  // 二级菜单里列哪些模型：只看已启用、能委派的 Agent 的启用模型。
+  recordMenuModels() {
+    const out = [];
+    for (const agent of AGENT_ORDER) {
+      if (!this.agentEnabled(agent) || AGENTS[agent]?.trackingOnly) continue;
+      for (const model of this.modelsFor(agent)) if (this.modelEnabled(model.id)) out.push({ agent, model });
+    }
+    return out;
+  }
+
+  async delegateViewRow(path, line, agent = "", model = "") {
+    const file = this.app.vault.getAbstractFileByPath(path);
+    if (!file) return this.notice(t("找不到这篇笔记"));
+    const lines = (await this.readNote(path)).split("\n");
+    if (!(line >= 0 && line < lines.length)) return;
+    return this.delegateDrop(agent || this.defaultTarget(), { path, line, lineText: lines[line] }, null, { model });
+  }
+
 
   // Which journal the two commands act on: the note you are looking at when it
   // sits next to today's journal, otherwise today's journal.
@@ -2678,6 +2949,16 @@ export default class AgentDeckPlugin extends Plugin {
     return this.autoLog.write(file, base, next, { cleanup: false });
   }
 
+  // 确定性无损自愈：先最小补齐标记；补不齐但可见 ## 标题与 --- 框架完整时，剥掉残余坏标记交给标题边界接管。
+  autoHealJournalMarkers(base) {
+    const layout = configuredJournalLayout(this.settings);
+    const fixed = repairJournalLayout(base, layout);
+    if (fixed) return fixed;
+    const stripped = stripJournalLayout(base);
+    if (stripped !== base && hasBoundedJournalFrame(stripped, layout)) return stripped;
+    return null;
+  }
+
   // Rebuild only the bounded task sections; outside notes remain untouched.
   async organizeJournal(file = this.journalTarget()) {
     if (!file) return this.notice(t("请先打开日记"));
@@ -2686,8 +2967,13 @@ export default class AgentDeckPlugin extends Plugin {
     try {
       plan = await this.journalPlan(file, base);
     } catch (e) {
-      if (!/分区标记不完整/.test(String(e?.message || e))) throw e;
-      return this.repairJournalMarkers(file, base);
+      if (!isJournalLayoutIncompleteError(e)) throw e;
+      const healed = this.autoHealJournalMarkers(base);
+      if (healed) {
+        plan = await this.journalPlan(file, healed);
+      } else {
+        return this.repairJournalMarkers(file, base);
+      }
     }
     const next = renderJournal(plan);
     if (next !== base && !await this.writeJournal(file, base, next)) return this.notice(t("日记刚有变化，请再整理一次"));
@@ -2695,9 +2981,9 @@ export default class AgentDeckPlugin extends Plugin {
     this.notice(plan.count.total ? t("已整理 {count} 个任务", { count: plan.count.total }) : t("已建立日志分区，区外笔记保持原样"));
   }
 
-  // 分区标记被删掉时先问一句：能补就补，补不回来就问要不要按任务重建分区。不点头就一个字都不动。
+  // 分区标记被删掉且无法无损自愈时先问一句：点头才重建，不点头一个字都不动。
   async repairJournalMarkers(file, base, { retry } = {}) {
-    const fixed = repairJournalLayout(base);
+    const fixed = repairJournalLayout(base, configuredJournalLayout(this.settings));
     const mode = fixed ? "repair" : "rebuild";
     const firstTime = !this.settings.journalMarkerIntroShown;
     const go = await askJournalMarkerRepair(this.app, { mode, firstTime, notes: [file.path] });
@@ -2708,21 +2994,28 @@ export default class AgentDeckPlugin extends Plugin {
     return retry ? retry() : this.organizeJournal(file);
   }
 
-  // 「现在整理一次」遇到分区标记坏了：列出坏掉的日记，问一次，修好再重跑。
-  async logNowWithMarkerGuard() {
-    const r = await this.autoLog.logNow();
-    if (!r?.error || !/分区标记不完整/.test(r.error)) return r;
+  // 「现在整理一次」遇到分区标记坏了：能无损自愈的直接修，其余列出坏掉的日记问一次，修好再重跑。
+  async logNowWithMarkerGuard(options) {
+    const r = await this.autoLog.logNow(options);
+    if (!r?.error || !(r.errorCode === JOURNAL_LAYOUT_INCOMPLETE || isJournalLayoutIncompleteError(r.error))) return r;
     const broken = await this.brokenJournals();
     if (!broken.length) return r;
+    const needAsk = [];
+    for (const item of broken) {
+      const healed = this.autoHealJournalMarkers(item.base);
+      if (healed) await this.writeJournal(item.file, item.base, healed);
+      else needAsk.push(item);
+    }
+    if (!needAsk.length) return this.autoLog.logNow(options);
     const firstTime = !this.settings.journalMarkerIntroShown;
-    const go = await askJournalMarkerRepair(this.app, { mode: "rebuild", firstTime, notes: broken.map((x) => x.path) });
+    const go = await askJournalMarkerRepair(this.app, { mode: "rebuild", firstTime, notes: needAsk.map((x) => x.file.path) });
     if (firstTime) { this.settings.journalMarkerIntroShown = true; await this.saveSettings(); }
     if (!go) { this.notice(t("分区标记没动；补上分区标记和 --- 分割线后再整理")); return r; }
-    for (const { file, base } of broken) {
-      const next = repairJournalLayout(base) || stripJournalLayout(base);
+    for (const { file, base } of needAsk) {
+      const next = repairJournalLayout(base, configuredJournalLayout(this.settings)) || stripJournalLayout(base);
       await this.writeJournal(file, base, next);
     }
-    return this.autoLog.logNow();
+    return this.autoLog.logNow(options);
   }
 
   // 最近这些天的日记里，分区标记坏掉的那几篇。
@@ -3728,6 +4021,7 @@ export default class AgentDeckPlugin extends Plugin {
         workbuddy: s.app === "cli" ? t("终端") : t("桌面版"),
         codex: isCodexDesktop(s.app) ? t("桌面版") : "CLI",
         hermes: s.app === "acp" ? t("后台执行") : "CLI",
+        minimax: s.app === "acp" ? t("后台执行") : s.app === "cli" ? t("终端") : t("桌面版"),
         antigravity: acp ? t("后台执行") : "IDE",
         dsh: "Harness",
       };
@@ -3737,7 +4031,7 @@ export default class AgentDeckPlugin extends Plugin {
         : (acp || usesDeckSessionLink(agent) || (isCliSession(agent, s.app) && cfg.cliOpen !== "desktop"))
           ? J.deckSessionUrl(agent, s.sid)
           : sessionDeepLink(agent, s.sid);
-      const copyByAgent = { codex: `codex resume ${s.sid}`, hermes: `hermes --resume ${s.sid}` };
+      const copyByAgent = { codex: `codex resume ${s.sid}`, hermes: `hermes --resume ${s.sid}`, minimax: s.app === "cli" ? `mcode --session ${s.sid}` : s.sid };
       const copy = s.isPendingJob ? "" : ((["dsh", "antigravity", "opencode", "qoder", "teleagent"].includes(agent) || AGENTS[agent].trackingOnly) ? s.sid : (copyByAgent[agent] || ""));
       const prog = this.sessionProgressText(s, s.job);
       const stepStr = [prog, s.step ? truncate(s.step, 30) : ""].filter(Boolean).join(" · ");
@@ -3897,7 +4191,7 @@ export default class AgentDeckPlugin extends Plugin {
   }
 
   async hideNautilusAgentBar() {
-    if (this.settings.menuBarHideNautilus === false) return;
+    if (process.platform !== "darwin" || this.settings.menuBarHideNautilus === false) return;
     const p = path.join(this.vaultPath, ".obsidian/plugins/nautilus-spiral/data.json");
     let data = null;
     try { data = JSON.parse(await fsp.readFile(p, "utf8")); } catch { /* not installed */ }
@@ -4005,6 +4299,81 @@ export default class AgentDeckPlugin extends Plugin {
 
   openExternal(url) { return openExternalRaw(url); }
 
+  async checkForUpdates({ manual = false } = {}) {
+    if (this._unloaded) return null;
+    if (!manual && !shouldAutoCheckUpdate(this.settings)) return null;
+    const fetchJson = async (url) => {
+      if (typeof obsidianNs.requestUrl === "function") {
+        const res = await obsidianNs.requestUrl({ url, headers: { Accept: "application/vnd.github+json", "User-Agent": "obsidian-agent-deck" } });
+        return res.json ?? JSON.parse(res.text || "{}");
+      }
+      const res = await fetch(url, { headers: { Accept: "application/vnd.github+json" } });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return await res.json();
+    };
+    try {
+      const info = await checkLatestRelease({ currentVersion: this.manifest?.version || "0.0.0", fetchJson });
+      this.settings.updateCheckLastAt = Date.now();
+      this.saveSettings().catch(() => {});
+      if (shouldPromptUpdate(info.latestVersion, info.currentVersion, this.settings, { manual })) {
+        this.promptUpdate(info);
+      } else if (manual) {
+        new Notice(t("Agent Deck 已是最新版本 v{version}", { version: info.currentVersion || this.manifest?.version || "" }), 4000);
+      }
+      return info;
+    } catch (e) {
+      if (manual) new Notice(t("检查更新失败：{error}", { error: String(e?.message || e) }), 6000);
+      return null;
+    }
+  }
+
+  promptUpdate(info) {
+    if (typeof document === "undefined") return;
+    const frag = document.createDocumentFragment();
+    const wrap = document.createElement("div");
+    wrap.style.display = "flex";
+    wrap.style.flexDirection = "column";
+    wrap.style.gap = "8px";
+    const msg = document.createElement("div");
+    msg.textContent = t("Agent Deck 发布新版本 v{latest}（当前 v{current}），要不要更新？", {
+      latest: info.latestVersion,
+      current: info.currentVersion,
+    });
+    wrap.appendChild(msg);
+    const bar = document.createElement("div");
+    bar.style.display = "flex";
+    bar.style.gap = "6px";
+    bar.style.flexWrap = "wrap";
+    let notice = null;
+    const mkBtn = (label, primary, onClick) => {
+      const btn = document.createElement("button");
+      btn.textContent = label;
+      btn.className = primary ? "mod-cta" : "";
+      btn.style.cursor = "pointer";
+      btn.onclick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onClick();
+        notice?.hide?.();
+      };
+      bar.appendChild(btn);
+    };
+    mkBtn(t("去更新"), true, () => this.openExternal(info.url));
+    if (this.app?.setting?.open && this.app?.setting?.openTabById) {
+      mkBtn(t("社区插件页"), false, () => {
+        this.app.setting.open();
+        this.app.setting.openTabById("community-plugins");
+      });
+    }
+    mkBtn(t("跳过此版"), false, () => {
+      this.settings.updateSkippedVersion = info.latestVersion;
+      this.saveSettings().catch(() => {});
+    });
+    wrap.appendChild(bar);
+    frag.appendChild(wrap);
+    notice = new Notice(frag, 20000);
+  }
+
   async readNote(path) {
     const view = this.sourceViewForPath(path);
     if (view) return view.editor.getValue();
@@ -4026,10 +4395,31 @@ export default class AgentDeckPlugin extends Plugin {
     await this.app.vault.process(file, () => text);
   }
 
+  syncCustomAcpAgents() {
+    const list = syncCustomAcpRegistry(this.settings?.customAcpAgents || []) || [];
+    const agents = (this.settings.agents ||= {});
+    const delegate = (this.settings.delegate ||= {});
+    for (const entry of list) {
+      agents[entry.id] = entry.enabled !== false;
+      const cfg = (delegate[entry.id] ||= {});
+      cfg.path = entry.command;
+      cfg.autoApprove = Boolean(entry.autoApprove);
+      if (cfg.cwd === undefined) cfg.cwd = "";
+      if (cfg.extraArgs === undefined) cfg.extraArgs = "";
+    }
+    return list;
+  }
+
   async checkBinary(kind) {
-    const bin = findAgentBinary(kind, this.settings.delegate?.[kind]?.path || "");
+    const cap = getAgentCapability(kind);
+    let bin = findAgentBinary(kind, this.settings.delegate?.[kind]?.path || cap.acpCommand || "");
+    const hasPathSep = bin.includes("/") || bin.includes("\\");
+    if (bin && (!hasPathSep || !fs.existsSync(bin))) {
+      bin = await resolveExecutableWithFallback(bin, path.basename(bin));
+    }
+    const customEnv = cap.acpEnvRaw ? parseCustomAcpEnv(cap.acpEnvRaw) : {};
     return await new Promise((resolve) => {
-      execFile(bin, ["--version"], { timeout: 10000, env: process.env }, (err, out, errOut) => {
+      execFile(bin, ["--version"], { timeout: 10000, env: cleanEnv(customEnv) }, (err, out, errOut) => {
         if (err) resolve(t("{kind} 没找到或不能运行：{error}", { kind, error: String(err.message || err) }) + "\n" + String(errOut || "").slice(0, 300));
         else resolve(`${kind}：${String(out || "").trim()}`);
       });
@@ -4037,7 +4427,7 @@ export default class AgentDeckPlugin extends Plugin {
   }
 
   openTerminalAt(cwd, cmd) {
-    return openTerminal(cmd, cwd, this.settings?.terminal || "auto");
+    return openTerminal(cmd, cwd, this.settings?.cliTerminal || "auto");
   }
 
   openPluginDir() {
@@ -4053,6 +4443,7 @@ export default class AgentDeckPlugin extends Plugin {
       cwd: runner?.cwd || runner?.job?.cwd || this.vaultPath,
       vaultPath: this.vaultPath,
       autoApprove: true,
+      allowlist: this.settings.securityAllowlist || [],
     }).allowAuto;
   }
 
@@ -4090,6 +4481,54 @@ export default class AgentDeckPlugin extends Plugin {
       this.notice(t("导出诊断报告失败：{error}", { error: e?.message || String(e) }), 6000);
     }
     return report;
+  }
+
+  async runSecurityAuditReport({ days = 30, agent = "", overrideDays = false } = {}) {
+    const outPath = "Agent Deck/安全审计.md";
+    // Sync frontmatter config (`days`, `agent`, `ignore_temp_noise`, `allowlist`) from existing report.
+    let allowlist = Array.isArray(this.settings.securityAllowlist) ? [...this.settings.securityAllowlist] : [];
+    let effectiveDays = days;
+    let effectiveAgent = agent;
+    let ignoreTempNoise = true;
+    const existing = this.app?.vault?.getAbstractFileByPath?.(outPath);
+    if (existing) {
+      try {
+        const existingMd = await this.app.vault.read(existing);
+        const cfg = parseAuditConfig(existingMd);
+        if (!overrideDays && cfg.days) effectiveDays = cfg.days;
+        if (!effectiveAgent && cfg.agent) effectiveAgent = cfg.agent;
+        if (cfg.ignoreTempNoise !== null) ignoreTempNoise = cfg.ignoreTempNoise;
+        if (JSON.stringify(cfg.allowlist) !== JSON.stringify(allowlist)) {
+          allowlist = cfg.allowlist;
+          this.settings.securityAllowlist = cfg.allowlist;
+          await this.saveSettings();
+        }
+      } catch { /* unreadable existing report */ }
+    }
+    this.notice(t("正在离线回放最近 {n} 天的历史工具调用…", { n: effectiveDays }), 4000);
+    const result = await runSecurityAudit(this, { days: effectiveDays, agent: effectiveAgent, ignoreTempNoise, allowlist });
+    const md = renderSecurityAuditReport(result);
+    const file = await this.writeVaultFile(outPath, md);
+    if (file && this.app?.workspace) {
+      try {
+        let opened = null;
+        this.app.workspace.iterateAllLeaves?.((leaf) => {
+          if (!opened && leaf?.view?.file?.path === outPath) opened = leaf;
+        });
+        if (opened) this.app.workspace.revealLeaf?.(opened);
+        else {
+          const leaf = this.app.workspace.getLeaf?.("tab") || this.app.workspace.getLeaf?.(false);
+          if (leaf?.openFile) await leaf.openFile(file);
+        }
+      } catch { /* headless */ }
+    }
+    this.notice(t("安全回放完成：扫描 {sessions} 个会话、{calls} 次工具调用，命中 {hits} 条风险（已写入 {path}）", {
+      sessions: result.scannedSessions,
+      calls: result.totalToolCalls,
+      hits: result.totalFindings,
+      path: outPath,
+    }), 8000);
+    return result;
   }
 }
 

@@ -13,16 +13,19 @@ import { notePath } from "./dream-entries.js";
 import { companionInstalled, dreamModelConfig } from "./dream.js";
 import { externalMemoryPath } from "./dream-sharing.js";
 import { agentIcon, setLucide } from "./icons.js";
-import { t, currentLanguage } from "./i18n.js";
+import { t, currentLanguage, listCustomLocales } from "./i18n.js";
 import { syncModelGroups } from "./model-groups.js";
 import { ManagedTimers } from "./runtime-guard.js";
 import { delegateAgents, cliHandoffAgents } from "./agent-registry.js";
+import { normalizeCustomAcpId, normalizeCustomAcpEntry } from "./custom-acp.js";
 import { detectInstalledHarnesses } from "./harness-detect.js";
 import {
   detectJournalProviders, resolveJournalProvider, JOURNAL_PROVIDERS, API_PRESETS, fetchAgyModels, testJournalModel,
 } from "./llm.js";
 import { discoverGrokBotStorage } from "./grok-bot-sessions.js";
+import { discoverMuseConversations } from "./muse-sessions.js";
 import { folderExists, normalizeProjectFolder, projectFolderEntries } from "./project-folders.js";
+import { getTerminalOptions } from "./terminals.js";
 
 const HOTKEY_MOD_SYMBOL = { control: "⌃", option: "⌥", shift: "⇧", command: "⌘", ctrl: "⌃", alt: "⌥", cmd: "⌘" };
 
@@ -141,13 +144,6 @@ export class AgentDeckSettingsTab extends PluginSettingTab {
     if (this._draftBar) { try { this._draftBar.remove(); } catch { /* gone */ } this._draftBar = null; }
     containerEl.empty();
     containerEl.addClass("ad-settings");
-    const head = containerEl.createDiv({ cls: "ad-set-head" });
-    const brand = head.createDiv({ cls: "ad-brand" });
-    const brandMark = brand.createSpan({ cls: "ad-brand__mark" });
-    setLucide(brandMark, "wand-sparkles");
-    const bt = brand.createDiv({ cls: "ad-brand__text" });
-    bt.createDiv({ cls: "ad-brand__name", text: "Agent Deck" });
-    bt.createDiv({ cls: "ad-brand__sub", text: `${t("智能体甲板")} · v${this.plugin.manifest.version}` });
 
     const nav = containerEl.createDiv({ cls: "ad-set-nav" });
     const dirty = this.isDraftDirty();
@@ -291,6 +287,9 @@ export class AgentDeckSettingsTab extends PluginSettingTab {
     if (typeof right === "function") right(rr, r);
     else if (typeof right === "string") rr.createSpan({ cls: "ad-row__value", text: right });
     else if (right) rr.appendChild(right);
+    if (Array.from(rr.children || []).some((c) => c.classList?.contains?.("ad-seg--many")) || rr.querySelector?.(".ad-seg--many")) {
+      r.classList?.add?.("ad-row--stack");
+    }
     return r;
   }
 
@@ -612,12 +611,27 @@ export class AgentDeckSettingsTab extends PluginSettingTab {
       });
     }
 
+    if (p.agentEnabled("minimax")) {
+      this.renderAcpCard(body, (d.minimax ||= { ...DEFAULTS.delegate.minimax }), {
+        id: "minimax",
+        title: "MiniMax Code",
+        sub: t("追踪桌面版与 CLI 会话；装有 mcode CLI 时支持 mcode acp 后台委派与终端续聊"),
+        moreKey: "minimax-more",
+        defaultEffort: "medium",
+        pathHint: t("留空自动查找 mcode（~/.minimax-code/bin/mcode 或 PATH）"),
+        refreshLabel: t("读取 MiniMax 可用模型"),
+        checkLabel: t("检查 mcode"),
+      });
+    }
+
+    this.renderCustomAcpCard(body);
+
     const showTerminal = cliHandoffAgents().some((id) => p.agentEnabled(id));
     const otherShared = ["workbuddy", "qwenwork", "teleagent"].filter((id) => p.agentEnabled(id));
     if (showTerminal || otherShared.length) {
       const sharedAgents = this.card(body, t("公共终端与其余 Agent"), "");
       if (showTerminal) {
-        this.rowSelect(sharedAgents, t("主力终端"), t("用于终端委派和恢复会话"), [{ id: "auto", label: t("自动") }, { id: "terminal", label: t("系统终端") }, { id: "iterm", label: "iTerm2" }, { id: "warp", label: "Warp" }, { id: "tern", label: "Tern" }, { id: "herdr", label: "Herdr" }], s.cliTerminal || "auto", (v) => { s.cliTerminal = v; p.saveSettings(); this.display(); });
+        this.rowSelect(sharedAgents, t("主力终端"), t("用于终端委派和恢复会话"), getTerminalOptions(), s.cliTerminal || "auto", (v) => { s.cliTerminal = v; p.saveSettings(); this.display(); });
         this.rowToggle(sharedAgents, t("默认在终端委派"), t("适用于 Claude Code、Codex、OpenCode、Qoder 和 Hermes"), !!s.delegateInTerminal, (v) => { s.delegateInTerminal = v; p.saveSettings(); p.refreshUI(); });
       }
       for (const id of otherShared) {
@@ -813,6 +827,53 @@ export class AgentDeckSettingsTab extends PluginSettingTab {
     this.display();
   }
 
+  renderCustomAcpCard(body) {
+    const p = this.plugin;
+    const s = p.settings;
+    const list = (s.customAcpAgents ||= []);
+    const card = this.card(
+      body,
+      t("自定义 ACP Agent"),
+      t("填写任意兼容 ACP 协议的 CLI 命令、参数与环境变量即可接入后台委派与应用内续聊，环境变量值支持 secret:KEY / env:VAR")
+    );
+    const persist = () => {
+      p.syncCustomAcpAgents?.();
+      syncDelegationSettings(s, s);
+      p.saveSettings();
+      p.refreshUI?.();
+      this.display();
+    };
+    if (!list.length) {
+      card.createDiv({ cls: "ad-muted", text: t("尚未添加自定义 ACP Agent（可接入 Gemini CLI、Kiro、Mistral Vibe、Pi 等任意 ACP 命令）") });
+    } else {
+      for (const entry of list) {
+        const sub = `@${entry.id} · ${entry.command}${entry.args ? " " + entry.args : ""}${entry.autoApprove ? ` · ${t("自动允许")}` : ""}`;
+        const r = this.row(card, entry.name || entry.id, sub);
+        const ctrl = r.createDiv({ cls: "ad-btnrow" });
+        const toggle = ctrl.createEl("input", { type: "checkbox", attr: { "aria-label": t("启用") } });
+        toggle.checked = entry.enabled !== false;
+        toggle.onchange = () => { entry.enabled = toggle.checked; persist(); };
+        this.bigButton(ctrl, t("检查"), async () => new Notice(await p.checkBinary(entry.id), 6000));
+        this.bigButton(ctrl, t("编辑"), () => new CustomAcpAgentModal(this.app, entry, list, (next) => {
+          Object.assign(entry, next);
+          persist();
+        }).open());
+        this.bigButton(ctrl, t("删除"), () => {
+          const idx = list.indexOf(entry);
+          if (idx >= 0) list.splice(idx, 1);
+          if (s.agents) delete s.agents[entry.id];
+          if (s.delegate) delete s.delegate[entry.id];
+          persist();
+        });
+      }
+    }
+    const bar = card.createDiv({ cls: "ad-btnrow" });
+    this.bigButton(bar, t("+ 添加自定义 ACP Agent"), () => new CustomAcpAgentModal(this.app, null, list, (entry) => {
+      list.push(entry);
+      persist();
+    }).open());
+  }
+
   renderModels(body) {
     const p = this.plugin;
     if (syncModelGroups(p.settings, (agent) => p.agentEnabled(agent))) p.saveSettings();
@@ -858,7 +919,7 @@ export class AgentDeckSettingsTab extends PluginSettingTab {
     for (const agent of AGENT_ORDER) {
       if (!p.agentEnabled(agent)) continue;
       const rows = [...pinned, ...rest].filter((m) => m.agent === agent);
-      const clientModels = agent === "workbuddy" || agent === "teleagent" || AGENTS[agent].trackingOnly;
+      const clientModels = agent === "workbuddy" || agent === "teleagent" || agent === "t3code" || AGENTS[agent].trackingOnly;
       if (!rows.length && (!clientModels || q || this.filter !== "all")) continue;
       const state = p.settings.ui.modelGroups[agent];
       const g = list.createEl(clientModels ? "div" : "details", { cls: "ad-modelgroup" });
@@ -1112,6 +1173,66 @@ export class AgentDeckSettingsTab extends PluginSettingTab {
     }
   }
 
+  renderMusePicker(card, sessCountEl, s, p) {
+    const maxTracked = Math.max(1, Math.min(20, Number(s.museMaxTracked) || 5));
+    const configured = Array.isArray(s.museTrackedIds) ? s.museTrackedIds : ["hatch-main"];
+    const selected = new Set(configured.map((x) => String(x || "").trim()).filter(Boolean).slice(0, maxTracked));
+    const conversations = typeof p.museConversations === "function"
+      ? p.museConversations()
+      : discoverMuseConversations(s.museCacheDir ? { cacheDir: s.museCacheDir } : {}).conversations;
+
+    const details = card.createEl("details", { cls: "ad-subdetails ad-grokbot-picker" });
+    details.open = typeof this._museThreadsOpen === "boolean" ? this._museThreadsOpen : conversations.length > 1;
+    details.ontoggle = () => { this._museThreadsOpen = details.open; };
+    const summary = details.createEl("summary", { cls: "ad-subdetails__head" });
+    const summaryTitle = summary.createSpan({ cls: "ad-grokbot-picker__title" });
+    const updateSummary = () => {
+      if (!selected.size) {
+        summaryTitle.textContent = t("追踪对话流 · 未选择（上限 {max} 个）", { max: maxTracked });
+        return;
+      }
+      const names = conversations.filter((c) => selected.has(c.id)).map((c) => (c.isMain ? "Main Chat" : c.title));
+      const preview = names.length > 3 ? t("{names} 等 {n} 个", { names: names.slice(0, 3).join("、"), n: names.length }) : names.join("、");
+      summaryTitle.textContent = preview
+        ? t("追踪对话流 · 已选 {n}/{max}（{preview}）", { n: selected.size, max: maxTracked, preview })
+        : t("追踪对话流 · 已选 {n}/{max}", { n: selected.size, max: maxTracked });
+    };
+    updateSummary();
+
+    const body = details.createDiv({ cls: "ad-grokbot-picker__body" });
+    if (!conversations.length) {
+      body.createSpan({ cls: "ad-muted", text: t("未检测到本机 Muse 对话缓存") });
+      return;
+    }
+
+    const chips = body.createDiv({ cls: "ad-seg ad-seg--many ad-grokbot-picker__chips" });
+    for (const conv of conversations) {
+      const on = selected.has(conv.id);
+      const label = conv.isMain ? "Main Chat (Muse)" : conv.title;
+      const b = chips.createEl("button", { cls: "ad-seg__btn ad-grokbot-chip" + (on ? " is-on" : ""), text: label, attr: { "aria-pressed": String(on), "data-muse-id": conv.id } });
+      b.onclick = async () => {
+        if (selected.has(conv.id)) {
+          selected.delete(conv.id);
+        } else {
+          if (selected.size >= maxTracked) {
+            new Notice(t("最多同时追踪 {max} 个 Muse 对话流，请先取消一个", { max: maxTracked }));
+            return;
+          }
+          selected.add(conv.id);
+        }
+        s.museTrackedIds = [...selected];
+        const nowOn = selected.has(conv.id);
+        b.classList.toggle("is-on", nowOn);
+        b.setAttribute("aria-pressed", String(nowOn));
+        updateSummary();
+        await p.saveSettings?.();
+        await p.scanNow?.(false, { agent: "muse" });
+        const nextCount = [...(p.usage?.meta?.values?.() || [])].filter((x) => x.agent === "muse").length;
+        if (sessCountEl) sessCountEl.textContent = t("{n} 个会话", { n: nextCount });
+      };
+    }
+  }
+
   // ---------- Recording ----------
   renderAgents(body) { return this.renderRecord(body); }
   renderTracking(body) { return this.renderRecord(body); }
@@ -1138,7 +1259,7 @@ export class AgentDeckSettingsTab extends PluginSettingTab {
     const sessions = [...p.usage.meta.values()].filter((x) => x.agent === id);
     const stats = card.createDiv({ cls: "ad-set-agent__meta" });
     const sessCountEl = stats.createSpan({ text: t("{n} 个会话", { n: sessions.length }) });
-    stats.createSpan({ text: id === "grokbot" ? t("用量未提供") : fmtTok(sessions.reduce((n, x) => n + (x.out || 0), 0)) + " tok" });
+    stats.createSpan({ text: id === "grokbot" || id === "muse" || id === "doubaowork" ? t("用量未提供") : fmtTok(sessions.reduce((n, x) => n + (x.out || 0), 0)) + " tok" });
     const stateText = primary
       ? t("主力（全量）")
       : enabled
@@ -1146,6 +1267,7 @@ export class AgentDeckSettingsTab extends PluginSettingTab {
         : (detected ? t("已关闭 · 本机已安装") : t("已关闭 · 未检测到"));
     stats.createSpan({ cls: "ad-set-agent__state", text: stateText });
     if (id === "grokbot" && enabled) this.renderGrokBotPicker(card, sessCountEl, s, p);
+    if (id === "muse" && enabled) this.renderMusePicker(card, sessCountEl, s, p);
   }
 
   renderRecord(body) {
@@ -1193,9 +1315,16 @@ export class AgentDeckSettingsTab extends PluginSettingTab {
     }
 
     const sourceMore = this.subDetails(sourceCard, "source-more", t("更多设置"));
-    this.rowNumber(sourceMore, t("日记日期分界"), t("此时刻之前计入前一天"), s.dayCutoff, 0, 12, (v) => { s.dayCutoff = v; p.saveSettings(); p.scheduleScan(); });
+    const spiralCutoff = p.spiralJournalCutoff?.();
+    const cutoff = this.rowNumber(sourceMore, t("日记日期分界"),
+      spiralCutoff == null ? t("此时刻之前计入前一天") : t("已跟随螺旋日程，请在螺旋日程中修改"),
+      spiralCutoff ?? s.dayCutoff, 0, 23.99, (v) => p.setStandaloneDayCutoff(v));
+    cutoff.disabled = spiralCutoff != null;
     this.rowNumber(sourceMore, t("扫描间隔（秒）"), "", s.pollSeconds, 5, 300, (v) => { s.pollSeconds = v; p.saveSettings(); p.scheduleScan(); });
     this.rowNumber(sourceMore, t("主力读多少天历史"), t("非主力读取当天会话"), s.fullHistoryDays, 1, 365, (v) => { s.fullHistoryDays = v; p.saveSettings(); p.scanNow(true); });
+    this.rowToggle(sourceMore, t("桌面数据库也读全部历史"),
+      t("关闭时桌面库只读上面的天数：几千个会话、几百 MB 的大库（TeleAgent、T3 Code、豆包工作 等）首次扫描不会卡住；打开后主力 Agent 读全部历史，首次扫描明显变慢"),
+      s.desktopFullHistory === true, (v) => { s.desktopFullHistory = v; p.saveSettings(); p.scanNow(true); });
     this.rowToggle(sourceMore, t("识别 side chat 和母子关系"), t("Claude 桌面版子会话与母子关联"), s.claudeDesktop !== false, (v) => { s.claudeDesktop = v; p.saveSettings(); p.scanNow(true); });
     if (typeof p.cursorHooksStatus === "function" && p.agentEnabled("cursor")) {
       const ch = p.cursorHooksStatus();
@@ -1460,7 +1589,7 @@ export class AgentDeckSettingsTab extends PluginSettingTab {
     for (const [key, label, desc, fallback] of [
       ["showEditorPills", t("任务行上的会话状态按钮"), "", true],
       ["lineProgress", t("显示任务行进度条与 token 块"), t("在 AI 任务行下方渲染 ASCII 进度条与紫色 token 方块"), true],
-      ["dragGrip", t("列表项尾巴上的把手"), t("单击委派；双击或 ⌘ 单击选择 Agent"), true],
+      ["dragGrip", t("段落尾巴上的小箭头"), t("单击委派；双击或 ⌘ 单击选择 Agent"), true],
       ["showRibbonIcon", t("左侧栏图标"), "", true],
       ["openDashboardOnStartup", t("启动时打开面板"), "", false],
     ]) {
@@ -1470,58 +1599,64 @@ export class AgentDeckSettingsTab extends PluginSettingTab {
     this.rowToggle(uiMore, t("最近 14 天的条形图"), "", s.ui.showUsageBars !== false, (v) => { s.ui.showUsageBars = v; p.saveSettings(); p.refreshUI(); });
     this.rowToggle(uiMore, t("每个 Agent 的小火花线"), "", s.ui.showSparkline !== false, (v) => { s.ui.showSparkline = v; p.saveSettings(); p.refreshUI(); });
 
-    this.mbSwitch = this.rowToggle(ui, t("macOS 菜单栏"), "", s.showMenuBar !== false, (v) => { s.showMenuBar = v; p.saveSettings(); p.applyUiSettings(); });
-    this.rowSegmented(uiMore, t("菜单栏显示哪些 Agent"), "", [{ id: "primary-running", label: t("主力与在跑的") }, { id: "all", label: t("全部已启用") }], s.menuBarAgentScope || "primary-running", (v) => { s.menuBarAgentScope = v; p.saveSettings(); p.menubar?.update(true); this.display(); });
-    for (const [key, label, desc, min, max] of [
-      ["menuBarPrimaryLimit", t("菜单栏：主力最多几个"), "", 3, 12],
-      ["menuBarOtherLimit", t("菜单栏：其它 Agent 最多几个"), "", 1, 6],
-    ]) {
-      this.rowNumber(uiMore, label, desc, s[key] || (key === "menuBarPrimaryLimit" ? 6 : 3), min, max, (v) => { s[key] = v; p.saveSettings(); p.refreshUI(); });
+    const isMac = process.platform === "darwin";
+    this.mbSwitch = null;
+    if (isMac) {
+      this.mbSwitch = this.rowToggle(ui, t("macOS 菜单栏"), "", s.showMenuBar !== false, (v) => { s.showMenuBar = v; p.saveSettings(); p.applyUiSettings(); });
+      this.rowSegmented(uiMore, t("菜单栏显示哪些 Agent"), "", [{ id: "primary-running", label: t("主力与在跑的") }, { id: "all", label: t("全部已启用") }], s.menuBarAgentScope || "primary-running", (v) => { s.menuBarAgentScope = v; p.saveSettings(); p.menubar?.update(true); this.display(); });
+      for (const [key, label, desc, min, max] of [
+        ["menuBarPrimaryLimit", t("菜单栏：主力最多几个"), "", 3, 12],
+        ["menuBarOtherLimit", t("菜单栏：其它 Agent 最多几个"), "", 1, 6],
+      ]) {
+        this.rowNumber(uiMore, label, desc, s[key] || (key === "menuBarPrimaryLimit" ? 6 : 3), min, max, (v) => { s[key] = v; p.saveSettings(); p.refreshUI(); });
+      }
+      this.row(ui, t("菜单栏快捷键"), t("点输入框后按组合键，需包含 ⌃、⌥ 或 ⌘"), (hkRight) => {
+        const hkInput = hkRight.createEl("input", { cls: "ad-hotkey", attr: { type: "text", spellcheck: "false", tabindex: "0", "aria-label": t("菜单栏快捷键") } });
+        hkInput.value = hotkeyDisplay(s.menuBarHotkey);
+        hkInput.addEventListener("focus", () => {
+          hkInput.value = t("按下组合键…");
+          hkInput.classList.add("is-capturing");
+        });
+        hkInput.addEventListener("blur", () => {
+          hkInput.value = hotkeyDisplay(s.menuBarHotkey);
+          hkInput.classList.remove("is-capturing");
+        });
+        hkInput.addEventListener("input", () => {
+          hkInput.value = hotkeyDisplay(s.menuBarHotkey);
+        });
+        hkInput.addEventListener("keydown", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          if (event.key === "Escape") { hkInput.blur(); return; }
+          if (["Control", "Alt", "Shift", "Meta"].includes(event.key)) return;
+          const key = hotkeyKeyFromEvent(event);
+          if (!key) { hkInput.value = t("只支持 A–Z / 0–9 / F1–F12"); return; }
+          if (!event.ctrlKey && !event.altKey && !event.metaKey) { hkInput.value = t("至少加 ⌃ / ⌥ / ⌘"); return; }
+          s.menuBarHotkey = hotkeySpecFromEvent(event, key);
+          p.saveSettings();
+          p.menubar?.update(true);
+          new Notice(t("菜单栏快捷键已保存，约 2 秒内生效"));
+          hkInput.value = hotkeyDisplay(s.menuBarHotkey);
+          hkInput.classList.remove("is-capturing");
+          hkInput.blur();
+        }, true);
+        const hkReset = hkRight.createEl("button", { cls: "ad-btn", text: t("默认") });
+        hkReset.onclick = () => {
+          s.menuBarHotkey = DEFAULTS.menuBarHotkey;
+          p.saveSettings();
+          p.menubar?.update(true);
+          hkInput.value = hotkeyDisplay(s.menuBarHotkey);
+        };
+      });
     }
-    this.row(ui, t("菜单栏快捷键"), t("点输入框后按组合键，需包含 ⌃、⌥ 或 ⌘"), (hkRight) => {
-      const hkInput = hkRight.createEl("input", { cls: "ad-hotkey", attr: { type: "text", spellcheck: "false", tabindex: "0", "aria-label": t("菜单栏快捷键") } });
-      hkInput.value = hotkeyDisplay(s.menuBarHotkey);
-      hkInput.addEventListener("focus", () => {
-        hkInput.value = t("按下组合键…");
-        hkInput.classList.add("is-capturing");
-      });
-      hkInput.addEventListener("blur", () => {
-        hkInput.value = hotkeyDisplay(s.menuBarHotkey);
-        hkInput.classList.remove("is-capturing");
-      });
-      hkInput.addEventListener("input", () => {
-        hkInput.value = hotkeyDisplay(s.menuBarHotkey);
-      });
-      hkInput.addEventListener("keydown", (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        if (event.key === "Escape") { hkInput.blur(); return; }
-        if (["Control", "Alt", "Shift", "Meta"].includes(event.key)) return;
-        const key = hotkeyKeyFromEvent(event);
-        if (!key) { hkInput.value = t("只支持 A–Z / 0–9 / F1–F12"); return; }
-        if (!event.ctrlKey && !event.altKey && !event.metaKey) { hkInput.value = t("至少加 ⌃ / ⌥ / ⌘"); return; }
-        s.menuBarHotkey = hotkeySpecFromEvent(event, key);
-        p.saveSettings();
-        p.menubar?.update(true);
-        new Notice(t("菜单栏快捷键已保存，约 2 秒内生效"));
-        hkInput.value = hotkeyDisplay(s.menuBarHotkey);
-        hkInput.classList.remove("is-capturing");
-        hkInput.blur();
-      }, true);
-      const hkReset = hkRight.createEl("button", { cls: "ad-btn", text: t("默认") });
-      hkReset.onclick = () => {
-        s.menuBarHotkey = DEFAULTS.menuBarHotkey;
-        p.saveSettings();
-        p.menubar?.update(true);
-        hkInput.value = hotkeyDisplay(s.menuBarHotkey);
-      };
-    });
 
     this.rowToggle(uiMore, t("使用螺旋日程的进度显示"), "", s.yieldToNautilus !== false, (v) => { s.yieldToNautilus = v; p.saveSettings(); p.refreshUI(); });
-    this.rowToggle(uiMore, t("关闭螺旋日程右下角的 Agent 汇总"), "", s.menuBarHideNautilus !== false, (v) => { s.menuBarHideNautilus = v; p.saveSettings(); if (v) p.hideNautilusAgentBar().catch(() => {}); else p.restoreNautilusAgentBar().catch(() => {}); });
+    if (isMac) {
+      this.rowToggle(uiMore, t("关闭螺旋日程右下角的 Agent 汇总"), "", s.menuBarHideNautilus !== false, (v) => { s.menuBarHideNautilus = v; p.saveSettings(); if (v) p.hideNautilusAgentBar().catch(() => {}); else p.restoreNautilusAgentBar().catch(() => {}); });
+    }
 
     const btn = uiMore.createDiv({ cls: "ad-btnrow" });
-    this.bigButton(btn, t("重启菜单栏"), () => p.menubar?.restart());
+    if (isMac) this.bigButton(btn, t("重启菜单栏"), () => p.menubar?.restart());
     this.bigButton(btn, t("重新计算全部历史"), () => p.rebuildUsage(), "mod-warning");
     this.bigButton(btn, t("打开插件目录"), () => p.openPluginDir());
     const stats = uiMore.createDiv({ cls: "ad-statline" });
@@ -1689,6 +1824,45 @@ export class AgentDeckSettingsTab extends PluginSettingTab {
       agentIcon(agent.createSpan({ cls: "ad-glyph" }), id);
       agent.createSpan({ text: AGENTS[id].name });
     }
+    const langCard = this.card(
+      body,
+      t("界面语言"),
+      t("选择插件界面语言并持久保存在设置中，更新插件不会重置。也可以把翻译好的 JSON 语言包放到 Vault 的 Agent Deck/locales/ 目录（如 zh-TW.json、ja.json）。"),
+    );
+    const customPacks = listCustomLocales().filter((pack) => pack.id !== "zh-TW");
+    const langChoices = [
+      { id: "auto", label: t("跟随 Obsidian") },
+      { id: "zh", label: "简体中文" },
+      { id: "zh-TW", label: "繁體中文" },
+      { id: "en", label: "English" },
+      ...customPacks.map((pack) => ({
+        id: pack.id,
+        label: pack.name === pack.id ? pack.id : `${pack.name} (${pack.id})`,
+      })),
+    ];
+    const selectedLang = p.settings.uiLanguage || "auto";
+    if (!langChoices.some((item) => item.id === selectedLang)) {
+      langChoices.push({ id: selectedLang, label: t("{id}（未找到语言包）", { id: selectedLang }) });
+    }
+    this.rowSelect(
+      langCard,
+      t("当前界面语言"),
+      customPacks.length
+        ? t("已载入 {count} 个自定义语言包", { count: customPacks.length })
+        : t("需要繁體中文、日文等其他语系？先导出模板，交给 AI 翻译后放到 Agent Deck/locales/ 即可。"),
+      langChoices,
+      selectedLang,
+      (val) => { p.setUiLanguage(val); },
+    );
+    const langBtns = langCard.createDiv({ cls: "ad-btnrow" });
+    this.bigButton(langBtns, t("导出语言模板"), () => p.exportLocaleTemplateFile());
+    this.bigButton(langBtns, t("重新扫描语言包"), () => {
+      const packs = p.reloadLocales();
+      this.display();
+      new Notice(packs.length
+        ? t("已扫描到 {count} 个自定义语言包", { count: packs.length })
+        : t("暂未发现自定义语言包（目录：Agent Deck/locales/）"));
+    });
     const flowCard = this.card(
       body,
       t("核心结构与信息流转"),
@@ -1698,7 +1872,7 @@ export class AgentDeckSettingsTab extends PluginSettingTab {
     this.renderAboutDiagram(diagramEl);
     const guide = this.card(body, t("常用操作"));
     const rows = [
-      [t("整理日志"), t("Ctrl+Alt+L，或点击面板顶部的「整理日志」")],
+      [t("整理日志版面"), t("Ctrl+Alt+L，或点击面板的「整理日志版面」")],
       [t("管理侧边栏"), t("点击 Agents 右上角「管理」，拖动调整顺序")],
       [t("查看与扫描"), t("点击会话打开；在 Agent 菜单中扫描")],
       [t("从笔记委派"), t("点击任务行末尾把手，或拖到 Agent 卡片")],
@@ -1714,7 +1888,13 @@ export class AgentDeckSettingsTab extends PluginSettingTab {
     const meta = c.createDiv({ cls: "ad-about-meta" });
     meta.createDiv({ text: t("版本 {version} · Apache-2.0 License", { version: p.manifest.version }) });
     meta.createDiv({ text: t("欢迎在 GitHub Issues 反馈 bug，或在 Roadmap 提交建议并为你期待的方向投票。") });
+    this.rowToggle(c, t("启动时自动检查新版本"), t("每天最多检查一次 GitHub Releases，有新版时提示并提供一键跳转更新"), p.settings.updateCheck !== false, (v) => { p.settings.updateCheck = v; p.saveSettings(); });
     const btns = c.createDiv({ cls: "ad-btnrow" });
+    const checkBtn = this.bigButton(btns, t("检查更新"), async () => {
+      if (checkBtn.disabled) return;
+      checkBtn.disabled = true;
+      try { await p.checkForUpdates({ manual: true }); } finally { checkBtn.disabled = false; }
+    });
     this.bigButton(btns, t("打开 GitHub 仓库"), () => p.openExternal("https://github.com/MatsuriMW/obsidian-agent-deck"));
     this.bigButton(btns, t("反馈 Issue"), () => p.openExternal("https://github.com/MatsuriMW/obsidian-agent-deck/issues"));
     this.bigButton(btns, t("查看 Roadmap"), () => p.openExternal("https://matsuri.site/portfolio/journal-workflow/#whistlist"));
@@ -1750,26 +1930,26 @@ function aboutArchitectureMermaid(lang) {
       "flowchart LR",
       '  subgraph NOTE["Obsidian Journal & Notes"]',
       "    direction TB",
-      '    Task["Task Line / Outline Block\\nGrip · Drag · @agent"]',
-      '    Views["Multi-View & Tidy\\nOutline · Table · Cards · Timeline"]',
+      '    Task["Task Line / In-Place Board\\nGrip · Drag · @agent · Mirror"]',
+      '    Views["Multi-View & Reading Preview\\nOutline · Table · Cards · Timeline · Export"]',
       "  end",
-      '  subgraph HARNESS["Delegation & Context"]',
-      '    Ctx["Harness Pipeline\\nAncestors · Wikilinks · Model"]',
+      '  subgraph HARNESS["Delegation & Guardrails"]',
+      '    Ctx["Harness Context & Policy\\nAncestors · Wikilinks · Skills · Allowlist"]',
       "  end",
-      '  subgraph AGENTS["8 Local AI Agents"]',
+      '  subgraph AGENTS["14 Built-in + Custom ACP Agents"]',
       "    direction TB",
       '    Run["Runners\\nACP/CLI · Desktop · Terminal"]',
       '    Logs["Local Logs & Hooks\\nJSONL · SQLite (Read-only)"]',
       "  end",
       '  subgraph DECK["Agent Deck Control & Sync"]',
       "    direction TB",
-      '    Panel["Sidebar Deck & macOS Menu Bar\\nLive Status · Alerts · Jump"]',
-      '    Sync["Journal Auto-Sync\\nStatus · Conclusions · Spans · Links"]',
+      '    Panel["Sidebar & Pinned macOS Bar\\nLive Status · Alerts · Jump"]',
+      '    Sync["Journal Auto-Sync\\nStatus · Conclusions · Combined Metrics"]',
       "  end",
-      '  subgraph INSIGHT["Review & Memory"]',
+      '  subgraph INSIGHT["Review · Security & Memory"]',
       "    direction TB",
-      '    Dash["Review Dashboard\\nToken Heatmap · Project Effort"]',
-      '    Dream["Dreaming Memory\\nFacts/Patterns · Shared Note"]',
+      '    Dash["Dashboard & Security Replay\\nHeatmap · Multi-Session Tasks · Audit"]',
+      '    Dream["Dreaming Memory\\nFacts/Patterns · Memory Base & Board"]',
       "  end",
       '  Task -->|"Delegate"| Ctx',
       '  Ctx -->|"Launch / Resume"| Run',
@@ -1778,7 +1958,8 @@ function aboutArchitectureMermaid(lang) {
       '  Panel <-->|"Drag Bind / Jump"| Task',
       '  Logs -->|"00:00 Split & Noise Filter"| Sync',
       '  Sync -->|"Write Back"| Views',
-      '  Logs -->|"Usage Stats"| Dash',
+      '  Logs -->|"Usage & Security Replay"| Dash',
+      '  Dash -.->|"Allowlist Guardrails"| Ctx',
       '  Views -->|"Daily Evidence"| Dash',
       '  Views -->|"14-Day Evidence"| Dream',
       "```",
@@ -1789,26 +1970,26 @@ function aboutArchitectureMermaid(lang) {
     "flowchart LR",
     '  subgraph NOTE["Obsidian 日记与笔记"]',
     "    direction TB",
-    '    Task["任务行 / 大纲块\\n把手 · 拖拽 · @agent"]',
-    '    Views["同源多视图与整理\\n大纲 · 表格 · 卡片 · 时间线 · 归档"]',
+    '    Task["任务行 / 原地分形看板\\n把手 · 拖拽 · @agent · 镜像卡"]',
+    '    Views["同源四视图与阅读预览\\n大纲 · 表格 · 卡片 · 时间线 · 导出"]',
     "  end",
-    '  subgraph HARNESS["委派与上下文管道"]',
-    '    Ctx["Harness 组装\\n母项链 · 双链 · 模型与位置"]',
+    '  subgraph HARNESS["委派与安全护栏"]',
+    '    Ctx["Harness 上下文与策略\\n母项链 · 双链 · 技能卡 · 白名单"]',
     "  end",
-    '  subgraph AGENTS["本机 8 家 AI Agent"]',
+    '  subgraph AGENTS["14 家内置 + 自定义 ACP Agent"]',
     "    direction TB",
     '    Run["执行端\\n后台 ACP/CLI · 桌面版 · 终端"]',
     '    Logs["本机会话日志 / Hooks\\nJSONL · SQLite（只读数据源）"]',
     "  end",
     '  subgraph DECK["Agent Deck 控制与回写"]',
     "    direction TB",
-    '    Panel["侧栏甲板 · macOS 菜单栏\\n实时状态 · 待确认提醒 · 直达跳转"]',
-    '    Sync["日志自动回写引擎\\n状态 · 结论 · 时段 · 短链"]',
+    '    Panel["侧栏甲板 · 置顶 macOS 菜单栏\\n实时状态 · 待确认提醒 · 直达跳转"]',
+    '    Sync["日志自动回写引擎\\n状态 · 结论 · 多会话合计时段"]',
     "  end",
-    '  subgraph INSIGHT["回顾分析与长期记忆"]',
+    '  subgraph INSIGHT["回顾 · 安全与长期记忆"]',
     "    direction TB",
-    '    Dash["协作回顾 Dashboard\\nToken 热力图 · 项目投入排名"]',
-    '    Dream["Dreaming 长期记忆\\n提炼偏好规律 · 单向共享"]',
+    '    Dash["协作回顾与安全回放\\n热力图 · 跨会话任务 · 离线审计"]',
+    '    Dream["Dreaming 长期记忆\\n提炼偏好规律 · 记忆看板与 Base"]',
     "  end",
     '  Task -->|"委派任务"| Ctx',
     '  Ctx -->|"启动 / 续聊"| Run',
@@ -1817,7 +1998,8 @@ function aboutArchitectureMermaid(lang) {
     '  Panel <-->|"拖放绑定 / 跳转"| Task',
     '  Logs -->|"零点分割与口语过滤"| Sync',
     '  Sync -->|"写回原任务块"| Views',
-    '  Logs -->|"用量汇总"| Dash',
+    '  Logs -->|"用量与安全回放"| Dash',
+    '  Dash -.->|"白名单闭环"| Ctx',
     '  Views -->|"日记证据归属"| Dash',
     '  Views -->|"近 14 天证据"| Dream',
     "```",
@@ -1897,6 +2079,79 @@ class AddModelModal extends Modal {
         custom: true,
       };
       this.onAdd(m);
+      this.close();
+    };
+  }
+  onClose() { this.contentEl.empty(); }
+}
+
+class CustomAcpAgentModal extends Modal {
+  constructor(app, existing, list, onSave) {
+    super(app);
+    this.existing = existing || null;
+    this.list = Array.isArray(list) ? list : [];
+    this.onSave = onSave;
+    this.id = existing?.id || "";
+    this.name = existing?.name || "";
+    this.command = existing?.command || "";
+    this.args = existing ? String(existing.args ?? "") : "acp";
+    this.env = existing?.env || "";
+    this.autoApprove = Boolean(existing?.autoApprove);
+  }
+  onOpen() {
+    const { contentEl } = this;
+    contentEl.addClass("ad-modal");
+    contentEl.createEl("h3", { text: this.existing ? t("编辑自定义 ACP Agent") : t("添加自定义 ACP Agent") });
+    const form = contentEl.createDiv({ cls: "ad-form" });
+    const field = (label, el) => { const f = form.createDiv({ cls: "ad-field" }); f.createDiv({ cls: "ad-field__label", text: label }); el(f); };
+    field(t("Agent ID（用于 @ 路由）"), (f) => {
+      const i = f.createEl("input", { cls: "ad-input", attr: { value: this.id, placeholder: t("例如 kiro、pi、mistral-vibe（小写字母/数字/-/_）") } });
+      i.disabled = Boolean(this.existing);
+      i.oninput = () => { this.id = i.value; };
+    });
+    field(t("显示名"), (f) => {
+      const i = f.createEl("input", { cls: "ad-input", attr: { value: this.name, placeholder: t("例如 Kiro") } });
+      i.oninput = () => { this.name = i.value; };
+    });
+    field(t("命令或绝对路径"), (f) => {
+      const i = f.createEl("input", { cls: "ad-input", attr: { value: this.command, placeholder: t("例如 kiro-cli 或 /opt/homebrew/bin/gemini") } });
+      i.oninput = () => { this.command = i.value; };
+    });
+    field(t("启动参数（空格分隔，留空不传子命令）"), (f) => {
+      const i = f.createEl("input", { cls: "ad-input", attr: { value: this.args, placeholder: "acp" } });
+      i.oninput = () => { this.args = i.value; };
+    });
+    field(t("环境变量（可选，每行 KEY=VALUE，支持 secret:KEY / env:VAR）"), (f) => {
+      const ta = f.createEl("textarea", { cls: "ad-input", attr: { rows: "3", placeholder: "OPENAI_API_KEY=secret:my_key" } });
+      ta.value = this.env;
+      ta.oninput = () => { this.env = ta.value; };
+    });
+    field(t("自动允许常规工具调用"), (f) => {
+      const cb = f.createEl("input", { type: "checkbox" });
+      cb.checked = this.autoApprove;
+      cb.onchange = () => { this.autoApprove = cb.checked; };
+    });
+    const bar = contentEl.createDiv({ cls: "ad-btnrow ad-btnrow--end" });
+    const cancel = bar.createEl("button", { cls: "ad-btn ad-btn--ghost", text: t("取消") });
+    cancel.onclick = () => this.close();
+    const save = bar.createEl("button", { cls: "ad-btn ad-btn--cta", text: this.existing ? t("保存") : t("添加") });
+    save.onclick = () => {
+      const id = this.existing ? this.existing.id : normalizeCustomAcpId(this.id);
+      if (!id) return new Notice(t("Agent ID 需以小写字母开头（2–32 位字母/数字/-/_），且不能与内置 Agent 重名"));
+      if (!this.existing && this.list.some((x) => x.id === id)) return new Notice(t("已存在同 ID 的自定义 ACP Agent"));
+      if (!this.command.trim()) return new Notice(t("请填写命令或可执行文件路径"));
+      const entry = normalizeCustomAcpEntry({
+        id,
+        name: this.name.trim() || id,
+        command: this.command.trim(),
+        args: this.args.trim(),
+        env: this.env,
+        color: this.existing?.color,
+        autoApprove: this.autoApprove,
+        enabled: this.existing ? this.existing.enabled !== false : true,
+      });
+      if (!entry) return new Notice(t("自定义 ACP Agent 配置无效"));
+      this.onSave(entry);
       this.close();
     };
   }

@@ -4,6 +4,10 @@ import fs from "fs";
 import { desktopMessages } from "./desktop-sessions.js";
 import { buildCursorConversation, readCursorTranscript } from "./cursor-sessions.js";
 import { buildGrokBotConversation } from "./grok-bot-sessions.js";
+import { buildMuseConversation } from "./muse-sessions.js";
+import { buildKimiCodeConversation } from "./kimicode-sessions.js";
+import { buildDoubaoWorkConversation } from "./doubaowork-sessions.js";
+import { buildGeminiCliConversation } from "./gemini-cli-sessions.js";
 import * as J from "./journal.js";
 import { decompress } from "fzstd";
 import { createHash } from "crypto";
@@ -16,6 +20,10 @@ const textOf = (content) => typeof content === "string" ? content : (Array.isArr
 export function conversationMessages(agent, source, transcriptText = "") {
   if (agent === "cursor") return buildCursorConversation(source, transcriptText);
   if (agent === "grokbot") return buildGrokBotConversation(source);
+  if (agent === "muse") return buildMuseConversation(source);
+  if (agent === "kimicode") return buildKimiCodeConversation(source);
+  if (agent === "doubaowork") return buildDoubaoWorkConversation(source);
+  if (agent === "gemini") return buildGeminiCliConversation(source);
   const messages = [];
   const seen = new Map();
   for (const line of source.split("\n")) {
@@ -55,10 +63,22 @@ export async function readConversation(plugin, session, cache = new Map()) {
   const files = [...(plugin.usage.files?.values() || [])].filter((f) => f.sid === sid && f.agent === session.agent && !f.sub);
   const messages = [];
   for (const file of files) {
-    if (["opencode", "qoder", "hermes", "qwenwork", "teleagent"].includes(session.agent) && file.path.includes("#")) {
+    if (["opencode", "qoder", "hermes", "qwenwork", "minimax", "t3code", "teleagent"].includes(session.agent) && file.path.includes("#")) {
       const db = file.path.slice(0, file.path.lastIndexOf("#"));
       const rows = await desktopMessages(db, session.agent, sid);
       messages.push(...rows.filter((m) => m.text.trim()).map(({ role, text, at }) => ({ role, text, at })));
+      continue;
+    }
+    if (session.agent === "kimicode") {
+      messages.push(...buildKimiCodeConversation(file.path));
+      continue;
+    }
+    if (session.agent === "doubaowork") {
+      messages.push(...buildDoubaoWorkConversation(file.path));
+      continue;
+    }
+    if (session.agent === "gemini") {
+      messages.push(...buildGeminiCliConversation(file.path));
       continue;
     }
     const realPath = file.path.includes("#") ? file.path.slice(0, file.path.lastIndexOf("#")) : file.path;

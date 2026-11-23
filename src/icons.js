@@ -14,6 +14,11 @@ export const AGENT_ICONS = {
   qoder: "circle-dot",
   cursor: "mouse-pointer-click",
   grokbot: "bot",
+  t3code: "code-2",
+  muse: "sparkles",
+  kimicode: "code-2",
+  doubaowork: "briefcase",
+  gemini: "sparkles",
 };
 
 export const STATE_ICONS = {

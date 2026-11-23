@@ -1,5 +1,75 @@
 # Changelog
 
+## 1.13.17
+
+- **表驱动主力终端注册表扩展（`src/terminals.js`）**：将主力终端列表从 5 家扩展至 **11 家 + 自动**，新增 **cmux**、**tmux**、**Ghostty**、**WezTerm**、**Kitty**、**Alacritty** 支持，并补齐 Windows `wt.exe`/`cmd.exe` 回退；`tmux` 在 `auto` 模式下仅在检测到活跃 CLI 会话位于 `tmux` 内时命中（不抢占默认终端），支持 `tmux` 与 `WezTerm` 窗格级焦点切换；同步修复设置页终端快捷按钮（`openTerminalAt`）未读取 `cliTerminal` 的问题。
+- **双语 README 切换与视觉升级**：默认 `README.md` 切换为英文正本并新增深色 Hero Banner，中文文档迁至 `README.zh-CN.md`，同步更新 Wiki 与安装脚本引用。
+
+## 1.13.16
+
+- **Antigravity CLI 会话追踪与内置 Gemini CLI ACP 委派**：支持追踪 `antigravity-cli` brain 会话，并为内置 Gemini CLI 启用 `gemini --acp` 后台委派与续聊。
+- **Windows 兼容修复**：`execCapture` 改走跨平台 `spawnCli` / `killChildProcess`，修复 Windows 下执行 `.cmd` 报 `spawn EINVAL` 及定时器泄漏问题。
+- **文档与 CI/发布流水线维护**：补齐英文 GitHub Wiki 页面与双语切换，在 README 明确第一阶段目标（Milestone 1：成为有效的 AI 上下文提供者），并将 GitHub Actions 升级至 Node 24 运行时。
+
+## 1.13.15
+
+- **新增 3 家内置 Agent 只读追踪（内置总数增至 17 家）**：
+  - **Kimi Code**：只读解析 `~/.kimi-code/sessions/<wsHash>/<sessionId>/wire.jsonl`（v1.5 协议，支持 `KIMI_CODE_HOME` 与 `~/.kimi/sessions` 回退），联读 `session-meta/state.json`（自定义标题、归档状态、模型）和 `workspaces.json`，精确统计逐轮 Token 与工具调用，支持只读对话详情与桌面端唤起。
+  - **豆包工作（Doubao Work）**：零依赖扫描 `~/Library/Application Support/DoubaoWork/Default/IndexedDB/chrome_doubaowork-chat_0.indexeddb.leveldb`（含 `.log` 与 Snappy 压缩 `.ldb` 块中的 V8 Structured Clone 会话列表元数据），支持唤起桌面端；严格不解密本地加密库 `sdk_storage`，Token 诚实显示「用量未提供」。
+  - **Gemini CLI**：只读解析 `~/.gemini/tmp/<projectSlug>/chats/session-*.jsonl`（兼容旧版 `session-*.json`），支持 `$set` / `$patch` / `$rewindTo`、自动剥离 `<session_context>` / `<hook_context>` 注入块、精确统计 Token（含缓存与思考 Token），并支持终端 `gemini --resume` 续聊。
+  - 同步 3 家官方/定制 128px 图标、本机 Harness 自动探测、macOS 菜单栏样式与中英繁文案；解析缓存版本 `USAGE_CACHE_VERSION` 递增至 `18`。
+- **README 精简与 GitHub Wiki 体系**：中英文 README 明确核心定位「以 Markdown / 大纲 / 日记为正本的多客户端 AI 总控台 + 长期记忆闭环」，突出主流模型全覆盖与中文 Agent 客户端生态适配；将详细支持矩阵、按需依赖与已知边界迁入 `docs/wiki/`（7 篇完整用户文档）。
+- **GitHub 自动化增强**：新增 `docs/wiki/**` 自动同步到 GitHub Wiki 的 Workflow（`sync-wiki.yml`）、结构化 Bug / 新 Agent 适配 Issue 表单模板与 Dependabot 周检配置。
+
+## 1.13.13
+
+- **支持 T3 Code（追踪 + `t3` CLI 委派 + 转发去重）**：只读解析 `~/.t3/userdata/statev2.sqlite`（支持 `T3_DATA_DIR` / `T3_STATE_DIR` 与 v1 `state.sqlite` 回退、逐轮 `turnTokenUsage`、工作树 `worktreePath`、子代理 `lineage` 与归档态）；支持经 `t3 thread start` / `t3 thread send` 后台委派与应用内续聊（未登记目录自动 `t3 project add`）；自动记日记时按 T3 Code 绑定表去重底层被转发的 Agent 会话，统一收录在 T3 Code 下不重复记录。
+- **支持 Muse 分对话流只读追踪**：读取 `~/Library/Caches/ConversationCache/*.json`（换算 Apple `CFAbsoluteTime`、提取 `contentBlocks` 与 `optionWidget`），云端 VM 诚实显示「用量未提供」；支持按对话流多选追踪（默认追踪 `hatch-main` Main Chat，上限 `museMaxTracked = 5`），设置页提供勾选器；同步 T3 Code 与 Muse 官方图标、菜单栏配色与中英繁文案。
+- **离线历史安全回放与白名单闭环**：新增命令 `安全：回放最近 30 天会话的工具调用并生成审计报告` 与 `安全：快速回放最近 7 天会话并生成审计报告`，基于 `security.js` 离线复盘 12 家客户端（含 Antigravity、DSH zstd）历史工具调用，自动降噪 `/tmp` 与常见构建目录，生成脱敏报告 `Agent Deck/安全审计.md`；支持在报告 frontmatter 修改 `days` / `agent` / `ignore_temp_noise` / `allowlist` 并自动同步到 ACP 实时护栏（明文密钥永不放行）。
+- **按任务跨多会话 / 多 Agent 用量与活跃时长聚合**：同一任务块绑定多个 `🔗` 会话时，编辑器 pill/token 徽标合并展示总 token、去重真实活跃时长与会话数（`×N`），悬浮展示各 Agent 分项明细。
+
+## 1.13.12
+
+- **支持 MiniMax Code 客户端与 `mcode` CLI**：只读解析 `~/.minimax/v2/sqlite/runtime-state.sqlite`（支持 `MINIMAX_DATA_DIR` / `MAVIS_DATA_DIR` 与 `~/.mavis` 回退、v2 消息行与旧版消息回退、逐轮 token 与模型、工作区路径、归档与父子会话），支持本机自动探测（`MiniMax Code.app`、`mcode` CLI、`~/.minimax`）、`mcode acp` 后台委派与应用内续聊、终端 `mcode --session` 续聊及桌面端唤起；同步官方图标、设置页卡片、菜单栏配色与中英繁文案。
+- **繁体中文（`zh-TW`）界面支持与日记整理布局优化**：补齐繁体中文语言包并增强日记分区布局与自动记录兼容。
+
+## 1.13.11
+
+- 手动重扫本机会话后整理今天的日记，并显示扫描和写入结果。旧日记里的自动记录可以跨天打开原会话，重扫期间保留跳转入口。
+- 自动记录和绑定任务使用同一套起止时间规则。会话运行时，标题时段更新到刷新时间。会话停止后，结束时间取最后一条日志事件。
+- 自动定位日记时读取 Obsidian 核心「日记」设置。修改设置后，下次定位即生效。与螺旋日程同时启用时，沿用它的日记分界。
+- Dream 采集跳过私密笔记和排除目录，并提供供后续主题与用语分析复用的材料入口。
+
+## 1.13.10
+
+- **右键菜单里的默认模型名改成短写法**：`antigravity-default` / `dsh-default` 这类「不传模型参数、用客户端自己的默认」的占位符原来直接显示目录全名，标题会变成「委派（DSH · 不指定（使用 DSH 当前默认模型））」这种括号套括号。现在统一显示 `CLI 默认`：`委派（Antigravity · CLI 默认）`、二级菜单里也是 `DSH · CLI 默认`；真指定了具体模型时仍显示型号名。
+
+## 1.13.9
+
+- **编辑器右键菜单补上委派**：上一版只把委派放进四视图／阅读视图的行菜单，源码行右键仍只有 Pin 与记录操作。现在光标所在那一段（任务行、`💬`／`⏱`／`🔗` 回传日志、普通段落）右键就出 `委派（Agent · 模型）` 与 `委派并选择模型 ▸` 两项，和行尾纸飞机、视图行菜单共用同一份实现（`addDelegateMenuItems`）。
+
+## 1.13.8
+
+- **委派箭头跟着光标走，回传的日志可以再派出去**：箭头不再限定「列表项 + 任务关键词／记录前缀」——光标停在哪一段，行尾就出纸飞机，母块行、`💬`／`⏱`／`🔗` 回传日志、普通段落一视同仁；不带列表标记的段落整行当一项发（`paragraphBlock`）。同时修掉一个真 bug：箭头原先加在行首装饰之前，光标停在 `💬` 行上会抛 `Ranges must be added sorted by 'from' position and 'startSide'`，把整层编辑器装饰（箭头、状态药丸）一起打掉，看着就像「箭头没了，只剩钉子」。
+- **四视图与阅读视图的行改成右键菜单**：表格／卡片／时间线／阅读视图的记录行去掉行内 📌，右键某一轮即出现 `Pin 为关键记录`／`取消 Pin`、`委派（Agent · 模型）`（直接按默认 Agent + 默认模型派）与 `委派并选择模型 ▸` 二级菜单（列出已启用 Agent 的启用模型，点哪项就派给那个模型的 Agent）。派发内容是该轮记录（连同子块），沿用原来的确认弹窗；编辑器源码行尾也不再放 📌。
+- 设置里「列表项尾巴上的把手」更名为「段落尾巴上的小箭头」，说明同步改成段落口径。
+
+## 1.13.7
+
+- **`TOREVIEW` 关键词配色柔和化**：将 `TOREVIEW` 从高警示的红→黄渐变改为低饱和、清新的纯雾青色（`#6fa9b8`），图标颜色同步更新；因为 `TOREVIEW` 仅表示需要看一眼而未必需要决策，降低视觉打扰并同步联动螺旋日程块颜色。
+
+## 1.13.6
+
+- **非 macOS 平台菜单栏入口收口**：Windows / Linux 隐藏设置页中的「macOS 菜单栏」相关开关、快捷键、螺旋日程汇总切换与重启按钮，不注册 `open-menubar-panel` 命令，且 `MenuBarBridge` 彻底静默空操作（不调 `/usr/bin/pkill`、不写状态文件）；同步更新中英文 README 的 Windows 适配现状说明。
+- **移除 CSS `:has()` 选择器**：将对话回放弹窗宽度与多选项设置行堆叠布局改为显式类名（`.modal.ad-conversation-modal`、`.ad-row.ad-row--stack`），消除 Obsidian 插件审核的 `:has()` 性能告警。
+
+## 1.13.5
+
+- **Windows CLI 兼容修复与三端测试全绿**（感谢 [@buaaflyaway](https://github.com/buaaflyaway) 提交 [#7](https://github.com/MatsuriMW/obsidian-agent-deck/pull/7)）：
+  - **进程树清理与 `.cmd` 多行传参修复**：Windows 下 CLI 超时改用 `killChildProcess` 终止整棵进程树并重试清理临时目录，避免子进程占用目录导致 `EPERM`/`EBUSY` 覆盖真实超时错误；对经 `cmd.exe` 执行的 `.cmd`/`.bat` 包装脚本（`agy`、`qodercli`、`codebuddy`）压平参数换行，防止提示词在首行被静默截断。
+  - **路径与可执行文件解析修复**：归一化 Windows 家目录反斜杠并忽略大小写，避免家目录被误识别为合法项目目录；裸名 CLI 查找在 Windows 上按 `PATHEXT` 优先匹配 `.exe`/`.cmd`/`.bat`（避免命中 npm 同目录的无后缀 POSIX 脚本）并回退至 `PATH` 查找。
+  - **测试夹具与三端 CI**：修正 Windows 路径 URL 转换、Cursor 测试 `USERPROFILE`/`APPDATA` 隔离、平台 PATH 断言与 ACP `session/cancel` 并发轮询，Linux / macOS / Windows 三端 CI 全部通过。
+
 ## 1.13.4
 
 - **本机 Harness 自动探测与界面降噪**：首次加载自动探测本机实际安装的 Harness/Agent（避免单装桌面聊天端 `Claude.app` 误启用 Claude Code），默认关闭未安装项并选出默认委派目标；支持在设置页和命令面板随时「重新检测 Harness」。设置页（委派目标、配置卡、公共终端、管理模型、来源与扫描折叠未安装项、`autoLogAgents`）、侧栏面板（Agent 卡片、最近筛选条、`AgentCardsModal`）、`DelegateOptionsModal` 与 `AutoLog` 统一过滤未启用项。

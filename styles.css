@@ -1,4 +1,4 @@
-/* Agent Deck 1.13.4 — Apache-2.0 — https://github.com/MatsuriMW/obsidian-agent-deck */
+/* Agent Deck 1.13.17 — Apache-2.0 — https://github.com/MatsuriMW/obsidian-agent-deck */
 /* Generated from src/styles/ by `npm run build` — do not edit styles.css directly. */
 /* src/styles/base/tokens.css */
 .ad-view,
@@ -2452,8 +2452,17 @@ body.ad-dragging-session .markdown-source-view .cm-content {
 .ad-prog[data-agent=hermes] {
   --ad-prog: #b57536;
 }
+.ad-prog[data-agent=minimax] {
+  --ad-prog: #e24d6a;
+}
 .ad-prog[data-agent=qwenwork] {
   --ad-prog: #6b63d6;
+}
+.ad-prog[data-agent=t3code] {
+  --ad-prog: #3d7bd9;
+}
+.ad-prog[data-agent=muse] {
+  --ad-prog: #c96f8f;
 }
 .ad-prog.is-linked {
   cursor: pointer;
@@ -2598,7 +2607,10 @@ body.ad-dragging-session .markdown-source-view .cm-content {
 .todoseq-keyword-formatted[data-task-keyword=MAYBE] {
   --tsq-kw: #8f7fb6;
 }
-.todoseq-keyword-formatted:is([data-task-keyword=TOREVIEW], [data-task-keyword=HITLIMIT], [data-task-keyword=NEEDOK], [data-task-keyword=QUEUED], [data-task-keyword=ERRORED], [data-task-keyword=DELEGATED]) {
+.todoseq-keyword-formatted[data-task-keyword=TOREVIEW] {
+  --tsq-kw: #6fa9b8;
+}
+.todoseq-keyword-formatted:is([data-task-keyword=HITLIMIT], [data-task-keyword=NEEDOK], [data-task-keyword=QUEUED], [data-task-keyword=ERRORED], [data-task-keyword=DELEGATED]) {
   --tsq-kw: #c8635f;
   background-image:
     linear-gradient(
@@ -2608,9 +2620,6 @@ body.ad-dragging-session .markdown-source-view .cm-content {
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
-}
-.todoseq-keyword-formatted[data-task-keyword=TOREVIEW] {
-  --tsq-kw-to: #b39a3e;
 }
 .todoseq-keyword-formatted[data-task-keyword=NEEDOK] {
   --tsq-kw-to: #bf7a45;
@@ -2633,7 +2642,7 @@ body.ad-dragging-session .markdown-source-view .cm-content {
 .todoseq-keyword-formatted[data-task-keyword=NEEDOK]::after {
   content: "?";
 }
-:is(.cm-editor, .markdown-preview-view, .table-cell-wrapper) .todoseq-keyword-formatted:is([data-task-keyword=TOREVIEW], [data-task-keyword=HITLIMIT], [data-task-keyword=NEEDOK], [data-task-keyword=QUEUED], [data-task-keyword=ERRORED], [data-task-keyword=DELEGATED]) {
+:is(.cm-editor, .markdown-preview-view, .table-cell-wrapper) .todoseq-keyword-formatted:is([data-task-keyword=HITLIMIT], [data-task-keyword=NEEDOK], [data-task-keyword=QUEUED], [data-task-keyword=ERRORED], [data-task-keyword=DELEGATED]) {
   text-shadow: none;
 }
 .tsq-ico {
@@ -2681,7 +2690,7 @@ body.ad-dragging-session .markdown-source-view .cm-content {
   --tsq-ico: #93606b;
 }
 .tsq-ico[data-kw=TOREVIEW] {
-  --tsq-ico: #b39a3e;
+  --tsq-ico: #6fa9b8;
 }
 .tsq-ico[data-kw=NEEDOK] {
   --tsq-ico: #bf7a45;
@@ -3055,34 +3064,6 @@ body.ad-dragging-session .markdown-source-view .cm-content {
 .ad-record-hidden,
 .ad-block-id-hidden {
   display: none !important;
-}
-.ad-record-pin-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  margin-left: 6px;
-  padding: 0 3px;
-  border: 0;
-  border-radius: 4px;
-  background: transparent;
-  box-shadow: none;
-  font-size: 10.5px;
-  line-height: 1.3;
-  vertical-align: middle;
-  cursor: pointer;
-  opacity: .28;
-  filter: grayscale(1);
-  transition: opacity .12s ease, background-color .12s ease;
-}
-.ad-record-pin-btn:hover {
-  opacity: .85;
-  filter: none;
-  background: var(--background-modifier-hover);
-}
-.ad-record-pin-btn.is-on {
-  opacity: 1;
-  filter: none;
-  background: color-mix(in srgb, var(--interactive-accent) 12%, transparent);
 }
 .markdown-source-view.mod-cm6 .cm-line.ad-record-line--pinned,
 .markdown-rendered .ad-record-pinned {
@@ -3902,6 +3883,23 @@ body.ad-dragging-session .markdown-source-view .cm-content {
   background: var(--ad-agent-soft, var(--background-modifier-hover));
   color: var(--text-muted);
 }
+.ad-record-table-wrap.ad-record-view-wrap--readonly .ad-rt-row,
+.ad-record-table-wrap.ad-record-view-wrap--readonly .ad-rt-card,
+.ad-record-table-wrap.ad-record-view-wrap--readonly .ad-rt-footer-item,
+.ad-record-table-wrap.ad-record-view-wrap--readonly .ad-rt-tl-item {
+  cursor: default;
+}
+.ad-board-wrap.ad-board-wrap--readonly .ad-board__actions,
+.ad-board-wrap.ad-board-wrap--readonly .ad-board__pin,
+.ad-board-wrap.ad-board-wrap--readonly .ad-board__zoom,
+.ad-board-wrap.ad-board-wrap--readonly .ad-board__coladd,
+.ad-board-wrap.ad-board-wrap--readonly .ad-board__quickadd {
+  display: none;
+}
+.ad-board-wrap.ad-board-wrap--readonly .ad-board__card,
+.ad-board-wrap.ad-board-wrap--readonly .ad-board__cardtitle {
+  cursor: default;
+}
 
 /* src/styles/views/settings.css */
 .modal.mod-settings .vertical-tab-content.ad-settings {
@@ -4047,10 +4045,10 @@ body.ad-dragging-session .markdown-source-view .cm-content {
   align-items: center;
   padding: 11px 0;
 }
-.ad-settings .ad-row:has(.ad-seg--many) {
+.ad-settings .ad-row.ad-row--stack {
   grid-template-columns: minmax(0, 1fr);
 }
-.ad-settings .ad-row:has(.ad-seg--many) > .ad-row__right {
+.ad-settings .ad-row.ad-row--stack > .ad-row__right {
   justify-content: flex-start;
 }
 .ad-settings .ad-row__name {
@@ -4294,7 +4292,10 @@ body.ad-dragging-session .markdown-source-view .cm-content {
 }
 .ad-settings .ad-set-agent[data-agent=grokbot] .ad-set-agent__icon img,
 .ad-settings .ad-set-agent[data-agent=qwenwork] .ad-set-agent__icon img,
-.ad-settings .ad-set-agent[data-agent=hermes] .ad-set-agent__icon img {
+.ad-settings .ad-set-agent[data-agent=hermes] .ad-set-agent__icon img,
+.ad-settings .ad-set-agent[data-agent=minimax] .ad-set-agent__icon img,
+.ad-settings .ad-set-agent[data-agent=t3code] .ad-set-agent__icon img,
+.ad-settings .ad-set-agent[data-agent=muse] .ad-set-agent__icon img {
   border-radius: 7px;
   border: 1px solid var(--ad-line);
 }
@@ -4969,7 +4970,7 @@ body.ad-dragging-session .markdown-source-view .cm-content {
 .ad-dream-progress progress[hidden] {
   display: none;
 }
-.modal:has(.ad-conversation) {
+.modal.ad-conversation-modal {
   width: min(680px, 94vw);
 }
 .ad-conversation {
@@ -5697,7 +5698,7 @@ body.ad-dragging-session .markdown-source-view .cm-content {
   margin: 16px 0;
   max-width: 80ch;
 }
-.ad-review :is(.ad-review__agents, .ad-review__models, .ad-review__projects, .ad-review__records, .ad-review__rhythm) {
+.ad-review :is(.ad-review__agents, .ad-review__models, .ad-review__projects, .ad-review__records, .ad-review__rhythm, .ad-review__security) {
   margin-top: 32px;
 }
 .ad-review .ad-review__rhythm-card {

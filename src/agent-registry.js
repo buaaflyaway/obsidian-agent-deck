@@ -151,6 +151,27 @@ const CAPABILITIES = new Map([
     waitDesktopUntilDone: false,
     sessionLinkScheme: "obsidian",
   }],
+  ["minimax", {
+    delegate: true,
+    runnerKind: "acp",
+    acp: true,
+    acpArgs: ["acp"],
+    acpAutoApprove: true,
+    acpDefaultModel: "minimax-default",
+    acpDefaultEffort: "",
+    acpModelOptional: true,
+    acpEffortOptional: true,
+    acpAllowUnknownEffort: true,
+    desktopHandoffOnly: false,
+    terminalHandoff: true,
+    continueInApp: true,
+    permissionControl: false,
+    archiveDetection: true,
+    modelCatalog: true,
+    autoOpenDesktopOnDone: true,
+    waitDesktopUntilDone: false,
+    sessionLinkScheme: "obsidian",
+  }],
   ["qwenwork", {
     delegate: false,
     runnerKind: "handoff",
@@ -187,6 +208,75 @@ const CAPABILITIES = new Map([
     modelCatalog: false,
     sessionLinkScheme: "grokbot",
   }],
+  ["t3code", {
+    delegate: true,
+    runnerKind: "t3code",
+    acp: false,
+    desktopHandoffOnly: false,
+    terminalHandoff: false,
+    continueInApp: true,
+    permissionControl: false,
+    archiveDetection: true,
+    modelCatalog: false,
+    autoOpenDesktopOnDone: true,
+    waitDesktopUntilDone: false,
+    sessionLinkScheme: "obsidian",
+  }],
+  ["muse", {
+    delegate: false,
+    runnerKind: "handoff",
+    acp: false,
+    desktopHandoffOnly: true,
+    terminalHandoff: false,
+    continueInApp: false,
+    permissionControl: false,
+    archiveDetection: false,
+    modelCatalog: false,
+    sessionLinkScheme: "muse",
+  }],
+  ["kimicode", {
+    delegate: false,
+    runnerKind: "handoff",
+    acp: false,
+    desktopHandoffOnly: true,
+    terminalHandoff: false,
+    continueInApp: false,
+    permissionControl: false,
+    archiveDetection: true,
+    modelCatalog: false,
+    sessionLinkScheme: "kimicode",
+  }],
+  ["doubaowork", {
+    delegate: false,
+    runnerKind: "handoff",
+    acp: false,
+    desktopHandoffOnly: true,
+    terminalHandoff: false,
+    continueInApp: false,
+    permissionControl: false,
+    archiveDetection: false,
+    modelCatalog: false,
+    sessionLinkScheme: "doubaowork",
+  }],
+  ["gemini", {
+    delegate: true,
+    runnerKind: "acp",
+    acp: true,
+    acpArgs: ["--acp"],
+    acpAutoApprove: true,
+    acpDefaultModel: "gemini-default",
+    acpDefaultEffort: "",
+    acpModelOptional: true,
+    acpEffortOptional: true,
+    acpAllowUnknownEffort: true,
+    desktopHandoffOnly: false,
+    terminalHandoff: true,
+    continueInApp: true,
+    permissionControl: false,
+    archiveDetection: false,
+    modelCatalog: true,
+    sessionLinkScheme: "gemini",
+  }],
 ]);
 
 export function registerAgentCapability(id, capability = {}) {
@@ -195,6 +285,11 @@ export function registerAgentCapability(id, capability = {}) {
   const next = { ...prev, ...capability };
   CAPABILITIES.set(id, next);
   return next;
+}
+
+export function unregisterAgentCapability(id) {
+  if (!id || typeof id !== "string") return false;
+  return CAPABILITIES.delete(id);
 }
 
 export function getAgentCapability(id) {

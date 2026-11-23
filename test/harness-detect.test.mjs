@@ -302,10 +302,7 @@ test("Settings, Sidebar View, and DelegateOptionsModal stay clean when only DSH 
     assert.ok(disabledDetails, "Disabled/uninstalled harnesses are collapsed into a sub-section");
     assert.equal(disabledDetails.open, false);
     const disabledCards = disabledDetails.all().filter((el) => el.classList.contains("ad-set-agent"));
-    // 本分支把 TeleAgent 加进 AGENT_ORDER（12 家），写死 9 会在每次新增 Agent 后再挂一次，
-    // 所以按“除 DSH/WorkBuddy 之外的已注册 Agent”推导数量。
-    const expectedDisabled = AGENT_ORDER.filter((id) => id !== "dsh" && id !== "workbuddy").length;
-    assert.equal(disabledCards.length, expectedDisabled);
+    assert.equal(disabledCards.length, AGENT_ORDER.length - 2);
     assert.ok(disabledCards.some((c) => c.all().some((x) => x.text === "已关闭 · 未检测到")));
     const autoLogBtns = recBody.all().filter((el) => el.parentElement?.classList.contains("ad-seg--many") && ["WorkBuddy", "DSH", "Claude", "Codex"].includes(el.text));
     assert.deepEqual(autoLogBtns.map((b) => b.text), ["WorkBuddy", "DSH"]);

@@ -133,10 +133,12 @@ export default {
   "{trigger}{agent} 不支持强度 {effort}": "{trigger}{agent} does not support effort {effort}",
   "选择后继续选择具体模型": "Pick this agent, then choose a model",
   "客户端交接；模型与强度在客户端设置": "Handed off to its client; set model and effort there",
+  "后台 ACP 委派；回车直接选定": "Background ACP delegation; press Enter to select",
   "选定模型；可继续输入 / 选择强度": "Model selected; type / to choose effort",
 
   // ----- delegation runtime notices and errors -----
   "已切到 Warp": "Switched to Warp",
+  "已切到终端": "Switched to terminal",
   "这个会话还没有会话号，稍等一秒再点": "This session has no session ID yet; try again in a second",
   "已打开 DeepSeek Harness；会话号已复制": "Opened DeepSeek Harness; session ID copied",
   "已打开 Antigravity；会话号已复制": "Opened Antigravity; session ID copied",

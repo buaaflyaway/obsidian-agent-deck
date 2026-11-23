@@ -7,7 +7,7 @@
 import fs from "fs";
 import { cleanUserPrompt, isPromptText } from "./prompt-text.js";
 export { cleanUserPrompt, isPromptText } from "./prompt-text.js";
-import { desktopSessions, desktopMessages } from "./desktop-sessions.js";
+import { desktopSessions, desktopMessages, t3CodeDelegatedSids } from "./desktop-sessions.js";
 import { resolveSqliteBinary } from "./sqlite.js";
 import { teleAgentDatabases } from "./teleagent.js";
 import {
@@ -41,6 +41,25 @@ import {
   grokBotPersistenceDir,
 } from "./grok-bot-sessions.js";
 export { grokBotPersistenceDir };
+import {
+  discoverMuseConversations,
+  parseMuseConversation,
+  museCacheDir,
+} from "./muse-sessions.js";
+export { museCacheDir };
+import {
+  discoverKimiCodeSessions,
+  parseKimiCodeSession,
+} from "./kimicode-sessions.js";
+import {
+  discoverDoubaoWorkConversations,
+  doubaoWorkIndexedDbDir,
+} from "./doubaowork-sessions.js";
+export { doubaoWorkIndexedDbDir };
+import {
+  discoverGeminiCliSessions,
+  parseGeminiCliSession,
+} from "./gemini-cli-sessions.js";
 export {
   cursorEventsDir,
   cursorHooksStatus,
@@ -83,6 +102,21 @@ const home = () => os.homedir();
 const norm = (p) => String(p || "").replace(/^~(?=\/)/, home());
 // QwenWork keeps its data under $QWENWORK_HOME, or ~/.qwenworkcn by default.
 const qwenWorkHome = () => process.env.QWENWORK_HOME ? norm(process.env.QWENWORK_HOME) : path.join(home(), ".qwenworkcn");
+// MiniMax Code stores its v2 runtime SQLite under $MINIMAX_DATA_DIR / $MAVIS_DATA_DIR, or ~/.minimax by default.
+const minimaxHome = () => {
+  if (process.env.MINIMAX_DATA_DIR) return norm(process.env.MINIMAX_DATA_DIR);
+  if (process.env.MAVIS_DATA_DIR) return norm(process.env.MAVIS_DATA_DIR);
+  const def = path.join(home(), ".minimax");
+  if (fs.existsSync(def)) return def;
+  const legacy = path.join(home(), ".mavis");
+  return fs.existsSync(legacy) ? legacy : def;
+};
+// T3 Code stores its orchestration SQLite under $T3_DATA_DIR / $T3_STATE_DIR, or ~/.t3/userdata by default.
+const t3CodeDataDir = () => {
+  if (process.env.T3_DATA_DIR) return norm(process.env.T3_DATA_DIR);
+  if (process.env.T3_STATE_DIR) return norm(process.env.T3_STATE_DIR);
+  return path.join(home(), ".t3", "userdata");
+};
 
 // Codex (and DSH's default workspace) create a folder per task, so the folder
 // name is a machine slug: "a", "dui", "w-s", a session id. Those are useless as
@@ -216,7 +250,7 @@ function cleanLive(v, now = Date.now()) {
 // parsing below changes: an old cache is then ignored instead of showing stale
 // numbers. Keep the complete per-message map: summary() needs historical token
 // records as well as the recent tail after an incremental append.
-export const USAGE_CACHE_VERSION = 15;
+export const USAGE_CACHE_VERSION = 18;
 // Bump when the shape of summary() changes (labels, buckets, fields). The stored
 // day summaries are then recomputed from the parse cache instead of staying on
 // the old shape until each day happens to be touched again.
@@ -281,6 +315,7 @@ export class AgentUsage {
     this.sideChats = new Map();      // sid -> [{ pid, since }] currently open side chats
     this.subs = new Map();           // sid -> Map(agentId -> subagent record)
     this.wbMeta = new Map();         // WorkBuddy db session metadata
+    this.t3Delegated = new Map();    // underlying provider sid -> owning T3 Code thread_id
     this.sideAt = 0;
     this.errors = [];
     this.lastScan = 0;
@@ -298,6 +333,11 @@ export class AgentUsage {
     if (this.isPrimary(agent)) return true;
     const a = this.settings.agents || {};
     return a[agent] !== false;
+  }
+
+  t3OwnerOf(sid) {
+    if (!sid || !this.enabled("t3code")) return "";
+    return this.t3Delegated.get(sid) || "";
   }
 
   stale(agent, ms) {
@@ -415,6 +455,7 @@ export class AgentUsage {
     add(path.join(h, ".codebuddy/projects"), "workbuddy");
     add(path.join(h, ".dsh/sessions"), "dsh");
     add(path.join(h, ".gemini/antigravity/brain"), "antigravity");
+    add(path.join(h, ".gemini/antigravity-cli/brain"), "antigravity");
     add(path.join(h, ".qoder/projects"), "qoder");
     add(path.join(qwenWorkHome(), "projects"), "qwenwork");
     add(cursorEventsDir(h), "cursor");
@@ -465,16 +506,25 @@ export class AgentUsage {
     this.applyClaudeDesktop();
     await this.readCursorMeta({ onlyAgent });
     await this.readGrokBotSessions({ floor, onlyAgent, strictSince, touched });
+    await this.readMuseSessions({ floor, onlyAgent, strictSince, touched });
+    await this.readKimiCodeSessions({ floor, onlyAgent, strictSince, touched });
+    await this.readDoubaoWorkSessions({ floor, onlyAgent, strictSince, touched });
+    await this.readGeminiCliSessions({ floor, onlyAgent, strictSince, touched });
     if (!onlyAgent && !strictSince) this.lastScan = Date.now();
     return touched;
   }
 
   desktopDatabases() {
     const hHome = process.env.HERMES_HOME ? norm(process.env.HERMES_HOME) : path.join(home(), ".hermes");
+    const t3Dir = t3CodeDataDir();
+    const t3V2 = path.join(t3Dir, "statev2.sqlite");
+    const t3V1 = path.join(t3Dir, "state.sqlite");
     const dbs = [
       [path.join(home(), ".local/share/opencode/opencode.db"), "opencode"],
       [path.join(home(), "Library/Application Support/com.qoder.app.stable/main.sqlite"), "qoder"],
       [path.join(hHome, "state.db"), "hermes"],
+      [path.join(minimaxHome(), "v2/sqlite/runtime-state.sqlite"), "minimax"],
+      [fs.existsSync(t3V2) ? t3V2 : t3V1, "t3code"],
     ];
     try {
       const profilesDir = path.join(hHome, "profiles");
@@ -503,10 +553,17 @@ export class AgentUsage {
     for (const [db, agent] of this.desktopDatabases()) {
       if (!this.enabled(agent) || onlyAgent && agent !== onlyAgent || !fs.existsSync(db)) continue;
       try {
-        // 桌面库一律按「回溯天数」窗口收敛：主力 Agent 若取 since=0，一个大库（几千会话 / 几百 MB part）
+        if (agent === "t3code") {
+          const delegated = await t3CodeDelegatedSids(db);
+          this.t3Delegated = delegated;
+        }
+        // 桌面库默认按「回溯天数」窗口收敛：主力 Agent 若取 since=0，一个大库（几千会话 / 几百 MB part）
         // 会在首次扫描时被整个读出来，主线程直接卡死。JSONL 那侧的「主力读全量」不受影响。
-        const sessions = await desktopSessions(db, agent, floor);
-        const scope = this.isPrimary(agent) ? -1 : Number(dayKeyToday(this.cfg).replace(/\D/g, "")) || 0;
+        // 想要完整历史的，在设置里打开「桌面数据库也读全部历史」（settings.desktopFullHistory）。
+        const wantFull = this.settings?.desktopFullHistory === true;
+        const dbFloor = !strictSince && wantFull && this.isPrimary(agent) ? 0 : floor;
+        const sessions = await desktopSessions(db, agent, dbFloor);
+        const scope = this.isPrimary(agent) ? -1 : Number(dayKeyToday(this.cfg).replaceAll("-", ""));
         for (const row of sessions) {
           const key = `${db}#${row.sid}`;
           if (row.archived || row.deletedAt) this.archived.add(row.sid); else this.archived.delete(row.sid);
@@ -946,6 +1003,540 @@ export class AgentUsage {
     }
 
     pruneUnselected(activeTracked);
+  }
+
+  async readMuseSessions({ floor = 0, onlyAgent = "", strictSince = false, touched = new Set() } = {}) {
+    if (onlyAgent && onlyAgent !== "muse") return;
+    const maxTracked = Math.max(1, Math.min(20, Number(this.settings.museMaxTracked) || 5));
+    const configuredIds = Array.isArray(this.settings.museTrackedIds)
+      ? this.settings.museTrackedIds
+      : ["hatch-main"];
+    const rawTracked = this.enabled("muse")
+      ? [...new Set(configuredIds.map((x) => String(x || "").trim()).filter(Boolean))].slice(0, maxTracked)
+      : [];
+    const tracked = new Set(rawTracked);
+
+    const pruneUnselected = (keep) => {
+      for (const [fileKey, fc] of [...this.files]) {
+        if (fc.agent !== "muse" || keep.has(fc.sid)) continue;
+        for (const day of fc.days?.keys() || []) touched.add(day);
+        this.files.delete(fileKey);
+        this.dirty = true;
+      }
+      for (const [sid, m] of [...this.meta]) {
+        if (m.agent === "muse" && !keep.has(sid)) {
+          this.meta.delete(sid);
+          this.dirty = true;
+        }
+      }
+    };
+
+    if (!tracked.size) {
+      pruneUnselected(tracked);
+      return;
+    }
+
+    const storage = discoverMuseConversations(
+      this.settings.museCacheDir
+        ? { cacheDir: this.settings.museCacheDir }
+        : { homeDir: home() },
+    );
+    const activeIds = new Set();
+    const scope = this.isPrimary("muse") ? -1 : Number(dayKeyToday(this.cfg).replaceAll("-", ""));
+
+    for (const conv of storage.conversations) {
+      if (!tracked.has(conv.id)) continue;
+      let st;
+      try { st = await fsp.stat(conv.filePath); } catch { continue; }
+      const sid = conv.id;
+      activeIds.add(sid);
+      const key = `${conv.filePath}#${sid}`;
+      const previous = this.files.get(key);
+      if (
+        previous &&
+        previous.size === st.size &&
+        previous.mtime === st.mtimeMs &&
+        previous.offset === scope
+      ) {
+        continue;
+      }
+
+      let rawText;
+      try { rawText = await fsp.readFile(conv.filePath, "utf8"); } catch { continue; }
+      const parsed = parseMuseConversation(rawText, conv);
+      if (!parsed) continue;
+
+      const fc = {
+        path: key,
+        agent: "muse",
+        sid,
+        id: sid,
+        cwd: "",
+        app: "desktop",
+        model: "",
+        size: st.size,
+        offset: scope,
+        mtime: st.mtimeMs,
+        days: new Map(),
+        msgs: new Map(),
+        titles: new Map([[sid, parsed.title]]),
+        live: null,
+      };
+      for (const day of previous?.days?.keys() || []) touched.add(day);
+
+      let firstText = "";
+      let firstEntryAt = 0;
+      for (const e of parsed.entries) {
+        if (!e.at) continue;
+        if (strictSince && e.at < floor) continue;
+        if (this.stale("muse", e.at) && !previous?.days.has(dayKey(e.at, this.cfg))) continue;
+        if (!firstEntryAt || e.at < firstEntryAt) firstEntryAt = e.at;
+        const { day, s } = this.touchSess(fc, touched, e.at, sid, "", "desktop");
+        const v = this.liveOf(fc, sid, e.at);
+        v.cwd = "";
+        v.app = "desktop";
+        v.title = parsed.title;
+        if (e.role === "user" && e.text.trim()) {
+          day.prompts++;
+          startRound(fc, e.at, e.text, e.id);
+          if (!firstText) firstText = e.text.slice(0, 300);
+          s.text = firstText;
+          v.state = "run";
+        } else if (e.role === "assistant") {
+          if (e.isTurnReply && e.summaryText) {
+            v.lastText = e.summaryText;
+            finishRound(fc, e.at, e.summaryText, !e.isStreaming);
+          }
+          v.state = e.isStreaming ? "run" : "wait";
+        }
+      }
+
+      if (fc.live) {
+        fc.live.state = parsed.state;
+        fc.live.step = parsed.step;
+        fc.live.turns = fc.rounds?.list.length || 0;
+        fc.live.rounds = fc.rounds?.list || [];
+        this.noteClientTitle(sid, parsed.title, { fc });
+        this.noteMeta(fc, sid, {
+          ...fc.live,
+          title: parsed.title || firstText,
+          clientTitle: Boolean(parsed.title),
+          text: firstText || "",
+          cwd: "",
+          app: "desktop",
+          model: "",
+          lastAt: fc.live.at,
+          startedAt: firstEntryAt || fc.live.at,
+          out: 0,
+          fresh: 0,
+          cached: 0,
+          calls: 0,
+          archived: false,
+        });
+        this.files.set(key, fc);
+        this.dirty = true;
+      } else if (previous) {
+        this.files.delete(key);
+        this.meta.delete(sid);
+        this.dirty = true;
+      }
+    }
+
+    pruneUnselected(activeIds);
+  }
+
+  async readKimiCodeSessions({ floor = 0, onlyAgent = "", strictSince = false, touched = new Set() } = {}) {
+    if (onlyAgent && onlyAgent !== "kimicode") return;
+    const prune = (keep) => {
+      for (const [fileKey, fc] of [...this.files]) {
+        if (fc.agent !== "kimicode" || keep.has(fc.sid)) continue;
+        for (const day of fc.days?.keys() || []) touched.add(day);
+        this.files.delete(fileKey);
+        this.dirty = true;
+      }
+      for (const [sid, m] of [...this.meta]) {
+        if (m.agent === "kimicode" && !keep.has(sid)) {
+          this.meta.delete(sid);
+          this.dirty = true;
+        }
+      }
+    };
+    if (!this.enabled("kimicode")) {
+      prune(new Set());
+      return;
+    }
+
+    const { sessions } = discoverKimiCodeSessions({ homeDir: home() });
+    const activeIds = new Set();
+    const scope = this.isPrimary("kimicode") ? -1 : Number(dayKeyToday(this.cfg).replaceAll("-", ""));
+
+    for (const sess of sessions) {
+      const sid = sess.id;
+      activeIds.add(sid);
+      const key = `${sess.wirePath || sess.metaPath}#${sid}`;
+      const previous = this.files.get(key);
+      if (
+        previous &&
+        previous.size === sess.size &&
+        previous.mtime === sess.mtimeMs &&
+        previous.offset === scope
+      ) {
+        continue;
+      }
+
+      let wireText = "";
+      if (sess.wirePath) {
+        try { wireText = await fsp.readFile(sess.wirePath, "utf8"); } catch { /* empty */ }
+      }
+      const parsed = parseKimiCodeSession(wireText, sess.meta || {}, sess);
+      if (!parsed.lastAt) continue;
+
+      const fc = {
+        path: key,
+        agent: "kimicode",
+        sid,
+        id: sid,
+        cwd: parsed.cwd || "",
+        app: sess.app || "desktop",
+        model: parsed.model || "",
+        size: sess.size,
+        offset: scope,
+        mtime: sess.mtimeMs,
+        days: new Map(),
+        msgs: new Map(),
+        titles: new Map([[sid, parsed.title]]),
+        live: null,
+      };
+      for (const day of previous?.days?.keys() || []) touched.add(day);
+
+      let firstText = "";
+      let firstEntryAt = 0;
+      for (const e of parsed.entries) {
+        const at = e.at || parsed.lastAt;
+        if (!at) continue;
+        if (strictSince && at < floor) continue;
+        if (this.stale("kimicode", at) && !previous?.days.has(dayKey(at, this.cfg))) continue;
+        if (!firstEntryAt || at < firstEntryAt) firstEntryAt = at;
+        const { day, s } = this.touchSess(fc, touched, at, sid, fc.cwd, fc.app);
+        const v = this.liveOf(fc, sid, at);
+        v.cwd = fc.cwd;
+        v.app = fc.app;
+        v.model = parsed.model || v.model;
+        v.title = parsed.title;
+        if (e.role === "user" && e.text.trim()) {
+          day.prompts++;
+          startRound(fc, at, e.text, e.id);
+          if (!firstText) firstText = e.text.slice(0, 300);
+          s.text = firstText;
+          v.state = "run";
+        } else if (e.role === "assistant") {
+          if (e.text) {
+            v.lastText = e.text;
+            finishRound(fc, at, e.text, !e.streaming);
+          }
+          v.state = e.streaming ? "run" : "wait";
+        }
+      }
+
+      let outSum = 0;
+      let freshSum = 0;
+      let cachedSum = 0;
+      let calls = 0;
+      for (const u of parsed.usages) {
+        const at = u.at || parsed.lastAt;
+        if (!at) continue;
+        if (strictSince && at < floor) continue;
+        if (this.stale("kimicode", at) && !previous?.days.has(dayKey(at, this.cfg))) continue;
+        const { key: dayId, s } = this.touchSess(fc, touched, at, sid, fc.cwd, fc.app);
+        const model = u.model || parsed.model || "";
+        fc.msgs.set(`kimicode:${u.id}`, { key: dayId, sid, proj: s.proj, model, out: u.out, fresh: u.inp, cached: u.cache, at });
+        outSum += u.out;
+        freshSum += u.inp;
+        cachedSum += u.cache;
+        calls += 1;
+      }
+
+      if (fc.live) {
+        fc.live.state = parsed.state;
+        fc.live.step = parsed.lastStep || "";
+        fc.live.turns = fc.rounds?.list.length || 0;
+        fc.live.rounds = fc.rounds?.list || [];
+        if (parsed.hasClientTitle) this.noteClientTitle(sid, parsed.title, { fc });
+        this.noteMeta(fc, sid, {
+          ...fc.live,
+          title: parsed.title || firstText,
+          clientTitle: parsed.hasClientTitle,
+          text: firstText || "",
+          cwd: fc.cwd,
+          app: fc.app,
+          model: parsed.model || "",
+          lastAt: fc.live.at,
+          startedAt: firstEntryAt || parsed.startedAt || fc.live.at,
+          out: outSum,
+          fresh: freshSum,
+          cached: cachedSum,
+          calls,
+          archived: parsed.archived,
+        });
+        this.files.set(key, fc);
+        this.dirty = true;
+      } else if (previous) {
+        this.files.delete(key);
+        this.meta.delete(sid);
+        this.dirty = true;
+      }
+    }
+
+    prune(activeIds);
+  }
+
+  async readDoubaoWorkSessions({ floor = 0, onlyAgent = "", strictSince = false, touched = new Set() } = {}) {
+    if (onlyAgent && onlyAgent !== "doubaowork") return;
+    const prune = (keep) => {
+      for (const [fileKey, fc] of [...this.files]) {
+        if (fc.agent !== "doubaowork" || keep.has(fc.sid)) continue;
+        for (const day of fc.days?.keys() || []) touched.add(day);
+        this.files.delete(fileKey);
+        this.dirty = true;
+      }
+      for (const [sid, m] of [...this.meta]) {
+        if (m.agent === "doubaowork" && !keep.has(sid)) {
+          this.meta.delete(sid);
+          this.dirty = true;
+        }
+      }
+    };
+    if (!this.enabled("doubaowork")) {
+      prune(new Set());
+      return;
+    }
+
+    const storage = discoverDoubaoWorkConversations({ homeDir: home() });
+    const activeIds = new Set();
+    const scope = this.isPrimary("doubaowork") ? -1 : Number(dayKeyToday(this.cfg).replaceAll("-", ""));
+
+    for (const conv of storage.conversations) {
+      const sid = conv.id;
+      const at = conv.lastAt || conv.startedAt;
+      if (!at) continue;
+      if (strictSince && at < floor) continue;
+
+      const key = `${storage.indexedDbDir}#${sid}`;
+      const previous = this.files.get(key);
+      if (this.stale("doubaowork", at) && !previous?.days.has(dayKey(at, this.cfg))) continue;
+
+      activeIds.add(sid);
+      if (
+        previous &&
+        previous.size === storage.size &&
+        previous.mtime === storage.mtimeMs &&
+        previous.offset === scope
+      ) {
+        continue;
+      }
+
+      const fc = {
+        path: key,
+        agent: "doubaowork",
+        sid,
+        id: sid,
+        cwd: "",
+        app: "desktop",
+        model: "",
+        size: storage.size,
+        offset: scope,
+        mtime: storage.mtimeMs,
+        days: new Map(),
+        msgs: new Map(),
+        titles: new Map([[sid, conv.title]]),
+        live: null,
+      };
+      for (const day of previous?.days?.keys() || []) touched.add(day);
+
+      const { s } = this.touchSess(fc, touched, conv.startedAt || at, sid, "", "desktop");
+      if (at !== conv.startedAt) this.touchSess(fc, touched, at, sid, "", "desktop");
+      s.text = conv.title;
+
+      const v = this.liveOf(fc, sid, at);
+      v.cwd = "";
+      v.app = "desktop";
+      v.title = conv.title;
+      v.state = "wait";
+      v.step = "";
+      v.turns = 0;
+      v.rounds = [];
+
+      if (conv.hasClientTitle) this.noteClientTitle(sid, conv.title, { fc });
+      this.noteMeta(fc, sid, {
+        ...v,
+        title: conv.title,
+        clientTitle: conv.hasClientTitle,
+        text: conv.title,
+        cwd: "",
+        app: "desktop",
+        model: "",
+        lastAt: at,
+        startedAt: conv.startedAt || at,
+        out: 0,
+        fresh: 0,
+        cached: 0,
+        calls: 0,
+        archived: false,
+      });
+      this.files.set(key, fc);
+      this.dirty = true;
+    }
+
+    prune(activeIds);
+  }
+
+  async readGeminiCliSessions({ floor = 0, onlyAgent = "", strictSince = false, touched = new Set() } = {}) {
+    if (onlyAgent && onlyAgent !== "gemini") return;
+    const prune = (keep) => {
+      for (const [fileKey, fc] of [...this.files]) {
+        if (fc.agent !== "gemini" || keep.has(fc.sid)) continue;
+        for (const day of fc.days?.keys() || []) touched.add(day);
+        this.files.delete(fileKey);
+        this.dirty = true;
+      }
+      for (const [sid, m] of [...this.meta]) {
+        if (m.agent === "gemini" && !keep.has(sid)) {
+          this.meta.delete(sid);
+          this.dirty = true;
+        }
+      }
+    };
+    if (!this.enabled("gemini")) {
+      prune(new Set());
+      return;
+    }
+
+    const { sessions } = discoverGeminiCliSessions({ homeDir: home() });
+    const activeIds = new Set();
+    const scope = this.isPrimary("gemini") ? -1 : Number(dayKeyToday(this.cfg).replaceAll("-", ""));
+
+    for (const sess of sessions) {
+      const quickStale = this.stale("gemini", sess.mtimeMs);
+      const prevByPath = [...this.files.values()].find((f) => f.agent === "gemini" && f.path.startsWith(`${sess.filePath}#`));
+      if (quickStale && !prevByPath) continue;
+      if (
+        prevByPath &&
+        prevByPath.size === sess.size &&
+        prevByPath.mtime === sess.mtimeMs &&
+        prevByPath.offset === scope
+      ) {
+        activeIds.add(prevByPath.sid);
+        continue;
+      }
+
+      let rawText;
+      try { rawText = await fsp.readFile(sess.filePath, "utf8"); } catch { continue; }
+      const parsed = parseGeminiCliSession(rawText, sess);
+      if (!parsed || !parsed.lastAt) continue;
+
+      const sid = parsed.id;
+      activeIds.add(sid);
+      const key = `${sess.filePath}#${sid}`;
+      const previous = this.files.get(key);
+
+      const fc = {
+        path: key,
+        agent: "gemini",
+        sid,
+        id: sid,
+        cwd: parsed.cwd || "",
+        app: "cli",
+        model: parsed.model || "",
+        size: sess.size,
+        offset: scope,
+        mtime: sess.mtimeMs,
+        days: new Map(),
+        msgs: new Map(),
+        titles: new Map([[sid, parsed.title]]),
+        live: null,
+      };
+      for (const day of previous?.days?.keys() || []) touched.add(day);
+
+      let firstText = "";
+      let firstEntryAt = 0;
+      for (const e of parsed.entries) {
+        const at = e.at || parsed.lastAt;
+        if (!at) continue;
+        if (strictSince && at < floor) continue;
+        if (this.stale("gemini", at) && !previous?.days.has(dayKey(at, this.cfg))) continue;
+        if (!firstEntryAt || at < firstEntryAt) firstEntryAt = at;
+        const { day, s } = this.touchSess(fc, touched, at, sid, fc.cwd, "cli");
+        const v = this.liveOf(fc, sid, at);
+        v.cwd = fc.cwd;
+        v.app = "cli";
+        v.model = parsed.model || v.model;
+        v.title = parsed.title;
+        if (e.role === "user" && e.text.trim()) {
+          day.prompts++;
+          startRound(fc, at, e.text, e.id);
+          if (!firstText) firstText = e.text.slice(0, 300);
+          s.text = firstText;
+          v.state = "run";
+        } else if (e.role === "assistant") {
+          if (e.text) {
+            v.lastText = e.text;
+            finishRound(fc, at, e.text, true);
+          }
+          v.state = "wait";
+        }
+      }
+
+      let outSum = 0;
+      let freshSum = 0;
+      let cachedSum = 0;
+      let calls = 0;
+      for (const u of parsed.usages) {
+        const at = u.at || parsed.lastAt;
+        if (!at) continue;
+        if (strictSince && at < floor) continue;
+        if (this.stale("gemini", at) && !previous?.days.has(dayKey(at, this.cfg))) continue;
+        const { key: dayId, s } = this.touchSess(fc, touched, at, sid, fc.cwd, "cli");
+        const model = u.model || parsed.model || "";
+        fc.msgs.set(`gemini:${u.id}`, { key: dayId, sid, proj: s.proj, model, out: u.out, fresh: u.inp, cached: u.cache, at });
+        outSum += u.out;
+        freshSum += u.inp;
+        cachedSum += u.cache;
+        calls += 1;
+      }
+
+      if (fc.live) {
+        fc.live.state = parsed.state;
+        fc.live.err = parsed.err || "";
+        fc.live.step = parsed.lastStep || "";
+        fc.live.turns = fc.rounds?.list.length || 0;
+        fc.live.rounds = fc.rounds?.list || [];
+        if (parsed.hasClientTitle) this.noteClientTitle(sid, parsed.title, { fc });
+        this.noteMeta(fc, sid, {
+          ...fc.live,
+          title: parsed.title || firstText,
+          clientTitle: parsed.hasClientTitle,
+          text: firstText || "",
+          cwd: fc.cwd,
+          app: "cli",
+          model: parsed.model || "",
+          lastAt: fc.live.at,
+          startedAt: firstEntryAt || parsed.startedAt || fc.live.at,
+          out: outSum,
+          fresh: freshSum,
+          cached: cachedSum,
+          calls,
+          archived: false,
+        });
+        this.files.set(key, fc);
+        this.dirty = true;
+      } else if (previous) {
+        this.files.delete(key);
+        this.meta.delete(sid);
+        this.dirty = true;
+      }
+    }
+
+    prune(activeIds);
   }
 
   // 归档 = 做完：桌面版里归档的、Codex archived_sessions 里的都可以从会话列表里收起来

@@ -77,6 +77,8 @@ plugin.allModels=()=>[
   {id:'six',agent:'opencode',name:'OpenCode one',tags:[]},
   {id:'seven',agent:'qoder',name:'Qoder one',tags:[]},
   {id:'eight',agent:'hermes',name:'Hermes one',tags:[]},
+  {id:'nine',agent:'minimax',name:'MiniMax one',tags:[]},
+  {id:'ten',agent:'gemini',name:'Gemini one',tags:[]},
 ];
 plugin.modelsFor=id=>plugin.allModels().filter(m=>m.agent===id);
 plugin.modelById=id=>plugin.allModels().find(m=>m.id===id)||null;
@@ -171,9 +173,9 @@ tab.renderRecord(recBody);
 const targetPickers = [...delBody.all(), ...recBody.all()].filter(el => el.classList.contains('ad-targetpick'));
 assert.equal(targetPickers.length, 1, 'default delegation target picker appears exactly once across all pages');
 assert.equal(targetPickers[0].children.length, AGENT_ORDER.filter(id => !AGENTS[id]?.trackingOnly).length, 'default target picker shows enabled delegable/handoff Agents');
-assert.equal(delBody.all().filter(el => el.tag === 'select').length, 9, 'seven default-model selects + primary terminal select + steward agent select');
+assert.equal(delBody.all().filter(el => el.tag === 'select').length, 10, 'eight default-model selects + primary terminal select + steward agent select');
 assert.equal(delBody.all().filter(el => el.classList.contains('ad-codex-picker')).length, 0, 'Codex uses the standard select menu');
-assert.equal(delBody.all().filter(el => el.classList.contains('ad-effort')).length, 7, 'exactly one default effort control per configurable Agent on Delegation page');
+assert.equal(delBody.all().filter(el => el.classList.contains('ad-effort')).length, 8, 'exactly one default effort control per configurable Agent on Delegation page');
 assert.equal(recBody.all().filter(el => el.classList.contains('ad-set-agent')).length, AGENT_ORDER.length, 'Recording page lists all tracked Agents');
 assert.equal(recBody.all().filter(el => el.classList.contains('ad-set-agent__config')).length, 0, 'Recording agent cards have no duplicate model or default-target controls');
 
@@ -185,14 +187,21 @@ for (const page of [delBody, recBody]) {
   assert.ok(more.every(el => el.open === false), 'More settings is collapsed initially');
 }
 const moreAncestor = el => { for (let p = el.parentElement; p; p = p.parentElement) if (p.tag === 'details' && p.children[0]?.children.some(child => child.options.text === '更多设置')) return p; };
-for (const label of ['扫描间隔（秒）', '整理超时（秒）', '菜单栏：其它 Agent 最多几个', '每个 Agent 的小火花线']) {
+for (const label of ['扫描间隔（秒）', '整理超时（秒）', '每个 Agent 的小火花线', ...(process.platform === 'darwin' ? ['菜单栏：其它 Agent 最多几个'] : [])]) {
   const el = recBody.all().find(el => el.options.text === label);
   assert.ok(el && moreAncestor(el), label + ' stays reachable under More settings');
 }
-for (const label of ['启用日记写入', '自动会话记录', '💬 最多多少个字', 'macOS 菜单栏']) {
+for (const label of ['启用日记写入', '自动会话记录', '💬 最多多少个字', ...(process.platform === 'darwin' ? ['macOS 菜单栏'] : [])]) {
   const el = recBody.all().find(el => el.options.text === label);
   assert.ok(el && !moreAncestor(el), label + ' remains visible');
 }
+if (process.platform !== 'darwin') {
+  for (const label of ['macOS 菜单栏', '菜单栏：其它 Agent 最多几个', '菜单栏快捷键', '重启菜单栏']) {
+    assert.equal(recBody.all().find(el => el.options.text === label), undefined, label + ' is hidden off macOS');
+  }
+}
+const manySegRow = recBody.all().find(el => el.classList.contains('ad-row') && el.all().some(c => c.classList.contains('ad-seg--many')));
+assert.ok(manySegRow?.classList.contains('ad-row--stack'), 'rows with .ad-seg--many receive .ad-row--stack without CSS :has()');
 assert.equal(DEFAULTS.resultMax, 350);
 assert.equal(syncDelegationSettings(deepMerge(DEFAULTS, { resultMax: 240 })).resultMax, 350, 'old default migrates');
 assert.equal(syncDelegationSettings(deepMerge(DEFAULTS, { resultMax: 600 })).resultMax, 600, 'custom maximum survives');
@@ -200,7 +209,7 @@ assert.equal(syncDelegationSettings(deepMerge(DEFAULTS, { resultMax: 240, result
 console.log('PASS More settings: collapsed detail controls, visible common actions and one-time result-length migration');
 
 const delegateGroups = delBody.all().filter(el => el.classList.contains('ad-delegate-agent'));
-assert.equal(delegateGroups.length, 7);
+assert.equal(delegateGroups.length, 8);
 for (const card of delegateGroups) assert.equal(card.open, plugin.isPrimary(card.dataset.agent), 'delegation cards default to primary-only expansion');
 const codexCard = delegateGroups.find(el => el.dataset.agent === 'codex');
 const codexSelect = codexCard.all().find(el => el.tag === 'select');
@@ -218,7 +227,7 @@ assert.ok(!plugin.settings.models.enabled.includes(''), 'empty model id is never
 syncDelegationSettings(plugin.settings);
 assert.equal(plugin.settings.delegate.codex.model, '', 'syncDelegationSettings preserves explicit unspecified model');
 const terminalSelect = delBody.all().filter(el => el.tag === 'select').at(-1);
-assert.deepEqual(terminalSelect.children.map(el => el.attrs.value), ['auto', 'terminal', 'iterm', 'warp', 'tern', 'herdr']);
+assert.deepEqual(terminalSelect.children.map(el => el.attrs.value), ['auto', 'terminal', 'iterm', 'warp', 'ghostty', 'cmux', 'tmux', 'wezterm', 'kitty', 'alacritty', 'tern', 'herdr']);
 terminalSelect.value = 'iterm';
 terminalSelect.onchange();
 assert.equal(plugin.settings.cliTerminal, 'iterm');

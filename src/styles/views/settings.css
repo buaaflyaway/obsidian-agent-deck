@@ -178,7 +178,7 @@
     padding: 11px 0;
 
     /* 选项数量较多时改为上下堆叠，避免挤压左侧标题 */
-    &:has(.ad-seg--many) {
+    &.ad-row--stack {
       grid-template-columns: minmax(0, 1fr);
 
       & > .ad-row__right {
@@ -478,7 +478,10 @@
 
     &[data-agent="grokbot"] .ad-set-agent__icon img,
     &[data-agent="qwenwork"] .ad-set-agent__icon img,
-    &[data-agent="hermes"] .ad-set-agent__icon img {
+    &[data-agent="hermes"] .ad-set-agent__icon img,
+    &[data-agent="minimax"] .ad-set-agent__icon img,
+    &[data-agent="t3code"] .ad-set-agent__icon img,
+    &[data-agent="muse"] .ad-set-agent__icon img {
       border-radius: 7px;
       border: 1px solid var(--ad-line);
     }

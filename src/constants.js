@@ -83,7 +83,7 @@ export const AGENTS = {
     color: "#8b6fb8",
     soft: "rgba(139,111,184,.13)",
     kind: "antigravity",
-    where: ["~/.gemini/antigravity/brain", t("Antigravity 桌面版与会话日志")],
+    where: ["~/.gemini/antigravity/brain · ~/.gemini/antigravity-cli/brain", t("Antigravity 桌面版、CLI 与会话日志")],
     deep: "antigravity",
     desktopOnly: true,
   },
@@ -122,6 +122,18 @@ export const AGENTS = {
     where: ["~/.hermes/state.db · $HERMES_HOME", t("Hermes Agent 会话与 ACP / CLI")],
     deep: "hermes",
     desktopOnly: false,
+  },
+  minimax: {
+    id: "minimax",
+    name: "MiniMax Code",
+    short: "MiniMax",
+    glyph: "◆",
+    color: "#e24d6a",
+    soft: "rgba(226,77,106,.13)",
+    kind: "minimax",
+    where: ["~/.minimax/v2/sqlite/runtime-state.sqlite · $MINIMAX_DATA_DIR", t("MiniMax Code 桌面版与 mcode CLI / ACP")],
+    deep: "minimax",
+    desktopOnly: true,
   },
   qwenwork: {
     id: "qwenwork",
@@ -162,6 +174,69 @@ export const AGENTS = {
     desktopOnly: true,
     trackingOnly: true,
   },
+  t3code: {
+    id: "t3code",
+    name: "T3 Code",
+    short: "T3 Code",
+    glyph: "◩",
+    color: "#3d7bd9",
+    soft: "rgba(61,123,217,.13)",
+    kind: "t3code",
+    where: ["~/.t3/userdata/statev2.sqlite · t3 CLI", t("T3 Code 桌面版与 t3 CLI")],
+    deep: "t3code",
+    desktopOnly: true,
+  },
+  muse: {
+    id: "muse",
+    name: "Muse",
+    short: "Muse",
+    glyph: "❋",
+    color: "#c96f8f",
+    soft: "rgba(201,111,143,.13)",
+    kind: "muse",
+    where: ["~/Library/Caches/ConversationCache/hatch-main.json", t("Muse 桌面版（仅追踪）")],
+    deep: "muse",
+    desktopOnly: true,
+    trackingOnly: true,
+  },
+  kimicode: {
+    id: "kimicode",
+    name: "Kimi Code",
+    short: "Kimi Code",
+    glyph: "◈",
+    color: "#2b6cb0",
+    soft: "rgba(43,108,176,.13)",
+    kind: "kimicode",
+    where: ["~/.kimi-code/sessions · ~/.kimi/sessions", t("Kimi Code 桌面版 / CLI（仅追踪）")],
+    deep: "kimicode",
+    desktopOnly: true,
+    trackingOnly: true,
+  },
+  doubaowork: {
+    id: "doubaowork",
+    name: "豆包工作",
+    short: "豆包工作",
+    glyph: "◎",
+    color: "#3b82f6",
+    soft: "rgba(59,130,246,.13)",
+    kind: "doubaowork",
+    where: ["~/Library/Application Support/DoubaoWork", t("豆包工作桌面版（仅追踪）")],
+    deep: "doubaowork",
+    desktopOnly: true,
+    trackingOnly: true,
+  },
+  gemini: {
+    id: "gemini",
+    name: "Gemini CLI",
+    short: "Gemini CLI",
+    glyph: "✦",
+    color: "#4285f4",
+    soft: "rgba(66,133,244,.13)",
+    kind: "gemini",
+    where: ["~/.gemini/tmp/*/chats", t("Gemini CLI 会话与 ACP 后台委派")],
+    deep: "gemini",
+    desktopOnly: false,
+  },
   teleagent: {
     id: "teleagent",
     name: "TeleAgent",
@@ -176,7 +251,7 @@ export const AGENTS = {
   },
 };
 
-export const AGENT_ORDER = ["claude", "codex", "workbuddy", "dsh", "antigravity", "opencode", "qoder", "hermes", "qwenwork", "teleagent", "cursor", "grokbot"];
+export const AGENT_ORDER = ["claude", "codex", "workbuddy", "dsh", "antigravity", "opencode", "qoder", "hermes", "minimax", "qwenwork", "teleagent", "cursor", "grokbot", "t3code", "muse", "kimicode", "doubaowork", "gemini"];
 
 export const AGENT_SHORT = (id) => (AGENTS[id] ? AGENTS[id].short : id || "Agent");
 
@@ -187,6 +262,8 @@ export const MODEL_CATALOG = [
   { id: "antigravity-default", agent: "antigravity", name: t("CLI 当前默认模型"), value: "", provider: "Antigravity", context: "—", tags: [], note: t("使用服务端的默认模型；读取可用模型后可指定模型。") },
   { id: "opencode-default", agent: "opencode", name: t("CLI 当前默认模型"), value: "", provider: "OpenCode", context: "—", tags: [], note: t("使用服务端的默认模型；读取可用模型后可指定模型。") },
   { id: "hermes-default", agent: "hermes", name: t("CLI 当前默认模型"), value: "", provider: "Hermes", context: "—", tags: [], note: t("使用 Hermes 当前配置的默认模型；读取可用模型后可指定模型。") },
+  { id: "minimax-default", agent: "minimax", name: t("CLI 当前默认模型"), value: "", provider: "MiniMax", context: "—", tags: [], note: t("使用 MiniMax Code 当前配置的默认模型；读取可用模型后可指定模型。") },
+  { id: "gemini-default", agent: "gemini", name: t("CLI 当前默认模型"), value: "", provider: "Gemini CLI", context: "—", tags: [], note: t("使用 Gemini CLI 当前配置的默认模型；读取可用模型后可指定模型。") },
   {
     id: "qoder-ultimate",
     agent: "qoder",
@@ -373,6 +450,7 @@ export const EFFORTS = {
   antigravity: ["low", "medium", "high", "xhigh"].map((id) => ({ id, label: id, hint: t("实际可用强度由 ACP 服务端校验") })),
   opencode: ["low", "medium", "high"].map((id) => ({ id, label: id, hint: t("实际可用强度由 ACP 服务端校验") })),
   hermes: ["low", "medium", "high"].map((id) => ({ id, label: id, hint: t("实际可用强度由 ACP 服务端校验") })),
+  minimax: ["low", "medium", "high"].map((id) => ({ id, label: id, hint: t("实际可用强度由 ACP 服务端校验") })),
   qoder: ["low", "medium", "high"].map((id) => ({ id, label: id, hint: t("传给 qodercli --reasoning-effort") })),
   codex: ["low", "medium", "high", "xhigh", "max"].map((id) => ({ id, label: id, hint: t("由所选 Codex 模型支持的强度决定") })),
   claude: [
@@ -421,7 +499,8 @@ export const CLAUDE_PERMISSIONS = [
 export const DEFAULTS = {
   version: STORE_VERSION,
   // Which agents are read. Primary agents are always on.
-  agents: { claude: true, codex: true, workbuddy: true, dsh: true, antigravity: true, opencode: true, qoder: true, hermes: true, qwenwork: true, teleagent: true, cursor: true, grokbot: true },
+  agents: { claude: true, codex: true, workbuddy: true, dsh: true, antigravity: true, opencode: true, qoder: true, hermes: true, minimax: true, qwenwork: true, teleagent: true, cursor: true, grokbot: true, t3code: true, muse: true, kimicode: true, doubaowork: true, gemini: true },
+  customAcpAgents: [],
   primaryAgents: ["claude", "dsh"],
   // 0 = midnight (00:00); otherwise the hour at which a new journal day begins.
   dayCutoff: 0,
@@ -431,18 +510,28 @@ export const DEFAULTS = {
   autoProjectFolder: true,  // 派活时从笔记的双链 / 路径 / 标题前缀认出项目，自动换成项目文件夹
   pollSeconds: 30,
   fullHistoryDays: 14,
+  // 桌面 SQLite 库（TeleAgent、T3 Code、Muse、Kimi Code、豆包工作 等）默认只读 fullHistoryDays 天：
+  // 几千个会话、几百 MB 的大库按「主力读全量」读一遍会把主线程卡住好几分钟。
+  // 打开这一项就回到「主力 Agent 读全部历史」的口径，代价是首次扫描明显变慢。
+  desktopFullHistory: false,
   // Claude desktop session list: identifies side chats (spawnedFrom) and archive state.
   claudeDesktop: true,
   hideArchived: true,
   cursorHooksPrompted: false,
   grokBotTrackedBotIds: [],
+  museTrackedIds: ["hatch-main"],
+  museMaxTracked: 5,
   // Human–AI journal: sessions written back into the daily note.
   journalFolder: "",       // 日记目录；留空自动检测（找不到就用「日记」）
   journalFormat: "",       // 日记文件名格式（moment 写法）；留空自动检测
   journalAutoWrite: true,  // 自动建项、结论和状态回写总开关；手动整理仍可用
   journalSync: true,
   journalLayout: null,
+  uiLanguage: "auto",
   journalLayoutLanguage: "auto",
+  updateCheck: true,
+  updateCheckLastAt: 0,
+  updateSkippedVersion: "",
   organizeJournalSuggest: true,
   journalOrganizePrompt: { day: "", count: 0, notes: {} },
   resultBack: true,
@@ -450,7 +539,7 @@ export const DEFAULTS = {
   kidBlocks: true,
   dragGrip: true,
   cliOpen: "terminal",     // 终端里起的 Claude Code 会话点开时：terminal 回终端 / desktop 走桌面版
-  cliTerminal: "auto",     // 主力终端：auto 按这台电脑的情况挑（见 delegation.js pickTerminal）/ terminal / iterm / warp / tern / herdr
+  cliTerminal: "auto",     // 主力终端：auto 按这台电脑的情况挑（见 terminals.js pickTerminal）/ terminal / iterm / warp / ghostty / cmux / tmux / wezterm / kitty / alacritty / tern / herdr
   delegateInTerminal: false,  // 拖到 Claude Code / Codex 上默认在主力终端里开交互式会话（按住 ⌘ 反过来）
   yieldToNautilus: true,   // 螺旋日程在任务行下面画了进度行时，不再画 pill、🔗 链接不可点          // 光标所在的列表项尾巴上显示拖拽把手（面板开着时）
   autoLog: true,           // 默认打开：活跃会话自动建项并记进今天的日记
@@ -484,6 +573,7 @@ export const DEFAULTS = {
   autoLogSeen: {},         // 会话号 → 第一次记进日记的时间；按 180 天懒清理，用来区分「第一次接入」
   noteDispatchJournal: false, // 非日记笔记里的派发也写当天日记；默认只写回原笔记
   stewardWatch: false, // 管家中途干预：波次里有会话长时间没输出就提醒一次；默认关
+  securityAllowlist: [], // 安全护栏白名单（与 Agent Deck/安全审计.md frontmatter allowlist 双向同步）
   replyInbox: [], // 回复信箱：还没回答的 ❓（渲染前会回笔记核对一遍）
   noteDispatchSessions: {},   // 会话号 → 从非日记笔记派发的时间；默认 autoLog 跳过这些会话
   keywordStyle: true,      // 关键词配色与 tsq-ico 图标；TODOseq 自己在格式化时让位
@@ -491,7 +581,7 @@ export const DEFAULTS = {
   autoLogBatch: 8,         // 一轮最多问模型几个会话
   // 没写不等于关：设置页用 `agOn[id] !== false` 判定，缺省值等于「开」。TeleAgent 的历史库有上千个会话，
   // 首次接入会把最近若干轮一次性补进当天日记，所以这里显式关掉，需要时在设置里手动打开。
-  autoLogAgents: { claude: true, codex: true, workbuddy: true, dsh: true, antigravity: true, opencode: true, qoder: true, cursor: true, grokbot: true, teleagent: false },
+  autoLogAgents: { claude: true, codex: true, workbuddy: true, dsh: true, antigravity: true, opencode: true, qoder: true, cursor: true, grokbot: true, teleagent: false, t3code: true, muse: true, kimicode: true, doubaowork: true, gemini: true },
   autoLogProvider: "auto",
   autoLogEffort: "low",
   autoLogModel: "",
@@ -551,6 +641,9 @@ export const DEFAULTS = {
     antigravity: { model: "antigravity-default", effort: "medium", path: "", cwd: "", autoApprove: false },
     opencode: { model: "opencode-default", effort: "medium", path: "", cwd: "", autoApprove: false, extraArgs: "" },
     hermes: { model: "hermes-default", effort: "medium", path: "", cwd: "", autoApprove: false, extraArgs: "" },
+    minimax: { model: "minimax-default", effort: "medium", path: "", cwd: "", autoApprove: false, extraArgs: "" },
+    gemini: { model: "gemini-default", effort: "", path: "", cwd: "", autoApprove: false, extraArgs: "" },
+    t3code: { path: "", cwd: "", extraArgs: "" },
     qoder: { model: "qoder-ultimate", effort: "high", permission: "auto", path: "", cwd: "", addVault: true, openDesktop: false, extraArgs: "" },
     dsh: {
       model: "dsh-default",
@@ -577,7 +670,7 @@ export const DEFAULTS = {
     pinned: ["claude-opus-5-5", "claude-sonnet-5", "deepseek-v4-pro"],
     order: MODEL_CATALOG.map((m) => m.id),
     custom: [],
-    defaultByAgent: { claude: "claude-opus-5-5", codex: "gpt-6.1-sol", dsh: "dsh-default", antigravity: "antigravity-default", opencode: "opencode-default", hermes: "hermes-default", qoder: "qoder-ultimate" },
+    defaultByAgent: { claude: "claude-opus-5-5", codex: "gpt-6.1-sol", dsh: "dsh-default", antigravity: "antigravity-default", opencode: "opencode-default", hermes: "hermes-default", minimax: "minimax-default", qoder: "qoder-ultimate" },
     effort: "high",
     effortByAgent: {},
   },
@@ -623,10 +716,16 @@ export function syncDelegationSettings(settings, raw = null) {
   m.defaultByAgent ||= {};
   m.effortByAgent ||= {};
   m.enabled = Array.isArray(m.enabled) ? m.enabled : [];
-  const delegateAgents = Object.keys(DEFAULTS.delegate).filter((k) => {
-    const entry = DEFAULTS.delegate[k];
-    return Boolean(entry && typeof entry === "object" && !Array.isArray(entry));
-  });
+  const customAcpIds = (Array.isArray(settings.customAcpAgents) ? settings.customAcpAgents : [])
+    .map((x) => String(x?.id || "").trim().toLowerCase())
+    .filter(Boolean);
+  const delegateAgents = [...new Set([
+    ...Object.keys(DEFAULTS.delegate).filter((k) => {
+      const entry = DEFAULTS.delegate[k];
+      return Boolean(entry && typeof entry === "object" && !Array.isArray(entry));
+    }),
+    ...customAcpIds,
+  ])];
   if (!delegateAgents.includes(d.target)) d.target = "claude";
   for (const agent of delegateAgents) {
     const cfg = (d[agent] ||= {});
@@ -699,25 +798,28 @@ function formatRegex(fmt) {
   return new RegExp("^" + out + esc(fmt.slice(last)) + "$");
 }
 
-// 返回 { folder, folderSource, format, source }；folder 为 "" 表示库根目录
-let _detected = null;
-export function detectJournalFormat(app, cfg = {}) {
-  const own = (cfg.journalFolder || "").trim().replace(/\/+$/, "");
-  const key = own + "\n" + (cfg.journalFormat || "");
-  if (_detected && _detected.app === app && _detected.key === key && Date.now() - _detected.at < 60e3) return _detected;
-  let conf = null;
+export function dailyNotesOptions(app) {
   try {
     const dn = app?.internalPlugins?.getPluginById?.("daily-notes");
-    if (dn?.enabled) conf = { ...(dn.instance?.options || {}), source: t("Obsidian「日记」核心插件") };
+    if (dn?.enabled) return dn.instance?.options || {};
   } catch { /* 没有这个接口 */ }
-  if (!conf) {
-    const pn = app?.plugins?.plugins?.["periodic-notes"]?.settings?.daily;
-    if (pn?.enabled) conf = { ...pn, source: "Periodic Notes" };
-  }
+  return null;
+}
+
+// 返回 { folder, folderSource, format, source }；folder 为 "" 表示库根目录
+let journalGuess = null;
+export function detectJournalFormat(app, cfg = {}) {
+  const own = (cfg.journalFolder || "").trim().replace(/\/+$/, "");
+  const core = dailyNotesOptions(app);
+  const periodic = app?.plugins?.plugins?.["periodic-notes"]?.settings?.daily;
+  const conf = core || (periodic?.enabled ? periodic : null);
+  const source = core ? t("Obsidian「日记」核心插件") : conf ? "Periodic Notes" : t("默认");
   const folder = own || (conf ? String(conf.folder || "").trim().replace(/^\/+|\/+$/g, "") : "日记");
-  const folderSource = own ? t("手动设置") : conf ? conf.source : t("默认");
-  let hit = conf ? { format: conf.format || "YYYY-MM-DD", source: conf.source } : null;
-  if (!hit) {
+  const folderSource = own ? t("手动设置") : source;
+  if (conf) return { format: conf.format || "YYYY-MM-DD", source, folder, folderSource };
+
+  // 只缓存文件扫描。核心插件和 Periodic Notes 的设置每次读取。
+  if (!journalGuess || journalGuess.app !== app || journalGuess.folder !== folder || Date.now() - journalGuess.at >= 60e3) {
     let files = [];
     try { files = app?.vault?.getMarkdownFiles?.() || []; } catch { /* 测试里的假 vault */ }
     const prefix = folder ? folder + "/" : "";
@@ -728,21 +830,18 @@ export function detectJournalFormat(app, cfg = {}) {
       const n = names.filter((x) => re.test(x)).length;
       if (n && (!best || n > best.n)) best = { fmt, n };
     }
-    if (best) hit = { format: best.fmt, source: folder ? t("「{folder}」里已有的 {n} 篇日记", { folder, n: best.n }) : t("库根目录里已有的 {n} 篇日记", { n: best.n }) };
+    journalGuess = { app, folder, at: Date.now(), best };
   }
-  _detected = { ...(hit || { format: "YYYY_MM_DD", source: t("默认") }), folder, folderSource, key, app, at: Date.now() };
-  return _detected;
-}
-
-export function journalFormat(app, cfg = {}) {
-  return (cfg.journalFormat || "").trim() || detectJournalFormat(app, cfg).format;
+  const { best } = journalGuess;
+  const guessedSource = best ? (folder ? t("「{folder}」里已有的 {n} 篇日记", { folder, n: best.n }) : t("库根目录里已有的 {n} 篇日记", { n: best.n })) : source;
+  return { format: best?.fmt || "YYYY_MM_DD", source: guessedSource, folder, folderSource };
 }
 
 // day 是内部日期键（YYYY_MM_DD），默认今天
 export function journalPath(app, cfg = {}, day = dayKeyToday(cfg)) {
   const [y, m, d] = String(day).split(/\D+/).map(Number);
-  const folder = detectJournalFormat(app, cfg).folder;
-  const name = formatDate(new Date(y, m - 1, d), journalFormat(app, cfg));
+  const { folder, format } = detectJournalFormat(app, cfg);
+  const name = formatDate(new Date(y, m - 1, d), (cfg.journalFormat || "").trim() || format);
   return folder ? `${folder}/${name}.md` : `${name}.md`;
 }
 

@@ -2,7 +2,7 @@
 import fs from "fs";
 import os from "os";
 import path from "path";
-import { AGENT_ORDER } from "./constants.js";
+import { AGENTS, AGENT_ORDER } from "./constants.js";
 import { delegateAgents } from "./agent-registry.js";
 import { expandedPathEntries } from "./delegation-runners.js";
 import {
@@ -10,6 +10,10 @@ import {
   cursorTrackingDbPath,
 } from "./cursor-sessions.js";
 import { grokBotDataDir, grokBotPersistenceDir } from "./grok-bot-sessions.js";
+import { museDataDirs } from "./muse-sessions.js";
+import { kimiCodeDataDirs } from "./kimicode-sessions.js";
+import { doubaoWorkDataDir, doubaoWorkIndexedDbDir } from "./doubaowork-sessions.js";
+import { geminiCliHome } from "./gemini-cli-sessions.js";
 
 // 版本号跟着“探测规则本身”变：v2 补了 TeleAgent 的探测、并剔除了 cursor 里插件自建的目录。
 // 启动时只要 data.harnessesDetected.version 落后，就自动按新规则重跑一次，
@@ -83,7 +87,17 @@ function buildSpecs({ homeDir, platform, env, appDirs }) {
     .flatMap((d) => [path.join(norm(d, homeDir), "projects"), norm(d, homeDir)]);
   const codexHome = env.CODEX_HOME ? norm(env.CODEX_HOME, homeDir) : path.join(homeDir, ".codex");
   const hermesHome = env.HERMES_HOME ? norm(env.HERMES_HOME, homeDir) : path.join(homeDir, ".hermes");
+  const minimaxHome = env.MINIMAX_DATA_DIR
+    ? norm(env.MINIMAX_DATA_DIR, homeDir)
+    : env.MAVIS_DATA_DIR
+      ? norm(env.MAVIS_DATA_DIR, homeDir)
+      : path.join(homeDir, ".minimax");
   const qwenHome = env.QWENWORK_HOME ? norm(env.QWENWORK_HOME, homeDir) : path.join(homeDir, ".qwenworkcn");
+  const t3DataDir = env.T3_DATA_DIR
+    ? norm(env.T3_DATA_DIR, homeDir)
+    : env.T3_STATE_DIR
+      ? norm(env.T3_STATE_DIR, homeDir)
+      : path.join(homeDir, ".t3", "userdata");
   const win = platform === "win32";
 
   return {
@@ -145,7 +159,10 @@ function buildSpecs({ homeDir, platform, env, appDirs }) {
         path.join(homeDir, ".npm-global", "bin", "agy"),
       ],
       apps: win ? ["Antigravity/Antigravity.exe"] : ["Antigravity.app"],
-      dataPaths: [path.join(homeDir, ".gemini", "antigravity")],
+      dataPaths: [
+        path.join(homeDir, ".gemini", "antigravity"),
+        path.join(homeDir, ".gemini", "antigravity-cli"),
+      ],
     },
     opencode: {
       binNames: ["opencode", "opencode-cli"],
@@ -185,6 +202,19 @@ function buildSpecs({ homeDir, platform, env, appDirs }) {
       apps: [],
       dataPaths: [hermesHome],
     },
+    minimax: {
+      binNames: ["mcode"],
+      binPaths: [
+        path.join(homeDir, ".minimax-code", "bin", "mcode"),
+        path.join(homeDir, ".local", "bin", "mcode"),
+        path.join(homeDir, ".npm-global", "bin", "mcode"),
+        path.join(homeDir, ".bun", "bin", "mcode"),
+      ],
+      apps: win
+        ? ["MiniMax Code/MiniMax Code.exe", "MiniMax/MiniMax Code.exe"]
+        : ["MiniMax Code.app"],
+      dataPaths: [minimaxHome, path.join(homeDir, ".mavis")],
+    },
     qwenwork: {
       binNames: [],
       binPaths: [],
@@ -211,6 +241,58 @@ function buildSpecs({ homeDir, platform, env, appDirs }) {
       dataPaths: [
         grokBotPersistenceDir(homeDir, platform, env),
         grokBotDataDir(homeDir, platform, env),
+      ],
+    },
+    t3code: {
+      binNames: ["t3"],
+      binPaths: [
+        path.join(homeDir, ".t3", "bin", "t3"),
+        path.join(homeDir, ".local", "bin", "t3"),
+      ],
+      apps: win
+        ? ["T3 Code/T3 Code.exe", "T3 Code (Beta)/T3 Code (Beta).exe"]
+        : ["T3 Code (Beta).app", "T3 Code.app"],
+      dataPaths: [
+        path.join(t3DataDir, "statev2.sqlite"),
+        path.join(t3DataDir, "state.sqlite"),
+        t3DataDir,
+        path.join(homeDir, ".t3"),
+      ],
+    },
+    muse: {
+      binNames: [],
+      binPaths: [],
+      apps: win ? [] : ["Muse.app"],
+      dataPaths: museDataDirs(homeDir, platform, env),
+    },
+    kimicode: {
+      binNames: ["kimi", "kimi-code"],
+      binPaths: [
+        path.join(homeDir, ".local", "bin", "kimi"),
+        path.join(homeDir, ".local", "bin", "kimi-code"),
+      ],
+      apps: win ? ["Kimi Code/Kimi Code.exe"] : ["Kimi Code.app"],
+      dataPaths: kimiCodeDataDirs(homeDir, env),
+    },
+    doubaowork: {
+      binNames: [],
+      binPaths: [],
+      apps: win ? ["DoubaoWork/DoubaoWork.exe"] : ["DoubaoWork.app"],
+      dataPaths: [
+        doubaoWorkIndexedDbDir(homeDir, platform, env),
+        doubaoWorkDataDir(homeDir, platform, env),
+      ],
+    },
+    gemini: {
+      binNames: ["gemini"],
+      binPaths: [
+        path.join(homeDir, ".local", "bin", "gemini"),
+        path.join(homeDir, ".npm-global", "bin", "gemini"),
+      ],
+      apps: [],
+      dataPaths: [
+        path.join(geminiCliHome(homeDir, env), "tmp"),
+        path.join(geminiCliHome(homeDir, env), "projects.json"),
       ],
     },
     // TeleAgent 只有桌面客户端，没有 CLI。安装位置不在系统应用目录里（默认 D:\Program Files\TeleClaw\TeleAgent），
@@ -280,6 +362,7 @@ export function detectInstalledHarnesses(options = {}) {
   const missing = [];
 
   for (const id of AGENT_ORDER) {
+    if (AGENTS[id]?.customAcp) continue;
     const spec = specs[id] || { binNames: [], binPaths: [], apps: [], dataPaths: [] };
     const via = [];
 
@@ -344,6 +427,7 @@ export function applyHarnessDetection(settings, { mode = "initial", detection = 
 
   if (mode === "migrate") {
     for (const id of AGENT_ORDER) {
+      if (AGENTS[id]?.customAcp) continue;
       if (!detected[id]) {
         agents[id] = false;
         autoLogAgents[id] = false;
@@ -353,6 +437,7 @@ export function applyHarnessDetection(settings, { mode = "initial", detection = 
     }
   } else {
     for (const id of AGENT_ORDER) {
+      if (AGENTS[id]?.customAcp) continue;
       agents[id] = Boolean(detected[id]);
       autoLogAgents[id] = Boolean(detected[id]);
     }
